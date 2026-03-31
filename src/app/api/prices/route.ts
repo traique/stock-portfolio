@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   return NextResponse.json(
     {
-      error: 'Route /api/prices should be served by Vercel rewrite to /api/vnstock_prices',
+      error: 'Please use /api/vnstock_prices directly.',
       provider: 'disabled-next-fallback',
     },
     { status: 500 }
