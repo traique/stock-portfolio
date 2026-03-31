@@ -12,7 +12,8 @@
     "@supabase/supabase-js": "^2.57.4",
     "next": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "yahoo-finance2": "latest"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

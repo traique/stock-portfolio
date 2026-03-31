@@ -70,7 +70,7 @@ export default function DashboardPage() {
 
     try {
       const response = await fetch(
-        `/api/vnstock_prices?symbols=${encodeURIComponent(symbols.join(','))}`,
+        `/api/prices?symbols=${encodeURIComponent(symbols.join(','))}`,
         { cache: 'no-store' }
       );
 
@@ -181,7 +181,7 @@ export default function DashboardPage() {
             </div>
             <h1 style={{ fontSize: 34, margin: '10px 0 0' }}>Danh mục cổ phiếu</h1>
             <p style={{ color: '#cbd5e1', marginTop: 8, lineHeight: 1.7 }}>
-              Giá hiện tại được lấy trực tiếp từ Vnstock khi mở trang hoặc khi bạn bấm làm mới.
+              Giá hiện tại được lấy từ Yahoo Finance khi mở trang hoặc khi bạn bấm làm mới.
             </p>
           </div>
 
@@ -441,4 +441,4 @@ export default function DashboardPage() {
       )}
     </main>
   );
-          }
+}

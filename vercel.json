@@ -1,9 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
-    {
-      "source": "/api/prices",
-      "destination": "/api/vnstock_prices"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }
