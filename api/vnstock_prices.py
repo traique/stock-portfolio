@@ -41,8 +41,8 @@ def to_number(value):
 def fetch_prices(symbols):
     ensure_vnstock_auth()
 
-    # Theo docs, có thể gọi nhiều mã cùng lúc và flatten cột để lấy match_price dễ hơn
-    trading = Trading(source="KBS")
+    # Đổi sang VCI cho ổn định hơn với bảng giá
+    trading = Trading(source="VCI")
     board = trading.price_board(
         symbols_list=symbols,
         flatten_columns=True,
@@ -63,12 +63,10 @@ def fetch_prices(symbols):
         if not symbol:
             continue
 
-        # Ưu tiên đúng cột match_price như docs
         price = to_number(row.get("match_price"))
 
-        # fallback nhẹ nếu match_price trống
         if not price:
-            for key in ["close", "close_price", "price", "last_price", "bid_1_price", "ask_1_price"]:
+            for key in ["close", "close_price", "price", "last_price", "ask_1_price", "bid_1_price"]:
                 price = to_number(row.get(key))
                 if price:
                     break
@@ -84,6 +82,8 @@ def fetch_prices(symbols):
                 "close_price": row.get("close_price"),
                 "price": row.get("price"),
                 "last_price": row.get("last_price"),
+                "ask_1_price": row.get("ask_1_price"),
+                "bid_1_price": row.get("bid_1_price"),
             }
         )
 
@@ -122,7 +122,7 @@ class handler(BaseHTTPRequestHandler):
             payload = {
                 "prices": prices,
                 "updatedAt": datetime.utcnow().isoformat() + "Z",
-                "provider": "vnstock-kbs",
+                "provider": "vnstock-vci",
             }
 
             if debug_mode:
@@ -141,7 +141,7 @@ class handler(BaseHTTPRequestHandler):
                 json.dumps(
                     {
                         "error": str(error),
-                        "provider": "vnstock-kbs",
+                        "provider": "vnstock-vci",
                     }
                 ).encode("utf-8")
-)
+            )
