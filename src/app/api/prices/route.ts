@@ -14,20 +14,29 @@ export async function GET(request: NextRequest) {
     const symbols = normalizeSymbols(request.nextUrl.searchParams.get('symbols') || '');
 
     if (!symbols.length) {
-      return NextResponse.json({ prices: {}, updatedAt: new Date().toISOString(), provider: 'yahoo-empty' });
+      return NextResponse.json({
+        prices: {},
+        updatedAt: new Date().toISOString(),
+        provider: 'yahoo-empty',
+      });
     }
 
-    const quotes = await Promise.all(
+    const results = await Promise.all(
       symbols.map(async (symbol) => {
         try {
-          const quote = await yahooFinance.quote(toYahooSymbol(symbol));
-          const price = Number(quote.regularMarketPrice ?? quote.postMarketPrice ?? quote.preMarketPrice ?? 0);
+          const quote: any = await yahooFinance.quote(toYahooSymbol(symbol));
+          const price = Number(
+            quote?.regularMarketPrice ??
+              quote?.postMarketPrice ??
+              quote?.preMarketPrice ??
+              0
+          );
 
           return {
             symbol,
             price,
-            currency: quote.currency || 'VND',
-            marketTime: quote.regularMarketTime || null,
+            currency: quote?.currency || 'VND',
+            marketTime: quote?.regularMarketTime || null,
           };
         } catch {
           return {
@@ -41,17 +50,20 @@ export async function GET(request: NextRequest) {
     );
 
     const prices = Object.fromEntries(
-      quotes.filter((item) => item.price > 0).map((item) => [item.symbol, item.price])
+      results.filter((item) => item.price > 0).map((item) => [item.symbol, item.price])
     );
 
     return NextResponse.json({
       prices,
       updatedAt: new Date().toISOString(),
       provider: 'yahoo-finance2',
-      debug: quotes,
+      debug: results,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message, provider: 'yahoo-finance2' }, { status: 500 });
+    return NextResponse.json(
+      { error: message, provider: 'yahoo-finance2' },
+      { status: 500 }
+    );
   }
 }
