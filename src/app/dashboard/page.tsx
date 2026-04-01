@@ -31,10 +31,10 @@ type PricesResponse = {
   error?: string;
 };
 
-function formatPrice(value?: number | null) {
+function formatCompactPrice(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
   return new Intl.NumberFormat('vi-VN', {
-    minimumFractionDigits: 1,
+    minimumFractionDigits: 0,
     maximumFractionDigits: 1,
   }).format(value);
 }
@@ -42,7 +42,11 @@ function formatPrice(value?: number | null) {
 function formatChange(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
   const sign = value > 0 ? '+' : value < 0 ? '' : '';
-  return `${sign}${value.toFixed(1)}`;
+  const abs = Math.abs(value % 1) < 0.000001;
+  return `${sign}${new Intl.NumberFormat('vi-VN', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: abs ? 0 : 1,
+  }).format(value)}`;
 }
 
 function formatPct(value?: number | null) {
@@ -165,6 +169,14 @@ export default function DashboardPage() {
   const summaryPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
   const quoteMap = useMemo(() => getQuoteMap(quotes), [quotes]);
 
+  const dayPnl = useMemo(() => {
+    return holdings.reduce((sum, holding) => {
+      const quote = quoteMap.get(holding.symbol.toUpperCase());
+      const change = Number(quote?.change || 0);
+      return sum + change * Number(holding.quantity || 0);
+    }, 0);
+  }, [holdings, quoteMap]);
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage('');
@@ -259,12 +271,24 @@ export default function DashboardPage() {
           </div>
 
           <div style={styles.summaryCard}>
-            <div style={styles.label}>Hiện tại</div>
+            <div style={styles.label}>NAV</div>
             <div style={styles.summaryValue}>{formatCurrency(summary.totalNow)}</div>
           </div>
 
-          <div style={styles.summaryCardWide}>
-            <div style={styles.label}>Lời / Lỗ</div>
+          <div style={styles.summaryCard}>
+            <div style={styles.label}>Lãi/lỗ trong ngày</div>
+            <div
+              style={{
+                ...styles.summaryValue,
+                color: dayPnl >= 0 ? '#16a34a' : '#dc2626',
+              }}
+            >
+              {formatCurrency(dayPnl)}
+            </div>
+          </div>
+
+          <div style={styles.summaryCard}>
+            <div style={styles.label}>Lãi/lỗ danh mục</div>
             <div
               style={{
                 ...styles.summaryValue,
@@ -275,9 +299,9 @@ export default function DashboardPage() {
             </div>
             <div
               style={{
-                marginTop: 6,
+                marginTop: 4,
                 fontWeight: 800,
-                fontSize: 16,
+                fontSize: 14,
                 color: summary.totalPnl >= 0 ? '#16a34a' : '#dc2626',
               }}
             >
@@ -363,28 +387,21 @@ export default function DashboardPage() {
                   <div style={styles.priceMain}>
                     <div style={styles.label}>Giá hiện tại</div>
                     <div style={styles.priceValue}>
-                      {formatPrice(quote?.price ?? row.currentPrice)}
+                      {formatCompactPrice(quote?.price ?? row.currentPrice)}
                     </div>
-                  </div>
 
-                  <div style={styles.changeRow}>
-                    <div style={styles.changeBox}>
-                      <div style={styles.label}>Thay đổi</div>
+                    <div style={styles.inlineChangeRow}>
                       <div
                         style={{
-                          ...styles.changeValue,
+                          ...styles.inlineChangeText,
                           color: getChangeColor(quote?.change),
                         }}
                       >
                         {formatChange(quote?.change)}
                       </div>
-                    </div>
-
-                    <div style={styles.changeBox}>
-                      <div style={styles.label}>% thay đổi</div>
                       <div
                         style={{
-                          ...styles.changeValue,
+                          ...styles.inlineChangeText,
                           color: getChangeColor(quote?.pct),
                         }}
                       >
@@ -428,7 +445,7 @@ export default function DashboardPage() {
                     }}
                   >
                     <span style={{ fontWeight: 700 }}>Hiệu suất</span>
-                    <span style={{ fontWeight: 800, fontSize: 26 }}>
+                    <span style={{ fontWeight: 800, fontSize: 24 }}>
                       {row.pnlPct >= 0 ? '+' : ''}
                       {row.pnlPct.toFixed(2)}%
                     </span>
@@ -518,14 +535,6 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: '1fr 1fr',
   },
   summaryCard: {
-    background: '#fff',
-    borderRadius: 22,
-    padding: 16,
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
-  },
-  summaryCardWide: {
-    gridColumn: 'span 2',
     background: '#fff',
     borderRadius: 22,
     padding: 16,
@@ -654,23 +663,16 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: '-0.04em',
   },
-  changeRow: {
+  inlineChangeRow: {
     marginTop: 10,
-    display: 'grid',
-    gap: 10,
-    gridTemplateColumns: '1fr 1fr',
+    display: 'flex',
+    gap: 14,
+    flexWrap: 'wrap',
   },
-  changeBox: {
-    background: '#f8fafc',
-    borderRadius: 16,
-    padding: 12,
-    border: '1px solid #e2e8f0',
-  },
-  changeValue: {
-    marginTop: 8,
-    fontSize: 28,
+  inlineChangeText: {
+    fontSize: 18,
     fontWeight: 800,
-    letterSpacing: '-0.03em',
+    lineHeight: 1.1,
   },
   miniGrid: {
     marginTop: 10,
