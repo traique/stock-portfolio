@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 
 type QuoteItem = {
   symbol: string;
@@ -24,8 +25,7 @@ type PricesResponse = {
   error?: string;
 };
 
-const DEFAULT_WATCHLIST = ['FPT', 'HPG', 'VCB', 'BID'];
-const TOP_SYMBOLS = [
+const MARKET_SYMBOLS = [
   'FPT',
   'HPG',
   'VCB',
@@ -36,16 +36,8 @@ const TOP_SYMBOLS = [
   'MBB',
   'SSI',
   'VND',
-  'POW',
   'GAS',
-  'HCM',
-  'GEX',
-  'KBC',
-  'VIX',
-  'SHS',
-  'DIG',
-  'NLG',
-  'DXG',
+  'POW',
 ];
 
 function formatPrice(value?: number | null) {
@@ -96,125 +88,91 @@ function colorFor(value?: number | null) {
   return '#64748b';
 }
 
-function normalizeSymbol(input: string) {
-  return input.trim().toUpperCase().replace(/[^A-Z]/g, '');
-}
-
 export default function HomePage() {
-  const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_WATCHLIST);
-  const [watchInput, setWatchInput] = useState('');
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
+  const [loadingAuth, setLoadingAuth] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authMessage, setAuthMessage] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
-  const [topQuotes, setTopQuotes] = useState<QuoteItem[]>([]);
   const [updatedAt, setUpdatedAt] = useState('');
-  const [provider, setProvider] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [topLoading, setTopLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [watchError, setWatchError] = useState('');
+  const [marketLoading, setMarketLoading] = useState(true);
+  const [marketError, setMarketError] = useState('');
 
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('homepage_watchlist') : null;
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length) {
-          setWatchlist(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
-        }
-      } catch {}
+    let mounted = true;
+
+    async function boot() {
+      const { data } = await supabase.auth.getSession();
+      const session = data.session;
+
+      if (!mounted) return;
+
+      setIsLoggedIn(!!session);
+      setUserEmail(session?.user?.email || '');
+      setSessionChecked(true);
     }
-  }, []);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('homepage_watchlist', JSON.stringify(watchlist));
-    }
-  }, [watchlist]);
+    boot();
 
-  async function fetchQuotes(symbols: string[]) {
-    if (!symbols.length) return { debug: [], updatedAt: '', provider: '' };
-
-    const response = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(','))}`, {
-      cache: 'no-store',
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(!!session);
+      setUserEmail(session?.user?.email || '');
+      setSessionChecked(true);
     });
 
-    const data: PricesResponse = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data?.error || 'Không lấy được dữ liệu');
-    }
-
-    return {
-      debug: data.debug || [],
-      updatedAt: data.updatedAt || '',
-      provider: data.provider || '',
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
     };
-  }
-
-  async function loadWatchlistQuotes() {
-    setLoading(true);
-    setError('');
-
-    try {
-      const data = await fetchQuotes(watchlist);
-      setQuotes(data.debug);
-      setUpdatedAt(data.updatedAt);
-      setProvider(data.provider);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lỗi tải dữ liệu');
-      setQuotes([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadTopQuotes() {
-    setTopLoading(true);
-
-    try {
-      const data = await fetchQuotes(TOP_SYMBOLS);
-      setTopQuotes(data.debug);
-      if (!updatedAt && data.updatedAt) setUpdatedAt(data.updatedAt);
-      if (!provider && data.provider) setProvider(data.provider);
-    } catch {
-      setTopQuotes([]);
-    } finally {
-      setTopLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    loadWatchlistQuotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watchlist.join(',')]);
-
-  useEffect(() => {
-    loadTopQuotes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const watchQuotes = useMemo(() => {
-    const bySymbol = new Map(quotes.map((item) => [item.symbol.toUpperCase(), item]));
-    return watchlist.map(
-      (symbol) =>
-        bySymbol.get(symbol) || {
-          symbol,
-          price: 0,
-          change: 0,
-          pct: 0,
-          volume: 0,
+  useEffect(() => {
+    async function loadMarket() {
+      setMarketLoading(true);
+      setMarketError('');
+
+      try {
+        const response = await fetch(
+          `/api/prices?symbols=${encodeURIComponent(MARKET_SYMBOLS.join(','))}`,
+          { cache: 'no-store' }
+        );
+        const data: PricesResponse = await response.json();
+
+        if (!response.ok) {
+          setMarketError(data?.error || 'Không lấy được dữ liệu thị trường');
+          setQuotes([]);
+        } else {
+          setQuotes(data.debug || []);
+          setUpdatedAt(data.updatedAt || '');
         }
-    );
-  }, [quotes, watchlist]);
+      } catch {
+        setMarketError('Lỗi kết nối dữ liệu thị trường');
+        setQuotes([]);
+      } finally {
+        setMarketLoading(false);
+      }
+    }
 
-  const marketBreadth = useMemo(() => {
-    const valid = topQuotes.filter((item) => Number.isFinite(item.pct));
-    const gainers = valid.filter((item) => item.pct > 0).length;
-    const losers = valid.filter((item) => item.pct < 0).length;
-    return { gainers, losers };
-  }, [topQuotes]);
+    loadMarket();
+  }, []);
 
-  const top10MomentumLiquidity = useMemo(() => {
-    return [...topQuotes]
+  const breadth = useMemo(() => {
+    const valid = quotes.filter((item) => Number.isFinite(item.pct));
+    return {
+      gainers: valid.filter((item) => item.pct > 0).length,
+      losers: valid.filter((item) => item.pct < 0).length,
+    };
+  }, [quotes]);
+
+  const top10 = useMemo(() => {
+    return [...quotes]
       .filter((item) => Number.isFinite(item.pct) && item.pct > 0)
       .sort((a, b) => {
         const pctDiff = (b.pct || 0) - (a.pct || 0);
@@ -222,140 +180,165 @@ export default function HomePage() {
         return (b.volume || 0) - (a.volume || 0);
       })
       .slice(0, 10);
-  }, [topQuotes]);
+  }, [quotes]);
 
-  function addWatchSymbol(symbolRaw?: string) {
-    const symbol = normalizeSymbol(symbolRaw ?? watchInput);
+  async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoadingAuth(true);
+    setAuthMessage('');
 
-    if (!symbol) {
-      setWatchError('Nhập mã hợp lệ');
-      return;
+    try {
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+
+        if (error) {
+          setAuthMessage(error.message);
+        } else {
+          setAuthMessage('Tạo tài khoản thành công');
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          setAuthMessage(error.message);
+        } else {
+          window.location.href = '/dashboard';
+        }
+      }
+    } finally {
+      setLoadingAuth(false);
     }
-
-    if (watchlist.includes(symbol)) {
-      setWatchError('Mã đã có trong watchlist');
-      return;
-    }
-
-    setWatchlist((prev) => [...prev, symbol]);
-    setWatchInput('');
-    setWatchError('');
   }
 
-  function removeWatchSymbol(symbol: string) {
-    setWatchlist((prev) => prev.filter((item) => item !== symbol));
+  async function handleLogout() {
+    await supabase.auth.signOut();
+  }
+
+  if (!sessionChecked) {
+    return (
+      <main style={styles.page}>
+        <div style={styles.container}>
+          <section style={styles.shellCard}>Đang tải...</section>
+        </div>
+      </main>
+    );
   }
 
   return (
     <main style={styles.page}>
       <div style={styles.container}>
         <section style={styles.hero}>
-          <div style={styles.eyebrow}>Bảng điều khiển thị trường</div>
-          <h1 style={styles.title}>Theo dõi danh mục thông minh</h1>
-          <div style={styles.heroMetaRow}>
+          <div style={styles.badge}>AlphaBoard</div>
+          <h1 style={styles.title}>Quản lý danh mục chuyên nghiệp</h1>
+          <p style={styles.subtitle}>Giá, NAV và hiệu suất trong một màn hình.</p>
+
+          <div style={styles.heroMeta}>
             <div style={styles.metaPill}>{formatDateTime(updatedAt)}</div>
-            <div style={styles.metaPill}>{provider || 'market data'}</div>
-          </div>
-          <div style={styles.heroActions}>
-            <Link href="/auth/login" style={styles.primaryBtn}>
-              Vào danh mục
-            </Link>
-            <button type="button" onClick={loadWatchlistQuotes} style={styles.secondaryBtn}>
-              {loading ? 'Đang tải...' : 'Làm mới'}
-            </button>
+            <div style={styles.metaPill}>Dữ liệu thị trường</div>
           </div>
         </section>
 
         <section style={styles.summaryGrid}>
           <div style={styles.summaryCard}>
             <div style={styles.summaryLabel}>Mã tăng</div>
-            <div style={styles.summaryValue}>{topLoading ? '--' : marketBreadth.gainers}</div>
+            <div style={styles.summaryValue}>{marketLoading ? '--' : breadth.gainers}</div>
           </div>
+
           <div style={styles.summaryCard}>
             <div style={styles.summaryLabel}>Mã giảm</div>
-            <div style={styles.summaryValue}>{topLoading ? '--' : marketBreadth.losers}</div>
+            <div style={styles.summaryValue}>{marketLoading ? '--' : breadth.losers}</div>
           </div>
         </section>
 
-        <section style={styles.block}>
-          <div style={styles.blockHead}>
-            <div style={styles.blockTitle}>Watchlist</div>
-          </div>
+        <section style={styles.shellCard}>
+          {isLoggedIn ? (
+            <div style={styles.loggedWrap}>
+              <div>
+                <div style={styles.loggedLabel}>Đang đăng nhập</div>
+                <div style={styles.loggedEmail}>{userEmail}</div>
+              </div>
 
-          <div style={styles.addRow}>
-            <input
-              value={watchInput}
-              onChange={(e) => setWatchInput(e.target.value)}
-              placeholder="Nhập mã"
-              style={styles.input}
-            />
-            <button type="button" onClick={() => addWatchSymbol()} style={styles.addBtn}>
-              Thêm
-            </button>
-          </div>
+              <div style={styles.loggedActions}>
+                <Link href="/dashboard" style={styles.primaryBtn}>
+                  Vào danh mục
+                </Link>
+                <button type="button" onClick={handleLogout} style={styles.secondaryBtn}>
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={styles.blockHead}>
+                <div style={styles.blockTitle}>
+                  {authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+                </div>
+              </div>
 
-          <div style={styles.quickRow}>
-            {['FPT', 'HPG', 'VCB', 'BID', 'CTG', 'MWG'].map((symbol) => (
+              <form onSubmit={handleAuthSubmit} style={styles.formGrid}>
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email"
+                  type="email"
+                  required
+                  style={styles.input}
+                />
+                <input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mật khẩu"
+                  type="password"
+                  required
+                  style={styles.input}
+                />
+
+                <button type="submit" style={styles.primaryWideBtn}>
+                  {loadingAuth
+                    ? 'Đang xử lý...'
+                    : authMode === 'login'
+                    ? 'Đăng nhập'
+                    : 'Tạo tài khoản'}
+                </button>
+              </form>
+
               <button
-                key={symbol}
                 type="button"
-                onClick={() => addWatchSymbol(symbol)}
-                style={styles.quickChip}
+                onClick={() => setAuthMode((prev) => (prev === 'login' ? 'signup' : 'login'))}
+                style={styles.switchBtn}
               >
-                + {symbol}
+                {authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}
               </button>
-            ))}
-          </div>
 
-          {watchError ? <div style={styles.errorText}>{watchError}</div> : null}
-          {error ? <div style={styles.errorText}>{error}</div> : null}
-
-          <div style={styles.watchGrid}>
-            {watchQuotes.map((item) => (
-              <article key={item.symbol} style={styles.watchCard}>
-                <div style={styles.watchHead}>
-                  <div>
-                    <div style={styles.symbol}>{item.symbol}</div>
-                    <div style={styles.ticker}>{item.ticker || `${item.symbol}.VN`}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeWatchSymbol(item.symbol)}
-                    style={styles.deleteBtn}
-                  >
-                    Xóa
-                  </button>
-                </div>
-
-                <div style={styles.price}>{formatPrice(item.price)}</div>
-
-                <div style={styles.changeLine}>
-                  <span style={{ ...styles.changeText, color: colorFor(item.change) }}>
-                    {formatChange(item.change)}
-                  </span>
-                  <span style={{ ...styles.changeText, color: colorFor(item.pct) }}>
-                    {formatPct(item.pct)}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
+              {authMessage ? <div style={styles.authMessage}>{authMessage}</div> : null}
+            </>
+          )}
         </section>
 
-        <section style={styles.block}>
+        <section style={styles.shellCard}>
           <div style={styles.blockHead}>
             <div style={styles.blockTitle}>Top 10 tăng mạnh</div>
             <div style={styles.blockSub}>ưu tiên thanh khoản</div>
           </div>
 
+          {marketError ? <div style={styles.errorText}>{marketError}</div> : null}
+
           <div style={styles.topList}>
-            {top10MomentumLiquidity.map((item, index) => (
+            {top10.map((item, index) => (
               <div key={item.symbol} style={styles.topRow}>
                 <div style={styles.rank}>{index + 1}</div>
+
                 <div style={styles.topMain}>
                   <div style={styles.topSymbol}>{item.symbol}</div>
                   <div style={styles.topVolume}>KL: {formatVolume(item.volume)}</div>
                 </div>
+
                 <div style={styles.topRight}>
                   <div style={styles.topPrice}>{formatPrice(item.price)}</div>
                   <div style={{ ...styles.topPct, color: colorFor(item.pct) }}>
@@ -365,7 +348,7 @@ export default function HomePage() {
               </div>
             ))}
 
-            {!topLoading && top10MomentumLiquidity.length === 0 ? (
+            {!marketLoading && top10.length === 0 ? (
               <div style={styles.empty}>Chưa có dữ liệu</div>
             ) : null}
           </div>
@@ -396,25 +379,37 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#fff',
     borderRadius: 28,
     padding: 18,
-    boxShadow: '0 14px 32px rgba(15, 23, 42, 0.18)',
+    boxShadow: '0 14px 32px rgba(15,23,42,0.18)',
   },
-  eyebrow: {
+  badge: {
+    display: 'inline-flex',
+    width: 'fit-content',
+    padding: '7px 12px',
+    borderRadius: 999,
+    background: 'rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.12)',
     fontSize: 13,
-    opacity: 0.8,
-    fontWeight: 700,
+    fontWeight: 800,
+    letterSpacing: '0.02em',
   },
   title: {
-    margin: '8px 0 0',
+    margin: '12px 0 0',
     fontSize: 34,
     lineHeight: 1.02,
     letterSpacing: '-0.04em',
     fontWeight: 800,
   },
-  heroMetaRow: {
+  subtitle: {
+    margin: '10px 0 0',
+    color: '#cbd5e1',
+    fontSize: 15,
+    lineHeight: 1.5,
+  },
+  heroMeta: {
     display: 'flex',
     gap: 8,
     flexWrap: 'wrap',
-    marginTop: 14,
+    marginTop: 16,
   },
   metaPill: {
     background: 'rgba(255,255,255,0.08)',
@@ -423,35 +418,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 12px',
     fontSize: 13,
     color: '#e2e8f0',
-  },
-  heroActions: {
-    display: 'flex',
-    gap: 10,
-    marginTop: 14,
-    flexWrap: 'wrap',
-  },
-  primaryBtn: {
-    border: 'none',
-    borderRadius: 16,
-    padding: '12px 16px',
-    background: '#fff',
-    color: '#0f172a',
-    fontWeight: 800,
-    fontSize: 15,
-    textDecoration: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryBtn: {
-    borderRadius: 16,
-    padding: '12px 16px',
-    background: 'transparent',
-    color: '#fff',
-    border: '1px solid rgba(255,255,255,0.2)',
-    fontWeight: 700,
-    fontSize: 15,
-    cursor: 'pointer',
   },
   summaryGrid: {
     display: 'grid',
@@ -477,7 +443,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: '-0.04em',
   },
-  block: {
+  shellCard: {
     background: '#fff',
     borderRadius: 24,
     padding: 16,
@@ -500,9 +466,52 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#64748b',
     fontWeight: 700,
   },
-  addRow: {
+  loggedWrap: {
     display: 'grid',
-    gridTemplateColumns: '1fr auto',
+    gap: 14,
+  },
+  loggedLabel: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: 700,
+  },
+  loggedEmail: {
+    marginTop: 8,
+    fontSize: 22,
+    lineHeight: 1.2,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
+    wordBreak: 'break-word',
+  },
+  loggedActions: {
+    display: 'grid',
+    gap: 10,
+  },
+  primaryBtn: {
+    border: 'none',
+    borderRadius: 16,
+    padding: '12px 16px',
+    background: '#0f172a',
+    color: '#fff',
+    fontWeight: 800,
+    fontSize: 15,
+    textDecoration: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryBtn: {
+    borderRadius: 16,
+    padding: '12px 16px',
+    background: '#fff',
+    color: '#0f172a',
+    border: '1px solid #dbe2ea',
+    fontWeight: 700,
+    fontSize: 15,
+    cursor: 'pointer',
+  },
+  formGrid: {
+    display: 'grid',
     gap: 10,
     marginTop: 14,
   },
@@ -515,92 +524,37 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     outline: 'none',
   },
-  addBtn: {
+  primaryWideBtn: {
     border: 'none',
     borderRadius: 16,
-    padding: '12px 16px',
+    padding: '13px 16px',
     background: '#0f172a',
     color: '#fff',
     fontWeight: 800,
     fontSize: 15,
     cursor: 'pointer',
   },
-  quickRow: {
-    display: 'flex',
-    gap: 8,
-    flexWrap: 'wrap',
+  switchBtn: {
     marginTop: 10,
-  },
-  quickChip: {
-    border: '1px solid #dbe2ea',
-    background: '#f8fafc',
-    color: '#334155',
-    borderRadius: 999,
-    padding: '8px 10px',
+    border: 'none',
+    background: 'transparent',
+    padding: 0,
+    textAlign: 'left',
+    color: '#0f172a',
+    fontSize: 14,
     fontWeight: 700,
-    fontSize: 13,
     cursor: 'pointer',
   },
-  errorText: {
+  authMessage: {
     marginTop: 10,
+    color: '#475569',
+    fontSize: 14,
+  },
+  errorText: {
+    marginTop: 12,
     color: '#be123c',
     fontSize: 13,
     fontWeight: 700,
-  },
-  watchGrid: {
-    display: 'grid',
-    gap: 10,
-    marginTop: 12,
-  },
-  watchCard: {
-    background: '#f8fafc',
-    borderRadius: 20,
-    padding: 14,
-    border: '1px solid #e2e8f0',
-  },
-  watchHead: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: 10,
-    alignItems: 'flex-start',
-  },
-  symbol: {
-    fontSize: 30,
-    lineHeight: 1,
-    fontWeight: 800,
-    letterSpacing: '-0.04em',
-  },
-  ticker: {
-    marginTop: 6,
-    fontSize: 13,
-    color: '#64748b',
-  },
-  deleteBtn: {
-    border: '1px solid #fecaca',
-    background: '#fff',
-    color: '#dc2626',
-    borderRadius: 14,
-    padding: '8px 10px',
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: 'pointer',
-  },
-  price: {
-    marginTop: 14,
-    fontSize: 40,
-    lineHeight: 1,
-    fontWeight: 800,
-    letterSpacing: '-0.04em',
-  },
-  changeLine: {
-    marginTop: 10,
-    display: 'flex',
-    gap: 14,
-    flexWrap: 'wrap',
-  },
-  changeText: {
-    fontSize: 18,
-    fontWeight: 800,
   },
   topList: {
     display: 'grid',
