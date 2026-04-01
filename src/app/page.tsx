@@ -25,38 +25,14 @@ type PricesResponse = {
   error?: string;
 };
 
-const MARKET_SYMBOLS = [
-  'FPT',
-  'HPG',
-  'VCB',
-  'BID',
-  'CTG',
-  'MWG',
-  'TCB',
-  'MBB',
-  'SSI',
-  'VND',
-  'GAS',
-  'POW',
-];
+const MARKET_SYMBOLS = ['FPT', 'HPG', 'VCB', 'BID', 'CTG', 'MWG', 'TCB', 'MBB', 'SSI', 'VND'];
 
 function formatPrice(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
-  const hasDecimal = Math.abs(value % 1) > 0.000001;
   return new Intl.NumberFormat('vi-VN', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: hasDecimal ? 1 : 0,
+    maximumFractionDigits: 0,
   }).format(value);
-}
-
-function formatChange(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
-  const sign = value > 0 ? '+' : value < 0 ? '' : '';
-  const hasDecimal = Math.abs(value % 1) > 0.000001;
-  return `${sign}${new Intl.NumberFormat('vi-VN', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: hasDecimal ? 1 : 0,
-  }).format(value)}`;
 }
 
 function formatPct(value?: number | null) {
@@ -88,6 +64,10 @@ function colorFor(value?: number | null) {
   return '#64748b';
 }
 
+function getDisplayName(email: string) {
+  return email.split('@')[0] || email;
+}
+
 export default function HomePage() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -108,10 +88,8 @@ export default function HomePage() {
 
     async function boot() {
       const { data } = await supabase.auth.getSession();
-      const session = data.session;
-
       if (!mounted) return;
-
+      const session = data.session;
       setIsLoggedIn(!!session);
       setUserEmail(session?.user?.email || '');
       setSessionChecked(true);
@@ -146,14 +124,14 @@ export default function HomePage() {
         const data: PricesResponse = await response.json();
 
         if (!response.ok) {
-          setMarketError(data?.error || 'Không lấy được dữ liệu thị trường');
+          setMarketError(data?.error || 'Không lấy được dữ liệu');
           setQuotes([]);
         } else {
           setQuotes(data.debug || []);
           setUpdatedAt(data.updatedAt || '');
         }
       } catch {
-        setMarketError('Lỗi kết nối dữ liệu thị trường');
+        setMarketError('Lỗi kết nối dữ liệu');
         setQuotes([]);
       } finally {
         setMarketLoading(false);
@@ -189,22 +167,10 @@ export default function HomePage() {
 
     try {
       if (authMode === 'signup') {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-
-        if (error) {
-          setAuthMessage(error.message);
-        } else {
-          setAuthMessage('Tạo tài khoản thành công');
-        }
+        const { error } = await supabase.auth.signUp({ email, password });
+        setAuthMessage(error ? error.message : 'Tạo tài khoản thành công');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
           setAuthMessage(error.message);
         } else {
@@ -224,7 +190,7 @@ export default function HomePage() {
     return (
       <main style={styles.page}>
         <div style={styles.container}>
-          <section style={styles.shellCard}>Đang tải...</section>
+          <section style={styles.card}>Đang tải...</section>
         </div>
       </main>
     );
@@ -235,94 +201,87 @@ export default function HomePage() {
       <div style={styles.container}>
         <section style={styles.hero}>
           <div style={styles.badge}>AlphaBoard</div>
-          <h1 style={styles.title}>Quản lý danh mục chuyên nghiệp</h1>
-          <p style={styles.subtitle}>Giá, NAV và hiệu suất trong một màn hình.</p>
+
+          <div style={styles.heroTop}>
+            <div>
+              <h1 style={styles.title}>Danh mục đầu tư thông minh</h1>
+              <p style={styles.subtitle}>Gọn, nhanh, dễ kiểm soát.</p>
+            </div>
+
+            {isLoggedIn ? (
+              <div style={styles.accountBox}>
+                <div style={styles.accountName}>{getDisplayName(userEmail)}</div>
+                <div style={styles.accountActions}>
+                  <Link href="/dashboard" style={styles.primaryBtn}>
+                    Vào danh mục
+                  </Link>
+                  <button type="button" onClick={handleLogout} style={styles.secondaryBtn}>
+                    Đăng xuất
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
 
           <div style={styles.heroMeta}>
             <div style={styles.metaPill}>{formatDateTime(updatedAt)}</div>
-            <div style={styles.metaPill}>Dữ liệu thị trường</div>
+            <div style={styles.metaPill}>Danh mục</div>
           </div>
         </section>
+
+        {!isLoggedIn ? (
+          <section style={styles.card}>
+            <div style={styles.blockTitle}>
+              {authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+            </div>
+
+            <form onSubmit={handleAuthSubmit} style={styles.formGrid}>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                type="email"
+                required
+                style={styles.input}
+              />
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mật khẩu"
+                type="password"
+                required
+                style={styles.input}
+              />
+              <button type="submit" style={styles.primaryWideBtn}>
+                {loadingAuth ? 'Đang xử lý...' : authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+              </button>
+            </form>
+
+            <button
+              type="button"
+              onClick={() => setAuthMode((prev) => (prev === 'login' ? 'signup' : 'login'))}
+              style={styles.switchBtn}
+            >
+              {authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}
+            </button>
+
+            {authMessage ? <div style={styles.authMessage}>{authMessage}</div> : null}
+          </section>
+        ) : null}
 
         <section style={styles.summaryGrid}>
           <div style={styles.summaryCard}>
             <div style={styles.summaryLabel}>Mã tăng</div>
             <div style={styles.summaryValue}>{marketLoading ? '--' : breadth.gainers}</div>
           </div>
-
           <div style={styles.summaryCard}>
             <div style={styles.summaryLabel}>Mã giảm</div>
             <div style={styles.summaryValue}>{marketLoading ? '--' : breadth.losers}</div>
           </div>
         </section>
 
-        <section style={styles.shellCard}>
-          {isLoggedIn ? (
-            <div style={styles.loggedWrap}>
-              <div>
-                <div style={styles.loggedLabel}>Đang đăng nhập</div>
-                <div style={styles.loggedEmail}>{userEmail}</div>
-              </div>
-
-              <div style={styles.loggedActions}>
-                <Link href="/dashboard" style={styles.primaryBtn}>
-                  Vào danh mục
-                </Link>
-                <button type="button" onClick={handleLogout} style={styles.secondaryBtn}>
-                  Đăng xuất
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={styles.blockHead}>
-                <div style={styles.blockTitle}>
-                  {authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
-                </div>
-              </div>
-
-              <form onSubmit={handleAuthSubmit} style={styles.formGrid}>
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email"
-                  type="email"
-                  required
-                  style={styles.input}
-                />
-                <input
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mật khẩu"
-                  type="password"
-                  required
-                  style={styles.input}
-                />
-
-                <button type="submit" style={styles.primaryWideBtn}>
-                  {loadingAuth
-                    ? 'Đang xử lý...'
-                    : authMode === 'login'
-                    ? 'Đăng nhập'
-                    : 'Tạo tài khoản'}
-                </button>
-              </form>
-
-              <button
-                type="button"
-                onClick={() => setAuthMode((prev) => (prev === 'login' ? 'signup' : 'login'))}
-                style={styles.switchBtn}
-              >
-                {authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}
-              </button>
-
-              {authMessage ? <div style={styles.authMessage}>{authMessage}</div> : null}
-            </>
-          )}
-        </section>
-
-        <section style={styles.shellCard}>
-          <div style={styles.blockHead}>
+        <section style={styles.card}>
+          <div style={styles.listHead}>
             <div style={styles.blockTitle}>Top 10 tăng mạnh</div>
             <div style={styles.blockSub}>ưu tiên thanh khoản</div>
           </div>
@@ -333,12 +292,10 @@ export default function HomePage() {
             {top10.map((item, index) => (
               <div key={item.symbol} style={styles.topRow}>
                 <div style={styles.rank}>{index + 1}</div>
-
                 <div style={styles.topMain}>
                   <div style={styles.topSymbol}>{item.symbol}</div>
                   <div style={styles.topVolume}>KL: {formatVolume(item.volume)}</div>
                 </div>
-
                 <div style={styles.topRight}>
                   <div style={styles.topPrice}>{formatPrice(item.price)}</div>
                   <div style={{ ...styles.topPct, color: colorFor(item.pct) }}>
@@ -367,7 +324,7 @@ const styles: Record<string, React.CSSProperties> = {
       'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif',
   },
   container: {
-    maxWidth: 760,
+    maxWidth: 1080,
     margin: '0 auto',
     padding: 12,
     display: 'flex',
@@ -392,8 +349,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 800,
     letterSpacing: '0.02em',
   },
+  heroTop: {
+    display: 'grid',
+    gap: 16,
+    marginTop: 14,
+  },
   title: {
-    margin: '12px 0 0',
+    margin: 0,
     fontSize: 34,
     lineHeight: 1.02,
     letterSpacing: '-0.04em',
@@ -404,6 +366,22 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#cbd5e1',
     fontSize: 15,
     lineHeight: 1.5,
+  },
+  accountBox: {
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    borderRadius: 22,
+    padding: 14,
+  },
+  accountName: {
+    fontSize: 24,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
+  },
+  accountActions: {
+    display: 'grid',
+    gap: 10,
+    marginTop: 12,
   },
   heroMeta: {
     display: 'flex',
@@ -419,80 +397,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     color: '#e2e8f0',
   },
-  summaryGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 12,
-  },
-  summaryCard: {
-    background: '#fff',
-    borderRadius: 22,
-    padding: 16,
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: 700,
-  },
-  summaryValue: {
-    marginTop: 8,
-    fontSize: 34,
-    lineHeight: 1,
-    fontWeight: 800,
-    letterSpacing: '-0.04em',
-  },
-  shellCard: {
-    background: '#fff',
-    borderRadius: 24,
-    padding: 16,
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
-  },
-  blockHead: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  blockTitle: {
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: '-0.03em',
-  },
-  blockSub: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: 700,
-  },
-  loggedWrap: {
-    display: 'grid',
-    gap: 14,
-  },
-  loggedLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: 700,
-  },
-  loggedEmail: {
-    marginTop: 8,
-    fontSize: 22,
-    lineHeight: 1.2,
-    fontWeight: 800,
-    letterSpacing: '-0.03em',
-    wordBreak: 'break-word',
-  },
-  loggedActions: {
-    display: 'grid',
-    gap: 10,
-  },
   primaryBtn: {
     border: 'none',
     borderRadius: 16,
     padding: '12px 16px',
-    background: '#0f172a',
-    color: '#fff',
+    background: '#fff',
+    color: '#0f172a',
     fontWeight: 800,
     fontSize: 15,
     textDecoration: 'none',
@@ -503,12 +413,24 @@ const styles: Record<string, React.CSSProperties> = {
   secondaryBtn: {
     borderRadius: 16,
     padding: '12px 16px',
-    background: '#fff',
-    color: '#0f172a',
-    border: '1px solid #dbe2ea',
+    background: 'transparent',
+    color: '#fff',
+    border: '1px solid rgba(255,255,255,0.2)',
     fontWeight: 700,
     fontSize: 15,
     cursor: 'pointer',
+  },
+  card: {
+    background: '#fff',
+    borderRadius: 24,
+    padding: 16,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
+  },
+  blockTitle: {
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
   },
   formGrid: {
     display: 'grid',
@@ -549,6 +471,41 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 10,
     color: '#475569',
     fontSize: 14,
+  },
+  summaryGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: 12,
+  },
+  summaryCard: {
+    background: '#fff',
+    borderRadius: 22,
+    padding: 16,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
+  },
+  summaryLabel: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: 700,
+  },
+  summaryValue: {
+    marginTop: 8,
+    fontSize: 34,
+    lineHeight: 1,
+    fontWeight: 800,
+    letterSpacing: '-0.04em',
+  },
+  listHead: {
+    display: 'flex',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  blockSub: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: 700,
   },
   errorText: {
     marginTop: 12,
