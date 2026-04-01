@@ -44,8 +44,8 @@ async function getYahooFinance(symbol: string, isStock = true) {
   const pct = (change / previousClose) * 100;
 
   if (isStock) {
-    price = price / 1000;
-    change = change / 1000;
+    price = price / 1;
+    change = change / 1;
   }
 
   return {
