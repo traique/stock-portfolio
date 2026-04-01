@@ -13,7 +13,7 @@ function safeNumber(value: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function getYahooFinance(symbol: string, isStock = true) {
+async function getYahooFinance(symbol: string) {
   const ticker = toYahooSymbol(symbol);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d&_=${Date.now()}`;
 
@@ -38,27 +38,21 @@ async function getYahooFinance(symbol: string, isStock = true) {
     throw new Error(`Yahoo returned empty meta for ${ticker}`);
   }
 
-  let price = safeNumber(meta.regularMarketPrice);
-  let previousClose = safeNumber(meta.previousClose);
-  let regularMarketVolume = safeNumber(meta.regularMarketVolume);
+  const price = safeNumber(meta.regularMarketPrice);
+  const previousClose = safeNumber(meta.previousClose);
+  const regularMarketVolume = safeNumber(meta.regularMarketVolume);
 
   if (!price || !previousClose) {
     throw new Error(`Missing market data for ${ticker}`);
   }
 
-  let change = price - previousClose;
+  const change = price - previousClose;
   const pct = previousClose ? (change / previousClose) * 100 : 0;
-
-  if (isStock) {
-    price = price / 1000;
-    previousClose = previousClose / 1000;
-    change = change / 1000;
-  }
 
   return {
     symbol,
     ticker,
-    price,
+    price, // giữ nguyên giá gốc, ví dụ 13050
     change,
     pct,
     previousClose,
@@ -76,7 +70,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         prices: {},
         updatedAt: new Date().toISOString(),
-        provider: 'yahoo-chart-empty',
+        provider: 'market',
         debug: [],
       });
     }
@@ -84,7 +78,7 @@ export async function GET(request: NextRequest) {
     const results = await Promise.all(
       symbols.map(async (symbol) => {
         try {
-          return await getYahooFinance(symbol, true);
+          return await getYahooFinance(symbol);
         } catch (error) {
           return {
             symbol,
@@ -109,14 +103,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       prices,
       updatedAt: new Date().toISOString(),
-      provider: 'yahoo-chart-v8',
+      provider: 'market',
       debug: results,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json(
-      { error: message, provider: 'yahoo-chart-v8' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message, provider: 'market' }, { status: 500 });
   }
 }
