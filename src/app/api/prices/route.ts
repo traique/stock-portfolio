@@ -8,80 +8,55 @@ function toYahooSymbol(symbol: string) {
   return `${symbol}.VN`;
 }
 
-function extractNumber(html: string, patterns: RegExp[]) {
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) {
-      const value = Number(match[1].replace(/,/g, ''));
-      if (Number.isFinite(value) && value > 0) {
-        return value;
-      }
-    }
+async function getYahooFinance(symbol: string, isStock = true) {
+  const ticker = toYahooSymbol(symbol);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d&_=${Date.now()}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      Accept: '*/*',
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    throw new Error(`Yahoo request failed for ${ticker}: ${response.status}`);
   }
-  return 0;
-}
 
-function extractText(html: string, patterns: RegExp[]) {
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) {
-      return match[1];
-    }
+  const data = await response.json();
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta;
+
+  if (!meta) {
+    throw new Error(`Yahoo returned empty meta for ${ticker}`);
   }
-  return null;
-}
 
-async function fetchYahooPagePrice(symbol: string) {
-  const yahooSymbol = toYahooSymbol(symbol);
-  const urls = [
-    `https://sg.finance.yahoo.com/quote/${yahooSymbol}`,
-    `https://uk.finance.yahoo.com/quote/${yahooSymbol}`,
-    `https://finance.yahoo.com/quote/${yahooSymbol}`,
-  ];
+  let price = Number(meta.regularMarketPrice ?? 0);
+  let previousClose = Number(meta.previousClose ?? 0);
 
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        cache: 'no-store',
-      });
+  if (!price || !previousClose) {
+    throw new Error(`Missing market data for ${ticker}`);
+  }
 
-      if (!response.ok) continue;
+  let change = price - previousClose;
+  const pct = (change / previousClose) * 100;
 
-      const html = await response.text();
-
-      const price = extractNumber(html, [
-        /"regularMarketPrice"\s*:\s*\{[^}]*"raw"\s*:\s*([0-9.]+)/,
-        /"currentPrice"\s*:\s*\{[^}]*"raw"\s*:\s*([0-9.]+)/,
-        /"financialData"\s*:\s*\{[\s\S]*?"currentPrice"\s*:\s*\{[^}]*"raw"\s*:\s*([0-9.]+)/,
-      ]);
-
-      const marketTime = extractText(html, [
-        /"regularMarketTime"\s*:\s*\{[^}]*"fmt"\s*:\s*"([^"]+)"/,
-        /"regularMarketTime"\s*:\s*\{[^}]*"raw"\s*:\s*([0-9]+)/,
-      ]);
-
-      if (price > 0) {
-        return {
-          symbol,
-          price,
-          marketTime,
-          sourceUrl: url,
-        };
-      }
-    } catch {
-      continue;
-    }
+  if (isStock) {
+    price = price / 1000;
+    change = change / 1000;
   }
 
   return {
     symbol,
-    price: 0,
-    marketTime: null,
-    sourceUrl: null,
+    ticker,
+    price,
+    change,
+    pct,
+    previousClose: isStock ? previousClose / 1000 : previousClose,
+    marketTime: meta.regularMarketTime ?? null,
+    currency: meta.currency ?? 'VND',
   };
 }
 
@@ -93,27 +68,42 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         prices: {},
         updatedAt: new Date().toISOString(),
-        provider: 'yahoo-page-empty',
+        provider: 'yahoo-chart-empty',
       });
     }
 
-    const results = await Promise.all(symbols.map((symbol) => fetchYahooPagePrice(symbol)));
+    const results = await Promise.all(
+      symbols.map(async (symbol) => {
+        try {
+          return await getYahooFinance(symbol, true);
+        } catch (error) {
+          return {
+            symbol,
+            ticker: toYahooSymbol(symbol),
+            price: 0,
+            change: 0,
+            pct: 0,
+            previousClose: 0,
+            marketTime: null,
+            currency: 'VND',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+        }
+      })
+    );
 
     const prices = Object.fromEntries(
-      results.filter((item) => item.price > 0).map((item) => [item.symbol, item.price])
+      results.filter((item) => Number(item.price) > 0).map((item) => [item.symbol, item.price])
     );
 
     return NextResponse.json({
       prices,
       updatedAt: new Date().toISOString(),
-      provider: 'yahoo-page-scrape',
+      provider: 'yahoo-chart-v8',
       debug: results,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json(
-      { error: message, provider: 'yahoo-page-scrape' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message, provider: 'yahoo-chart-v8' }, { status: 500 });
   }
 }
