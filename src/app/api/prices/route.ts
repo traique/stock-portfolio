@@ -8,6 +8,11 @@ function toYahooSymbol(symbol: string) {
   return `${symbol}.VN`;
 }
 
+function safeNumber(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 async function getYahooFinance(symbol: string, isStock = true) {
   const ticker = toYahooSymbol(symbol);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d&_=${Date.now()}`;
@@ -33,19 +38,21 @@ async function getYahooFinance(symbol: string, isStock = true) {
     throw new Error(`Yahoo returned empty meta for ${ticker}`);
   }
 
-  let price = Number(meta.regularMarketPrice ?? 0);
-  let previousClose = Number(meta.previousClose ?? 0);
+  let price = safeNumber(meta.regularMarketPrice);
+  let previousClose = safeNumber(meta.previousClose);
+  let regularMarketVolume = safeNumber(meta.regularMarketVolume);
 
   if (!price || !previousClose) {
     throw new Error(`Missing market data for ${ticker}`);
   }
 
   let change = price - previousClose;
-  const pct = (change / previousClose) * 100;
+  const pct = previousClose ? (change / previousClose) * 100 : 0;
 
   if (isStock) {
-    price = price / 1;
-    change = change / 1;
+    price = price / 1000;
+    previousClose = previousClose / 1000;
+    change = change / 1000;
   }
 
   return {
@@ -54,9 +61,10 @@ async function getYahooFinance(symbol: string, isStock = true) {
     price,
     change,
     pct,
-    previousClose: isStock ? previousClose / 1000 : previousClose,
+    previousClose,
     marketTime: meta.regularMarketTime ?? null,
     currency: meta.currency ?? 'VND',
+    volume: regularMarketVolume,
   };
 }
 
@@ -69,6 +77,7 @@ export async function GET(request: NextRequest) {
         prices: {},
         updatedAt: new Date().toISOString(),
         provider: 'yahoo-chart-empty',
+        debug: [],
       });
     }
 
@@ -86,6 +95,7 @@ export async function GET(request: NextRequest) {
             previousClose: 0,
             marketTime: null,
             currency: 'VND',
+            volume: 0,
             error: error instanceof Error ? error.message : 'Unknown error',
           };
         }
@@ -104,6 +114,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message, provider: 'yahoo-chart-v8' }, { status: 500 });
+    return NextResponse.json(
+      { error: message, provider: 'yahoo-chart-v8' },
+      { status: 500 }
+    );
   }
 }
