@@ -2,8 +2,8 @@ import './globals.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Stock Portfolio',
-  description: 'Theo dõi lời lỗ cổ phiếu với Supabase + Vercel',
+  title: 'AlphaBoard',
+  description: 'Quản lý danh mục chuyên nghiệp',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
