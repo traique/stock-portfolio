@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'AlphaBoard',
-  description: 'Quản lý danh mục chuyên nghiệp',
+  description: 'Danh mục đầu tư thông minh',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
