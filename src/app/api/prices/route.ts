@@ -52,7 +52,7 @@ async function getYahooFinance(symbol: string) {
   return {
     symbol,
     ticker,
-    price, // giữ nguyên giá gốc, ví dụ 13050
+    price,
     change,
     pct,
     previousClose,
