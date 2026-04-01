@@ -25,7 +25,7 @@ type PricesResponse = {
   error?: string;
 };
 
-const MARKET_SYMBOLS = ['FPT', 'HPG', 'VCB', 'BID', 'CTG', 'MWG', 'TCB', 'MBB', 'SSI', 'VND'];
+const DEFAULT_WATCHLIST = ['FPT', 'HPG', 'VCB', 'BID'];
 
 function formatPrice(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
@@ -58,15 +58,21 @@ function formatDateTime(value?: string) {
 }
 
 function colorFor(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '#64748b';
-  if (value > 0) return '#16a34a';
-  if (value < 0) return '#dc2626';
-  return '#64748b';
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'var(--muted)';
+  if (value > 0) return 'var(--green)';
+  if (value < 0) return 'var(--red)';
+  return 'var(--muted)';
+}
+
+function normalizeSymbol(input: string) {
+  return input.trim().toUpperCase().replace(/[^A-Z]/g, '');
 }
 
 function getDisplayName(email: string) {
   return email.split('@')[0] || email;
 }
+
+type ThemeMode = 'light' | 'dark';
 
 export default function HomePage() {
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -78,10 +84,46 @@ export default function HomePage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_WATCHLIST);
+  const [watchInput, setWatchInput] = useState('');
+  const [watchError, setWatchError] = useState('');
+
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [updatedAt, setUpdatedAt] = useState('');
   const [marketLoading, setMarketLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
+
+  const [theme, setTheme] = useState<ThemeMode>('light');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('alphaboard_theme') as ThemeMode | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setTheme(savedTheme);
+      document.documentElement.dataset.theme = savedTheme;
+    } else {
+      document.documentElement.dataset.theme = 'light';
+    }
+
+    const savedWatchlist = localStorage.getItem('alphaboard_watchlist');
+    if (savedWatchlist) {
+      try {
+        const parsed = JSON.parse(savedWatchlist);
+        if (Array.isArray(parsed) && parsed.length) {
+          setWatchlist(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
+        }
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('alphaboard_theme', theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('alphaboard_watchlist', JSON.stringify(watchlist));
+  }, [watchlist]);
 
   useEffect(() => {
     let mounted = true;
@@ -111,27 +153,36 @@ export default function HomePage() {
     };
   }, []);
 
+  async function fetchQuotes(symbols: string[]) {
+    if (!symbols.length) return { debug: [], updatedAt: '' };
+
+    const response = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(','))}`, {
+      cache: 'no-store',
+    });
+
+    const data: PricesResponse = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || 'Không lấy được dữ liệu');
+    }
+
+    return {
+      debug: data.debug || [],
+      updatedAt: data.updatedAt || '',
+    };
+  }
+
   useEffect(() => {
     async function loadMarket() {
       setMarketLoading(true);
       setMarketError('');
 
       try {
-        const response = await fetch(
-          `/api/prices?symbols=${encodeURIComponent(MARKET_SYMBOLS.join(','))}`,
-          { cache: 'no-store' }
-        );
-        const data: PricesResponse = await response.json();
-
-        if (!response.ok) {
-          setMarketError(data?.error || 'Không lấy được dữ liệu');
-          setQuotes([]);
-        } else {
-          setQuotes(data.debug || []);
-          setUpdatedAt(data.updatedAt || '');
-        }
-      } catch {
-        setMarketError('Lỗi kết nối dữ liệu');
+        const data = await fetchQuotes(watchlist);
+        setQuotes(data.debug);
+        setUpdatedAt(data.updatedAt);
+      } catch (error) {
+        setMarketError(error instanceof Error ? error.message : 'Lỗi dữ liệu');
         setQuotes([]);
       } finally {
         setMarketLoading(false);
@@ -139,7 +190,7 @@ export default function HomePage() {
     }
 
     loadMarket();
-  }, []);
+  }, [watchlist]);
 
   const breadth = useMemo(() => {
     const valid = quotes.filter((item) => Number.isFinite(item.pct));
@@ -147,17 +198,6 @@ export default function HomePage() {
       gainers: valid.filter((item) => item.pct > 0).length,
       losers: valid.filter((item) => item.pct < 0).length,
     };
-  }, [quotes]);
-
-  const top10 = useMemo(() => {
-    return [...quotes]
-      .filter((item) => Number.isFinite(item.pct) && item.pct > 0)
-      .sort((a, b) => {
-        const pctDiff = (b.pct || 0) - (a.pct || 0);
-        if (Math.abs(pctDiff) > 0.0001) return pctDiff;
-        return (b.volume || 0) - (a.volume || 0);
-      })
-      .slice(0, 10);
   }, [quotes]);
 
   async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -186,63 +226,95 @@ export default function HomePage() {
     await supabase.auth.signOut();
   }
 
+  function addWatchSymbol(symbolRaw?: string) {
+    const symbol = normalizeSymbol(symbolRaw ?? watchInput);
+
+    if (!symbol) {
+      setWatchError('Nhập mã hợp lệ');
+      return;
+    }
+
+    if (watchlist.includes(symbol)) {
+      setWatchError('Mã đã có');
+      return;
+    }
+
+    setWatchlist((prev) => [...prev, symbol]);
+    setWatchInput('');
+    setWatchError('');
+  }
+
+  function removeWatchSymbol(symbol: string) {
+    setWatchlist((prev) => prev.filter((item) => item !== symbol));
+  }
+
   if (!sessionChecked) {
     return (
-      <main style={styles.page}>
-        <div style={styles.container}>
-          <section style={styles.card}>Đang tải...</section>
+      <main className="ab-page">
+        <div className="ab-shell">
+          <section className="ab-card">Đang tải...</section>
         </div>
       </main>
     );
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <section style={styles.hero}>
-          <div style={styles.badge}>AlphaBoard</div>
+    <main className="ab-page">
+      <div className="ab-shell">
+        <section className="ab-hero">
+          <div className="ab-hero-top">
+            <div className="ab-badge">AlphaBoard</div>
 
-          <div style={styles.heroTop}>
-            <div>
-              <h1 style={styles.title}>Danh mục đầu tư thông minh</h1>
-              <p style={styles.subtitle}>Gọn, nhanh, dễ kiểm soát.</p>
+            <button
+              type="button"
+              className="ab-icon-btn"
+              onClick={() => setSettingsOpen((prev) => !prev)}
+              aria-label="Tùy chỉnh"
+            >
+              ⚙️
+            </button>
+          </div>
+
+          <h1 className="ab-title">Danh mục đầu tư</h1>
+
+          <div className="ab-meta-row">
+            <div className="ab-pill">{formatDateTime(updatedAt)}</div>
+          </div>
+
+          {settingsOpen ? (
+            <div className="ab-settings">
+              <button
+                type="button"
+                className={`ab-chip ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => setTheme('light')}
+              >
+                Sáng
+              </button>
+              <button
+                type="button"
+                className={`ab-chip ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => setTheme('dark')}
+              >
+                Tối
+              </button>
             </div>
-
-            {isLoggedIn ? (
-              <div style={styles.accountBox}>
-                <div style={styles.accountName}>{getDisplayName(userEmail)}</div>
-                <div style={styles.accountActions}>
-                  <Link href="/dashboard" style={styles.primaryBtn}>
-                    Vào danh mục
-                  </Link>
-                  <button type="button" onClick={handleLogout} style={styles.secondaryBtn}>
-                    Đăng xuất
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div style={styles.heroMeta}>
-            <div style={styles.metaPill}>{formatDateTime(updatedAt)}</div>
-            <div style={styles.metaPill}>Danh mục</div>
-          </div>
+          ) : null}
         </section>
 
         {!isLoggedIn ? (
-          <section style={styles.card}>
-            <div style={styles.blockTitle}>
+          <section className="ab-card">
+            <div className="ab-section-title">
               {authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
             </div>
 
-            <form onSubmit={handleAuthSubmit} style={styles.formGrid}>
+            <form onSubmit={handleAuthSubmit} className="ab-form">
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Email"
                 type="email"
                 required
-                style={styles.input}
+                className="ab-input"
               />
               <input
                 value={password}
@@ -250,9 +322,9 @@ export default function HomePage() {
                 placeholder="Mật khẩu"
                 type="password"
                 required
-                style={styles.input}
+                className="ab-input"
               />
-              <button type="submit" style={styles.primaryWideBtn}>
+              <button type="submit" className="ab-btn ab-btn-primary">
                 {loadingAuth ? 'Đang xử lý...' : authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
               </button>
             </form>
@@ -260,313 +332,468 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => setAuthMode((prev) => (prev === 'login' ? 'signup' : 'login'))}
-              style={styles.switchBtn}
+              className="ab-link-btn"
             >
               {authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}
             </button>
 
-            {authMessage ? <div style={styles.authMessage}>{authMessage}</div> : null}
+            {authMessage ? <div className="ab-note">{authMessage}</div> : null}
           </section>
-        ) : null}
+        ) : (
+          <section className="ab-card">
+            <div className="ab-row-between">
+              <div>
+                <div className="ab-label">Tài khoản</div>
+                <div className="ab-name">{getDisplayName(userEmail)}</div>
+              </div>
 
-        <section style={styles.summaryGrid}>
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Mã tăng</div>
-            <div style={styles.summaryValue}>{marketLoading ? '--' : breadth.gainers}</div>
+              <div className="ab-action-stack">
+                <Link href="/dashboard" className="ab-btn ab-btn-primary">
+                  Vào danh mục
+                </Link>
+                <button type="button" onClick={handleLogout} className="ab-btn ab-btn-secondary">
+                  Đăng xuất
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section className="ab-summary-grid">
+          <div className="ab-summary-card">
+            <div className="ab-label">Mã tăng</div>
+            <div className="ab-summary-value">{marketLoading ? '--' : breadth.gainers}</div>
           </div>
-          <div style={styles.summaryCard}>
-            <div style={styles.summaryLabel}>Mã giảm</div>
-            <div style={styles.summaryValue}>{marketLoading ? '--' : breadth.losers}</div>
+          <div className="ab-summary-card">
+            <div className="ab-label">Mã giảm</div>
+            <div className="ab-summary-value">{marketLoading ? '--' : breadth.losers}</div>
           </div>
         </section>
 
-        <section style={styles.card}>
-          <div style={styles.listHead}>
-            <div style={styles.blockTitle}>Top 10 tăng mạnh</div>
-            <div style={styles.blockSub}>ưu tiên thanh khoản</div>
+        <section className="ab-card">
+          <div className="ab-row-between">
+            <div className="ab-section-title">Watchlist</div>
           </div>
 
-          {marketError ? <div style={styles.errorText}>{marketError}</div> : null}
+          <div className="ab-add-row">
+            <input
+              value={watchInput}
+              onChange={(e) => setWatchInput(e.target.value)}
+              placeholder="Nhập mã"
+              className="ab-input"
+            />
+            <button type="button" onClick={() => addWatchSymbol()} className="ab-btn ab-btn-primary">
+              Thêm
+            </button>
+          </div>
 
-          <div style={styles.topList}>
-            {top10.map((item, index) => (
-              <div key={item.symbol} style={styles.topRow}>
-                <div style={styles.rank}>{index + 1}</div>
-                <div style={styles.topMain}>
-                  <div style={styles.topSymbol}>{item.symbol}</div>
-                  <div style={styles.topVolume}>KL: {formatVolume(item.volume)}</div>
-                </div>
-                <div style={styles.topRight}>
-                  <div style={styles.topPrice}>{formatPrice(item.price)}</div>
-                  <div style={{ ...styles.topPct, color: colorFor(item.pct) }}>
-                    {formatPct(item.pct)}
+          <div className="ab-quick-row">
+            {['FPT', 'HPG', 'VCB', 'BID', 'CTG', 'MWG'].map((symbol) => (
+              <button
+                key={symbol}
+                type="button"
+                className="ab-chip"
+                onClick={() => addWatchSymbol(symbol)}
+              >
+                + {symbol}
+              </button>
+            ))}
+          </div>
+
+          {watchError ? <div className="ab-error">{watchError}</div> : null}
+          {marketError ? <div className="ab-error">{marketError}</div> : null}
+
+          <div className="ab-watch-grid">
+            {quotes.map((item) => (
+              <article key={item.symbol} className="ab-watch-card">
+                <div className="ab-row-between">
+                  <div>
+                    <div className="ab-symbol">{item.symbol}</div>
+                    <div className="ab-muted">KL: {formatVolume(item.volume)}</div>
                   </div>
+
+                  <button
+                    type="button"
+                    className="ab-delete"
+                    onClick={() => removeWatchSymbol(item.symbol)}
+                  >
+                    Xóa
+                  </button>
                 </div>
-              </div>
+
+                <div className="ab-price">{formatPrice(item.price)}</div>
+
+                <div className="ab-change-row">
+                  <span style={{ color: colorFor(item.change) }}>{formatPrice(item.change)}</span>
+                  <span style={{ color: colorFor(item.pct) }}>{formatPct(item.pct)}</span>
+                </div>
+              </article>
             ))}
 
-            {!marketLoading && top10.length === 0 ? (
-              <div style={styles.empty}>Chưa có dữ liệu</div>
-            ) : null}
+            {!marketLoading && quotes.length === 0 ? <div className="ab-note">Chưa có mã</div> : null}
           </div>
         </section>
       </div>
+
+      <style jsx>{`
+        .ab-page {
+          min-height: 100vh;
+          background: var(--bg);
+          color: var(--text);
+          font-family:
+            Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial,
+            'Noto Sans', sans-serif;
+          transition: background 0.2s ease, color 0.2s ease;
+        }
+
+        .ab-shell {
+          max-width: 1100px;
+          margin: 0 auto;
+          padding: 12px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .ab-hero,
+        .ab-card,
+        .ab-summary-card,
+        .ab-watch-card {
+          transition:
+            background 0.2s ease,
+            border-color 0.2s ease,
+            color 0.2s ease,
+            box-shadow 0.2s ease;
+        }
+
+        .ab-hero {
+          background: linear-gradient(135deg, #0b1530, #12224a);
+          color: #fff;
+          border-radius: 28px;
+          padding: 18px;
+          box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
+        }
+
+        .ab-hero-top,
+        .ab-row-between {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+        }
+
+        .ab-badge {
+          display: inline-flex;
+          width: fit-content;
+          padding: 7px 12px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: 0.02em;
+        }
+
+        .ab-icon-btn {
+          width: 42px;
+          height: 42px;
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          background: rgba(255, 255, 255, 0.08);
+          color: #fff;
+          font-size: 18px;
+          cursor: pointer;
+        }
+
+        .ab-title {
+          margin: 14px 0 0;
+          font-size: 34px;
+          line-height: 1.02;
+          letter-spacing: -0.04em;
+          font-weight: 800;
+        }
+
+        .ab-meta-row {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 16px;
+        }
+
+        .ab-pill {
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 999px;
+          padding: 8px 12px;
+          font-size: 13px;
+          color: #e2e8f0;
+        }
+
+        .ab-settings {
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+          flex-wrap: wrap;
+        }
+
+        .ab-chip {
+          border: 1px solid var(--border);
+          background: var(--soft);
+          color: var(--text);
+          border-radius: 999px;
+          padding: 8px 10px;
+          font-weight: 700;
+          font-size: 13px;
+          cursor: pointer;
+        }
+
+        .ab-chip.active {
+          background: var(--text);
+          color: var(--card);
+          border-color: var(--text);
+        }
+
+        .ab-card {
+          background: var(--card);
+          border-radius: 24px;
+          padding: 16px;
+          border: 1px solid var(--border);
+          box-shadow: 0 8px 18px rgba(148, 163, 184, 0.1);
+        }
+
+        .ab-section-title {
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+        }
+
+        .ab-label {
+          font-size: 13px;
+          color: var(--muted);
+          font-weight: 700;
+        }
+
+        .ab-name {
+          margin-top: 6px;
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          word-break: break-word;
+        }
+
+        .ab-action-stack {
+          display: grid;
+          gap: 10px;
+          min-width: 160px;
+        }
+
+        .ab-btn {
+          border-radius: 16px;
+          padding: 12px 16px;
+          font-weight: 800;
+          font-size: 15px;
+          text-decoration: none;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+
+        .ab-btn-primary {
+          border: none;
+          background: var(--primary);
+          color: #fff;
+        }
+
+        .ab-btn-secondary {
+          border: 1px solid var(--border);
+          background: var(--card);
+          color: var(--text);
+        }
+
+        .ab-form {
+          display: grid;
+          gap: 10px;
+          margin-top: 14px;
+        }
+
+        .ab-input {
+          width: 100%;
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          padding: 12px 14px;
+          background: var(--card);
+          color: var(--text);
+          font-size: 15px;
+          outline: none;
+        }
+
+        .ab-link-btn {
+          margin-top: 10px;
+          border: none;
+          background: transparent;
+          padding: 0;
+          text-align: left;
+          color: var(--text);
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .ab-note {
+          margin-top: 10px;
+          color: var(--muted);
+          font-size: 14px;
+        }
+
+        .ab-error {
+          margin-top: 10px;
+          color: var(--red);
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .ab-summary-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .ab-summary-card {
+          background: var(--card);
+          border-radius: 22px;
+          padding: 16px;
+          border: 1px solid var(--border);
+          box-shadow: 0 8px 18px rgba(148, 163, 184, 0.1);
+        }
+
+        .ab-summary-value {
+          margin-top: 8px;
+          font-size: 34px;
+          line-height: 1;
+          font-weight: 800;
+          letter-spacing: -0.04em;
+        }
+
+        .ab-add-row {
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 10px;
+          margin-top: 14px;
+        }
+
+        .ab-quick-row {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-top: 10px;
+        }
+
+        .ab-watch-grid {
+          display: grid;
+          gap: 10px;
+          margin-top: 12px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .ab-watch-card {
+          background: var(--soft);
+          border-radius: 20px;
+          padding: 14px;
+          border: 1px solid var(--border);
+        }
+
+        .ab-symbol {
+          font-size: 30px;
+          line-height: 1;
+          font-weight: 800;
+          letter-spacing: -0.04em;
+        }
+
+        .ab-muted {
+          margin-top: 6px;
+          font-size: 13px;
+          color: var(--muted);
+        }
+
+        .ab-delete {
+          border: 1px solid #fecaca;
+          background: var(--card);
+          color: var(--red);
+          border-radius: 14px;
+          padding: 8px 10px;
+          font-weight: 700;
+          font-size: 13px;
+          cursor: pointer;
+        }
+
+        .ab-price {
+          margin-top: 14px;
+          font-size: 40px;
+          line-height: 1;
+          font-weight: 800;
+          letter-spacing: -0.04em;
+        }
+
+        .ab-change-row {
+          margin-top: 10px;
+          display: flex;
+          gap: 14px;
+          flex-wrap: wrap;
+          font-size: 18px;
+          font-weight: 800;
+        }
+
+        :global(:root) {
+          --bg: #f4f7fb;
+          --card: #ffffff;
+          --soft: #f8fafc;
+          --text: #0f172a;
+          --muted: #64748b;
+          --border: #dbe2ea;
+          --primary: #0f172a;
+          --green: #16a34a;
+          --red: #dc2626;
+        }
+
+        :global(:root[data-theme='dark']) {
+          --bg: #0b1220;
+          --card: #111827;
+          --soft: #172033;
+          --text: #f8fafc;
+          --muted: #94a3b8;
+          --border: #243041;
+          --primary: #2563eb;
+          --green: #22c55e;
+          --red: #f87171;
+        }
+
+        @media (max-width: 900px) {
+          .ab-watch-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        @media (max-width: 720px) {
+          .ab-row-between,
+          .ab-hero-top {
+            flex-direction: column;
+          }
+
+          .ab-action-stack {
+            width: 100%;
+            min-width: 0;
+          }
+
+          .ab-add-row {
+            grid-template-columns: 1fr;
+          }
+
+          .ab-summary-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+        }
+      `}</style>
     </main>
   );
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    background: '#f4f7fb',
-    color: '#0f172a',
-    fontFamily:
-      'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif',
-  },
-  container: {
-    maxWidth: 1080,
-    margin: '0 auto',
-    padding: 12,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  hero: {
-    background: 'linear-gradient(135deg, #0b1530, #12224a)',
-    color: '#fff',
-    borderRadius: 28,
-    padding: 18,
-    boxShadow: '0 14px 32px rgba(15,23,42,0.18)',
-  },
-  badge: {
-    display: 'inline-flex',
-    width: 'fit-content',
-    padding: '7px 12px',
-    borderRadius: 999,
-    background: 'rgba(255,255,255,0.1)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    fontSize: 13,
-    fontWeight: 800,
-    letterSpacing: '0.02em',
-  },
-  heroTop: {
-    display: 'grid',
-    gap: 16,
-    marginTop: 14,
-  },
-  title: {
-    margin: 0,
-    fontSize: 34,
-    lineHeight: 1.02,
-    letterSpacing: '-0.04em',
-    fontWeight: 800,
-  },
-  subtitle: {
-    margin: '10px 0 0',
-    color: '#cbd5e1',
-    fontSize: 15,
-    lineHeight: 1.5,
-  },
-  accountBox: {
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: 22,
-    padding: 14,
-  },
-  accountName: {
-    fontSize: 24,
-    fontWeight: 800,
-    letterSpacing: '-0.03em',
-  },
-  accountActions: {
-    display: 'grid',
-    gap: 10,
-    marginTop: 12,
-  },
-  heroMeta: {
-    display: 'flex',
-    gap: 8,
-    flexWrap: 'wrap',
-    marginTop: 16,
-  },
-  metaPill: {
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 999,
-    padding: '8px 12px',
-    fontSize: 13,
-    color: '#e2e8f0',
-  },
-  primaryBtn: {
-    border: 'none',
-    borderRadius: 16,
-    padding: '12px 16px',
-    background: '#fff',
-    color: '#0f172a',
-    fontWeight: 800,
-    fontSize: 15,
-    textDecoration: 'none',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryBtn: {
-    borderRadius: 16,
-    padding: '12px 16px',
-    background: 'transparent',
-    color: '#fff',
-    border: '1px solid rgba(255,255,255,0.2)',
-    fontWeight: 700,
-    fontSize: 15,
-    cursor: 'pointer',
-  },
-  card: {
-    background: '#fff',
-    borderRadius: 24,
-    padding: 16,
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
-  },
-  blockTitle: {
-    fontSize: 22,
-    fontWeight: 800,
-    letterSpacing: '-0.03em',
-  },
-  formGrid: {
-    display: 'grid',
-    gap: 10,
-    marginTop: 14,
-  },
-  input: {
-    width: '100%',
-    border: '1px solid #dbe2ea',
-    borderRadius: 16,
-    padding: '12px 14px',
-    background: '#fff',
-    fontSize: 15,
-    outline: 'none',
-  },
-  primaryWideBtn: {
-    border: 'none',
-    borderRadius: 16,
-    padding: '13px 16px',
-    background: '#0f172a',
-    color: '#fff',
-    fontWeight: 800,
-    fontSize: 15,
-    cursor: 'pointer',
-  },
-  switchBtn: {
-    marginTop: 10,
-    border: 'none',
-    background: 'transparent',
-    padding: 0,
-    textAlign: 'left',
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  authMessage: {
-    marginTop: 10,
-    color: '#475569',
-    fontSize: 14,
-  },
-  summaryGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: 12,
-  },
-  summaryCard: {
-    background: '#fff',
-    borderRadius: 22,
-    padding: 16,
-    border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: '#64748b',
-    fontWeight: 700,
-  },
-  summaryValue: {
-    marginTop: 8,
-    fontSize: 34,
-    lineHeight: 1,
-    fontWeight: 800,
-    letterSpacing: '-0.04em',
-  },
-  listHead: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  blockSub: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: 700,
-  },
-  errorText: {
-    marginTop: 12,
-    color: '#be123c',
-    fontSize: 13,
-    fontWeight: 700,
-  },
-  topList: {
-    display: 'grid',
-    gap: 10,
-    marginTop: 14,
-  },
-  topRow: {
-    display: 'grid',
-    gridTemplateColumns: '36px 1fr auto',
-    gap: 12,
-    alignItems: 'center',
-    background: '#f8fafc',
-    borderRadius: 18,
-    padding: '12px 12px',
-    border: '1px solid #e2e8f0',
-  },
-  rank: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    background: '#e2e8f0',
-    color: '#0f172a',
-    fontWeight: 800,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 14,
-  },
-  topMain: {
-    minWidth: 0,
-  },
-  topSymbol: {
-    fontSize: 18,
-    fontWeight: 800,
-  },
-  topVolume: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: 700,
-  },
-  topRight: {
-    textAlign: 'right',
-  },
-  topPrice: {
-    fontSize: 18,
-    fontWeight: 800,
-  },
-  topPct: {
-    marginTop: 4,
-    fontSize: 14,
-    fontWeight: 800,
-  },
-  empty: {
-    color: '#64748b',
-    fontSize: 14,
-  },
-};
+  }
