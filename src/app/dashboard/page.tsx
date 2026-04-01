@@ -60,9 +60,7 @@ function getChangeColor(value?: number | null) {
 
 function getQuoteMap(items: QuoteDebugItem[]) {
   const map = new Map<string, QuoteDebugItem>();
-  items.forEach((item) => {
-    map.set(item.symbol.toUpperCase(), item);
-  });
+  items.forEach((item) => map.set(item.symbol.toUpperCase(), item));
   return map;
 }
 
@@ -71,7 +69,6 @@ export default function DashboardPage() {
   const [prices, setPrices] = useState<PriceMap>({});
   const [quotes, setQuotes] = useState<QuoteDebugItem[]>([]);
   const [updatedAt, setUpdatedAt] = useState('');
-  const [provider, setProvider] = useState('');
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -103,9 +100,8 @@ export default function DashboardPage() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error(error);
       setHoldings([]);
-      setMessage('Không tải được danh mục.');
+      setMessage('Không tải được dữ liệu');
     } else {
       setHoldings((data || []) as Holding[]);
     }
@@ -136,18 +132,16 @@ export default function DashboardPage() {
       if (!response.ok) {
         setPrices({});
         setQuotes([]);
-        setMessage(data?.error || 'Không lấy được giá hiện tại.');
+        setMessage(data?.error || 'Không lấy được giá');
       } else {
         setPrices(data.prices || {});
         setQuotes(data.debug || []);
         setUpdatedAt(data.updatedAt || '');
-        setProvider(data.provider || '');
       }
-    } catch (error) {
-      console.error(error);
+    } catch {
       setPrices({});
       setQuotes([]);
-      setMessage('Lỗi kết nối khi lấy giá.');
+      setMessage('Lỗi kết nối');
     } finally {
       setRefreshing(false);
     }
@@ -171,20 +165,6 @@ export default function DashboardPage() {
   const summaryPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
   const quoteMap = useMemo(() => getQuoteMap(quotes), [quotes]);
 
-  const topGainers = useMemo(() => {
-    return [...quotes]
-      .filter((item) => Number.isFinite(item.pct) && item.pct > 0)
-      .sort((a, b) => b.pct - a.pct)
-      .slice(0, 3);
-  }, [quotes]);
-
-  const topLosers = useMemo(() => {
-    return [...quotes]
-      .filter((item) => Number.isFinite(item.pct) && item.pct < 0)
-      .sort((a, b) => a.pct - b.pct)
-      .slice(0, 3);
-  }, [quotes]);
-
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage('');
@@ -201,7 +181,7 @@ export default function DashboardPage() {
     const quantity = Number(form.quantity);
 
     if (!symbol || !buyPrice || !quantity) {
-      setMessage('Vui lòng nhập đầy đủ mã, giá mua và số lượng.');
+      setMessage('Nhập đủ mã, giá mua, số lượng');
       return;
     }
 
@@ -248,675 +228,478 @@ export default function DashboardPage() {
     window.location.href = '/auth/login';
   }
 
-  async function handleRefreshAll() {
+  async function handleRefresh() {
     await loadHoldings();
   }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        background: '#f4f7fb',
-        color: '#0f172a',
-        fontFamily:
-          'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif',
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 1320,
-          margin: '0 auto',
-          padding: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 16,
-        }}
-      >
-        <section
-          style={{
-            background: 'linear-gradient(135deg, #0f172a, #1e293b)',
-            color: '#fff',
-            borderRadius: 28,
-            padding: 22,
-            boxShadow: '0 16px 40px rgba(15,23,42,0.16)',
-          }}
-        >
-          <div
-            style={{
-              display: 'grid',
-              gap: 16,
-              gridTemplateColumns: '1.5fr 1fr',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 14, opacity: 0.8 }}>Xin chào{email ? `, ${email}` : ''}</div>
-              <h1
-                style={{
-                  margin: '10px 0 0',
-                  fontSize: 36,
-                  lineHeight: 1.08,
-                  fontWeight: 800,
-                  letterSpacing: '-0.03em',
-                }}
-              >
-                Danh mục cổ phiếu
-              </h1>
-              <p
-                style={{
-                  marginTop: 10,
-                  color: '#cbd5e1',
-                  lineHeight: 1.7,
-                  fontSize: 16,
-                }}
-              >
-                Theo dõi tổng vốn, giá trị hiện tại, lời lỗ và biến động giá từng mã theo bố cục bento
-                gọn, dễ quét.
-              </p>
+    <main style={styles.page}>
+      <div style={styles.container}>
+        <section style={styles.topCard}>
+          <div>
+            <div style={styles.topEmail}>{email}</div>
+            <h1 style={styles.topTitle}>Danh mục</h1>
+            <div style={styles.topTime}>{formatDateTime(updatedAt)}</div>
+          </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  marginTop: 18,
-                }}
-              >
-                <div
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 16,
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    color: '#e2e8f0',
-                  }}
-                >
-                  Cập nhật: {formatDateTime(updatedAt)}
-                </div>
-                <div
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 16,
-                    padding: '10px 12px',
-                    fontSize: 14,
-                    color: '#e2e8f0',
-                  }}
-                >
-                  Nguồn: {provider || '--'}
-                </div>
-              </div>
-            </div>
+          <div style={styles.topActions}>
+            <button style={styles.primaryButton} onClick={handleRefresh}>
+              {refreshing || loading ? 'Đang tải...' : 'Làm mới'}
+            </button>
+            <button style={styles.ghostButton} onClick={handleLogout}>
+              Đăng xuất
+            </button>
+          </div>
+        </section>
 
+        <section style={styles.summaryGrid}>
+          <div style={styles.summaryCard}>
+            <div style={styles.label}>Tổng vốn</div>
+            <div style={styles.summaryValue}>{formatCurrency(summary.totalBuy)}</div>
+          </div>
+
+          <div style={styles.summaryCard}>
+            <div style={styles.label}>Hiện tại</div>
+            <div style={styles.summaryValue}>{formatCurrency(summary.totalNow)}</div>
+          </div>
+
+          <div style={styles.summaryCardWide}>
+            <div style={styles.label}>Lời / Lỗ</div>
             <div
               style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-                alignItems: 'stretch',
-                justifyContent: 'flex-start',
+                ...styles.summaryValue,
+                color: summary.totalPnl >= 0 ? '#16a34a' : '#dc2626',
               }}
             >
-              <button
-                type="button"
-                onClick={handleRefreshAll}
-                style={{
-                  border: 'none',
-                  borderRadius: 18,
-                  padding: '12px 16px',
-                  fontWeight: 700,
-                  background: '#fff',
-                  color: '#0f172a',
-                  cursor: 'pointer',
-                }}
-              >
-                {refreshing || loading ? 'Đang tải...' : 'Làm mới'}
-              </button>
-              <button
-                type="button"
-                onClick={handleLogout}
-                style={{
-                  borderRadius: 18,
-                  padding: '12px 16px',
-                  fontWeight: 700,
-                  background: 'transparent',
-                  color: '#fff',
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  cursor: 'pointer',
-                }}
-              >
-                Đăng xuất
-              </button>
+              {formatCurrency(summary.totalPnl)}
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                fontWeight: 800,
+                fontSize: 16,
+                color: summary.totalPnl >= 0 ? '#16a34a' : '#dc2626',
+              }}
+            >
+              {summaryPct >= 0 ? '+' : ''}
+              {summaryPct.toFixed(2)}%
             </div>
           </div>
         </section>
 
-        <section
-          style={{
-            display: 'grid',
-            gap: 16,
-            gridTemplateColumns: 'repeat(12, 1fr)',
-          }}
-        >
-          <div
-            style={{
-              gridColumn: 'span 8',
-              display: 'grid',
-              gap: 16,
-            }}
-          >
-            <section
-              style={{
-                background: '#fff',
-                borderRadius: 26,
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 10px 24px rgba(148,163,184,0.12)',
-                padding: 20,
-              }}
-            >
-              <div>
-                <h2
-                  style={{
-                    margin: 0,
-                    fontSize: 24,
-                    fontWeight: 800,
-                    letterSpacing: '-0.02em',
-                  }}
-                >
-                  Thêm cổ phiếu
-                </h2>
-                <p
-                  style={{
-                    marginTop: 8,
-                    color: '#64748b',
-                    lineHeight: 1.7,
-                  }}
-                >
-                  Nhập mã, giá mua, số lượng và ngày mua để hệ thống tự tính lời lỗ.
-                </p>
-              </div>
+        <section style={styles.formCard}>
+          <form onSubmit={handleSubmit} style={styles.formGrid}>
+            <input
+              value={form.symbol}
+              onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+              placeholder="Mã"
+              required
+              style={styles.input}
+            />
+            <input
+              value={form.buy_price}
+              onChange={(e) => setForm({ ...form, buy_price: e.target.value })}
+              type="number"
+              placeholder="Giá mua"
+              required
+              style={styles.input}
+            />
+            <input
+              value={form.quantity}
+              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+              type="number"
+              placeholder="Số lượng"
+              required
+              style={styles.input}
+            />
+            <input
+              value={form.buy_date}
+              onChange={(e) => setForm({ ...form, buy_date: e.target.value })}
+              type="date"
+              style={styles.input}
+            />
+            <input
+              value={form.note}
+              onChange={(e) => setForm({ ...form, note: e.target.value })}
+              placeholder="Ghi chú"
+              style={styles.inputFull}
+            />
+            <button type="submit" style={styles.submitButton}>
+              Thêm mã
+            </button>
+          </form>
 
-              <form
-                onSubmit={handleSubmit}
-                style={{
-                  marginTop: 16,
-                  display: 'grid',
-                  gap: 12,
-                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                }}
-              >
-                <input
-                  value={form.symbol}
-                  onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-                  placeholder="Mã cổ phiếu"
-                  required
-                  style={inputStyle}
-                />
-                <input
-                  value={form.buy_price}
-                  onChange={(e) => setForm({ ...form, buy_price: e.target.value })}
-                  type="number"
-                  placeholder="Giá mua"
-                  required
-                  style={inputStyle}
-                />
-                <input
-                  value={form.quantity}
-                  onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                  type="number"
-                  placeholder="Số lượng"
-                  required
-                  style={inputStyle}
-                />
-                <input
-                  value={form.buy_date}
-                  onChange={(e) => setForm({ ...form, buy_date: e.target.value })}
-                  type="date"
-                  style={inputStyle}
-                />
-                <input
-                  value={form.note}
-                  onChange={(e) => setForm({ ...form, note: e.target.value })}
-                  placeholder="Ghi chú"
-                  style={{ ...inputStyle, gridColumn: 'span 2' }}
-                />
+          {message ? <div style={styles.errorBox}>{message}</div> : null}
+        </section>
 
-                <button
-                  type="submit"
-                  style={{
-                    gridColumn: 'span 2',
-                    border: 'none',
-                    borderRadius: 18,
-                    padding: '14px 16px',
-                    background: '#0f172a',
-                    color: '#fff',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Thêm mã
-                </button>
-              </form>
+        {loading ? (
+          <section style={styles.infoCard}>Đang tải...</section>
+        ) : holdings.length === 0 ? (
+          <section style={styles.infoCard}>Chưa có mã nào</section>
+        ) : (
+          <section style={styles.cardsGrid}>
+            {holdings.map((holding) => {
+              const row = calcHolding(holding, prices);
+              const quote = quoteMap.get(holding.symbol.toUpperCase());
+              const positive = row.pnl >= 0;
 
-              {message ? (
-                <div
-                  style={{
-                    marginTop: 12,
-                    background: '#fff1f2',
-                    border: '1px solid #fecdd3',
-                    color: '#be123c',
-                    borderRadius: 16,
-                    padding: 12,
-                    fontSize: 14,
-                  }}
-                >
-                  {message}
-                </div>
-              ) : null}
-            </section>
-
-            <section
-              style={{
-                display: 'grid',
-                gap: 16,
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              }}
-            >
-              {holdings.map((holding) => {
-                const row = calcHolding(holding, prices);
-                const quote = quoteMap.get(holding.symbol.toUpperCase());
-                const positive = row.pnl >= 0;
-
-                return (
-                  <article
-                    key={holding.id}
-                    style={{
-                      background: '#fff',
-                      borderRadius: 24,
-                      border: '1px solid #e2e8f0',
-                      boxShadow: '0 10px 24px rgba(148,163,184,0.12)',
-                      padding: 18,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        alignItems: 'flex-start',
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontSize: 28,
-                            fontWeight: 800,
-                            letterSpacing: '-0.03em',
-                          }}
-                        >
-                          {holding.symbol}
-                        </div>
-                        <div style={{ color: '#64748b', marginTop: 6 }}>
-                          SL: {holding.quantity}
-                          {holding.buy_date ? ` • ${holding.buy_date}` : ''}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(holding.id, holding.symbol)}
-                        style={{
-                          border: '1px solid #fecaca',
-                          background: '#fff',
-                          color: '#dc2626',
-                          borderRadius: 14,
-                          padding: '10px 12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Xóa
-                      </button>
+              return (
+                <article key={holding.id} style={styles.stockCard}>
+                  <div style={styles.stockHead}>
+                    <div>
+                      <div style={styles.stockSymbol}>{holding.symbol}</div>
+                      <div style={styles.stockMeta}>SL: {holding.quantity}</div>
                     </div>
 
-                    <div
-                      style={{
-                        marginTop: 16,
-                        display: 'grid',
-                        gap: 12,
-                        gridTemplateColumns: '1.25fr 1fr 1fr',
-                      }}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(holding.id, holding.symbol)}
+                      style={styles.deleteButton}
                     >
-                      <div
-                        style={{
-                          background: '#f8fafc',
-                          borderRadius: 18,
-                          padding: 14,
-                          border: '1px solid #e2e8f0',
-                        }}
-                      >
-                        <div style={labelStyle}>Giá hiện tại</div>
-                        <div
-                          style={{
-                            marginTop: 8,
-                            fontSize: 34,
-                            fontWeight: 800,
-                            letterSpacing: '-0.03em',
-                          }}
-                        >
-                          {formatPrice(quote?.price ?? row.currentPrice)}
-                        </div>
-                      </div>
+                      Xóa
+                    </button>
+                  </div>
 
-                      <div
-                        style={{
-                          background: '#f8fafc',
-                          borderRadius: 18,
-                          padding: 14,
-                          border: '1px solid #e2e8f0',
-                        }}
-                      >
-                        <div style={labelStyle}>Thay đổi</div>
-                        <div
-                          style={{
-                            marginTop: 8,
-                            fontSize: 24,
-                            fontWeight: 800,
-                            color: getChangeColor(quote?.change),
-                          }}
-                        >
-                          {formatChange(quote?.change)}
-                        </div>
-                      </div>
+                  <div style={styles.priceMain}>
+                    <div style={styles.label}>Giá hiện tại</div>
+                    <div style={styles.priceValue}>
+                      {formatPrice(quote?.price ?? row.currentPrice)}
+                    </div>
+                  </div>
 
+                  <div style={styles.changeRow}>
+                    <div style={styles.changeBox}>
+                      <div style={styles.label}>Thay đổi</div>
                       <div
                         style={{
-                          background: '#f8fafc',
-                          borderRadius: 18,
-                          padding: 14,
-                          border: '1px solid #e2e8f0',
+                          ...styles.changeValue,
+                          color: getChangeColor(quote?.change),
                         }}
                       >
-                        <div style={labelStyle}>% thay đổi</div>
-                        <div
-                          style={{
-                            marginTop: 8,
-                            fontSize: 24,
-                            fontWeight: 800,
-                            color: getChangeColor(quote?.pct),
-                          }}
-                        >
-                          {formatPct(quote?.pct)}
-                        </div>
+                        {formatChange(quote?.change)}
                       </div>
                     </div>
 
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: 'grid',
-                        gap: 12,
-                        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                      }}
-                    >
-                      <div style={miniCardStyle}>
-                        <div style={labelStyle}>Giá mua</div>
-                        <div style={valueStyle}>{formatCurrency(Number(holding.buy_price))}</div>
-                      </div>
-                      <div style={miniCardStyle}>
-                        <div style={labelStyle}>Tổng mua</div>
-                        <div style={valueStyle}>{formatCurrency(row.totalBuy)}</div>
-                      </div>
-                      <div style={miniCardStyle}>
-                        <div style={labelStyle}>Tổng hiện tại</div>
-                        <div style={valueStyle}>{formatCurrency(row.totalNow)}</div>
-                      </div>
-                      <div style={miniCardStyle}>
-                        <div style={labelStyle}>Lời / Lỗ</div>
-                        <div
-                          style={{
-                            ...valueStyle,
-                            color: positive ? '#16a34a' : '#dc2626',
-                          }}
-                        >
-                          {formatCurrency(row.pnl)}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 14,
-                        padding: 14,
-                        borderRadius: 18,
-                        background: positive ? '#ecfdf5' : '#fef2f2',
-                        border: positive ? '1px solid #bbf7d0' : '1px solid #fecaca',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 12,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: positive ? '#166534' : '#991b1b' }}>
-                        Hiệu suất vị thế
-                      </div>
+                    <div style={styles.changeBox}>
+                      <div style={styles.label}>% thay đổi</div>
                       <div
                         style={{
-                          fontSize: 26,
-                          fontWeight: 800,
+                          ...styles.changeValue,
+                          color: getChangeColor(quote?.pct),
+                        }}
+                      >
+                        {formatPct(quote?.pct)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={styles.miniGrid}>
+                    <div style={styles.miniCard}>
+                      <div style={styles.label}>Giá mua</div>
+                      <div style={styles.miniValue}>{formatCurrency(Number(holding.buy_price))}</div>
+                    </div>
+                    <div style={styles.miniCard}>
+                      <div style={styles.label}>Tổng mua</div>
+                      <div style={styles.miniValue}>{formatCurrency(row.totalBuy)}</div>
+                    </div>
+                    <div style={styles.miniCard}>
+                      <div style={styles.label}>Hiện tại</div>
+                      <div style={styles.miniValue}>{formatCurrency(row.totalNow)}</div>
+                    </div>
+                    <div style={styles.miniCard}>
+                      <div style={styles.label}>Lời / Lỗ</div>
+                      <div
+                        style={{
+                          ...styles.miniValue,
                           color: positive ? '#16a34a' : '#dc2626',
                         }}
                       >
-                        {row.pnlPct >= 0 ? '+' : ''}
-                        {row.pnlPct.toFixed(2)}%
+                        {formatCurrency(row.pnl)}
                       </div>
                     </div>
-                  </article>
-                );
-              })}
-            </section>
+                  </div>
 
-            {!loading && holdings.length === 0 ? (
-              <section
-                style={{
-                  background: '#fff',
-                  borderRadius: 24,
-                  border: '1px solid #e2e8f0',
-                  boxShadow: '0 10px 24px rgba(148,163,184,0.12)',
-                  padding: 20,
-                  color: '#64748b',
-                }}
-              >
-                Chưa có mã nào. Hãy thêm mã đầu tiên của bạn.
-              </section>
-            ) : null}
-          </div>
-
-          <div
-            style={{
-              gridColumn: 'span 4',
-              display: 'grid',
-              gap: 16,
-              alignContent: 'start',
-            }}
-          >
-            <section style={summaryCardStyle}>
-              <div style={labelStyle}>Tổng vốn</div>
-              <div style={{ ...bigValueStyle }}>{formatCurrency(summary.totalBuy)}</div>
-            </section>
-
-            <section style={summaryCardStyle}>
-              <div style={labelStyle}>Giá trị hiện tại</div>
-              <div style={{ ...bigValueStyle }}>{formatCurrency(summary.totalNow)}</div>
-            </section>
-
-            <section style={summaryCardStyle}>
-              <div style={labelStyle}>Lời / Lỗ toàn danh mục</div>
-              <div
-                style={{
-                  ...bigValueStyle,
-                  color: summary.totalPnl >= 0 ? '#16a34a' : '#dc2626',
-                }}
-              >
-                {formatCurrency(summary.totalPnl)}
-              </div>
-              <div
-                style={{
-                  marginTop: 6,
-                  fontWeight: 800,
-                  color: summary.totalPnl >= 0 ? '#16a34a' : '#dc2626',
-                }}
-              >
-                {summaryPct >= 0 ? '+' : ''}
-                {summaryPct.toFixed(2)}%
-              </div>
-            </section>
-
-            <section style={summaryCardStyle}>
-              <div style={labelStyle}>Mã tăng mạnh</div>
-              <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
-                {topGainers.length === 0 ? (
-                  <div style={{ color: '#64748b' }}>Chưa có dữ liệu.</div>
-                ) : (
-                  topGainers.map((item) => (
-                    <div key={item.symbol} style={listItemStyle}>
-                      <div>
-                        <div style={{ fontWeight: 800 }}>{item.symbol}</div>
-                        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-                          {formatPrice(item.price)}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right', color: '#16a34a', fontWeight: 800 }}>
-                        <div>{formatChange(item.change)}</div>
-                        <div>{formatPct(item.pct)}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section style={summaryCardStyle}>
-              <div style={labelStyle}>Mã giảm mạnh</div>
-              <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
-                {topLosers.length === 0 ? (
-                  <div style={{ color: '#64748b' }}>Chưa có dữ liệu.</div>
-                ) : (
-                  topLosers.map((item) => (
-                    <div key={item.symbol} style={listItemStyle}>
-                      <div>
-                        <div style={{ fontWeight: 800 }}>{item.symbol}</div>
-                        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
-                          {formatPrice(item.price)}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right', color: '#dc2626', fontWeight: 800 }}>
-                        <div>{formatChange(item.change)}</div>
-                        <div>{formatPct(item.pct)}</div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
-        </section>
+                  <div
+                    style={{
+                      ...styles.performanceBox,
+                      background: positive ? '#ecfdf5' : '#fef2f2',
+                      borderColor: positive ? '#bbf7d0' : '#fecaca',
+                      color: positive ? '#16a34a' : '#dc2626',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>Hiệu suất</span>
+                    <span style={{ fontWeight: 800, fontSize: 26 }}>
+                      {row.pnlPct >= 0 ? '+' : ''}
+                      {row.pnlPct.toFixed(2)}%
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        )}
       </div>
-
-      <style jsx>{`
-        @media (max-width: 1180px) {
-          section[style*='grid-template-columns: repeat(12, 1fr)'] > div:first-child,
-          section[style*='grid-template-columns: repeat(12, 1fr)'] > div:last-child {
-            grid-column: span 12 !important;
-          }
-        }
-
-        @media (max-width: 1024px) {
-          section[style*='grid-template-columns: 1.5fr 1fr'] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (max-width: 900px) {
-          section[style*='grid-template-columns: repeat(2, minmax(0, 1fr))'] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-
-        @media (max-width: 720px) {
-          form[style*='grid-template-columns: repeat(2, minmax(0, 1fr))'] {
-            grid-template-columns: 1fr !important;
-          }
-
-          form[style*='grid-template-columns: repeat(2, minmax(0, 1fr))'] input,
-          form[style*='grid-template-columns: repeat(2, minmax(0, 1fr))'] button {
-            grid-column: span 1 !important;
-          }
-
-          div[style*='grid-template-columns: 1.25fr 1fr 1fr'] {
-            grid-template-columns: 1fr !important;
-          }
-
-          div[style*='grid-template-columns: repeat(2, minmax(0, 1fr))'] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </main>
   );
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  border: '1px solid #dbe2ea',
-  borderRadius: 16,
-  padding: '12px 14px',
-  background: '#fff',
-  fontSize: 15,
-  outline: 'none',
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: '#64748b',
-  fontWeight: 700,
-};
-
-const valueStyle: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 22,
-  fontWeight: 800,
-  letterSpacing: '-0.02em',
-};
-
-const bigValueStyle: React.CSSProperties = {
-  marginTop: 8,
-  fontSize: 34,
-  fontWeight: 800,
-  letterSpacing: '-0.03em',
-};
-
-const miniCardStyle: React.CSSProperties = {
-  background: '#f8fafc',
-  borderRadius: 18,
-  padding: 14,
-  border: '1px solid #e2e8f0',
-};
-
-const summaryCardStyle: React.CSSProperties = {
-  background: '#fff',
-  borderRadius: 24,
-  border: '1px solid #e2e8f0',
-  boxShadow: '0 10px 24px rgba(148,163,184,0.12)',
-  padding: 18,
-};
-
-const listItemStyle: React.CSSProperties = {
-  background: '#f8fafc',
-  borderRadius: 18,
-  padding: '12px 14px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: 12,
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: '100vh',
+    background: '#f3f6fb',
+    color: '#0f172a',
+    fontFamily:
+      'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif',
+  },
+  container: {
+    maxWidth: 760,
+    margin: '0 auto',
+    padding: 12,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  topCard: {
+    background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+    color: '#fff',
+    borderRadius: 24,
+    padding: 16,
+    display: 'grid',
+    gap: 14,
+  },
+  topEmail: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  topTitle: {
+    margin: '4px 0 0',
+    fontSize: 28,
+    lineHeight: 1.05,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
+  },
+  topTime: {
+    marginTop: 10,
+    display: 'inline-block',
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 14,
+    padding: '8px 10px',
+    fontSize: 13,
+    color: '#e2e8f0',
+  },
+  topActions: {
+    display: 'grid',
+    gap: 10,
+  },
+  primaryButton: {
+    border: 'none',
+    borderRadius: 16,
+    padding: '12px 14px',
+    background: '#fff',
+    color: '#0f172a',
+    fontWeight: 800,
+    fontSize: 15,
+    cursor: 'pointer',
+  },
+  ghostButton: {
+    borderRadius: 16,
+    padding: '12px 14px',
+    background: 'transparent',
+    color: '#fff',
+    border: '1px solid rgba(255,255,255,0.2)',
+    fontWeight: 700,
+    fontSize: 15,
+    cursor: 'pointer',
+  },
+  summaryGrid: {
+    display: 'grid',
+    gap: 12,
+    gridTemplateColumns: '1fr 1fr',
+  },
+  summaryCard: {
+    background: '#fff',
+    borderRadius: 22,
+    padding: 16,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+  },
+  summaryCardWide: {
+    gridColumn: 'span 2',
+    background: '#fff',
+    borderRadius: 22,
+    padding: 16,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+  },
+  label: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: 700,
+  },
+  summaryValue: {
+    marginTop: 8,
+    fontSize: 24,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
+  },
+  formCard: {
+    background: '#fff',
+    borderRadius: 22,
+    padding: 16,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+  },
+  formGrid: {
+    display: 'grid',
+    gap: 10,
+    gridTemplateColumns: '1fr 1fr',
+  },
+  input: {
+    width: '100%',
+    border: '1px solid #dbe2ea',
+    borderRadius: 14,
+    padding: '12px 12px',
+    background: '#fff',
+    fontSize: 14,
+    outline: 'none',
+  },
+  inputFull: {
+    width: '100%',
+    gridColumn: 'span 2',
+    border: '1px solid #dbe2ea',
+    borderRadius: 14,
+    padding: '12px 12px',
+    background: '#fff',
+    fontSize: 14,
+    outline: 'none',
+  },
+  submitButton: {
+    gridColumn: 'span 2',
+    border: 'none',
+    borderRadius: 16,
+    padding: '13px 14px',
+    background: '#0f172a',
+    color: '#fff',
+    fontWeight: 800,
+    fontSize: 15,
+    cursor: 'pointer',
+  },
+  errorBox: {
+    marginTop: 10,
+    background: '#fff1f2',
+    border: '1px solid #fecdd3',
+    color: '#be123c',
+    borderRadius: 14,
+    padding: 10,
+    fontSize: 13,
+  },
+  infoCard: {
+    background: '#fff',
+    borderRadius: 22,
+    padding: 16,
+    border: '1px solid #e2e8f0',
+    color: '#64748b',
+    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+  },
+  cardsGrid: {
+    display: 'grid',
+    gap: 12,
+  },
+  stockCard: {
+    background: '#fff',
+    borderRadius: 22,
+    padding: 14,
+    border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+  },
+  stockHead: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  stockSymbol: {
+    fontSize: 30,
+    fontWeight: 800,
+    letterSpacing: '-0.04em',
+    lineHeight: 1,
+  },
+  stockMeta: {
+    marginTop: 6,
+    color: '#64748b',
+    fontSize: 13,
+  },
+  deleteButton: {
+    border: '1px solid #fecaca',
+    background: '#fff',
+    color: '#dc2626',
+    borderRadius: 14,
+    padding: '8px 10px',
+    fontWeight: 700,
+    fontSize: 13,
+    cursor: 'pointer',
+  },
+  priceMain: {
+    marginTop: 14,
+    background: '#f8fafc',
+    borderRadius: 18,
+    padding: 14,
+    border: '1px solid #e2e8f0',
+  },
+  priceValue: {
+    marginTop: 6,
+    fontSize: 42,
+    lineHeight: 1,
+    fontWeight: 800,
+    letterSpacing: '-0.04em',
+  },
+  changeRow: {
+    marginTop: 10,
+    display: 'grid',
+    gap: 10,
+    gridTemplateColumns: '1fr 1fr',
+  },
+  changeBox: {
+    background: '#f8fafc',
+    borderRadius: 16,
+    padding: 12,
+    border: '1px solid #e2e8f0',
+  },
+  changeValue: {
+    marginTop: 8,
+    fontSize: 28,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
+  },
+  miniGrid: {
+    marginTop: 10,
+    display: 'grid',
+    gap: 10,
+    gridTemplateColumns: '1fr 1fr',
+  },
+  miniCard: {
+    background: '#f8fafc',
+    borderRadius: 16,
+    padding: 12,
+    border: '1px solid #e2e8f0',
+    minWidth: 0,
+  },
+  miniValue: {
+    marginTop: 8,
+    fontSize: 18,
+    fontWeight: 800,
+    letterSpacing: '-0.02em',
+    wordBreak: 'break-word',
+  },
+  performanceBox: {
+    marginTop: 10,
+    borderRadius: 16,
+    border: '1px solid',
+    padding: '12px 14px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
 };
