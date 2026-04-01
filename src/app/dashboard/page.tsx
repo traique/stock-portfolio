@@ -20,6 +20,7 @@ type QuoteDebugItem = {
   previousClose?: number;
   marketTime?: number | null;
   currency?: string;
+  volume?: number;
   error?: string;
 };
 
@@ -33,19 +34,20 @@ type PricesResponse = {
 
 function formatCompactPrice(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
+  const hasDecimal = Math.abs(value % 1) > 0.000001;
   return new Intl.NumberFormat('vi-VN', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: 1,
+    maximumFractionDigits: hasDecimal ? 1 : 0,
   }).format(value);
 }
 
 function formatChange(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
   const sign = value > 0 ? '+' : value < 0 ? '' : '';
-  const abs = Math.abs(value % 1) < 0.000001;
+  const hasDecimal = Math.abs(value % 1) > 0.000001;
   return `${sign}${new Intl.NumberFormat('vi-VN', {
     minimumFractionDigits: 0,
-    maximumFractionDigits: abs ? 0 : 1,
+    maximumFractionDigits: hasDecimal ? 1 : 0,
   }).format(value)}`;
 }
 
@@ -92,7 +94,7 @@ export default function DashboardPage() {
     const { data: authData } = await supabase.auth.getUser();
 
     if (!authData.user) {
-      window.location.href = '/auth/login';
+      window.location.href = '/';
       return;
     }
 
@@ -184,7 +186,7 @@ export default function DashboardPage() {
     const { data: authData } = await supabase.auth.getUser();
 
     if (!authData.user) {
-      window.location.href = '/auth/login';
+      window.location.href = '/';
       return;
     }
 
@@ -237,7 +239,7 @@ export default function DashboardPage() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    window.location.href = '/auth/login';
+    window.location.href = '/';
   }
 
   async function handleRefresh() {
@@ -247,20 +249,26 @@ export default function DashboardPage() {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
-        <section style={styles.topCard}>
-          <div>
-            <div style={styles.topEmail}>{email}</div>
-            <h1 style={styles.topTitle}>Danh mục</h1>
-            <div style={styles.topTime}>{formatDateTime(updatedAt)}</div>
-          </div>
+        <section style={styles.hero}>
+          <div style={styles.heroBadge}>AlphaBoard</div>
+          <div style={styles.heroTop}>
+            <div>
+              <div style={styles.heroEmail}>{email}</div>
+              <h1 style={styles.heroTitle}>Danh mục đầu tư</h1>
+              <div style={styles.heroMetaRow}>
+                <div style={styles.metaPill}>{formatDateTime(updatedAt)}</div>
+                <div style={styles.metaPill}>Dữ liệu thị trường</div>
+              </div>
+            </div>
 
-          <div style={styles.topActions}>
-            <button style={styles.primaryButton} onClick={handleRefresh}>
-              {refreshing || loading ? 'Đang tải...' : 'Làm mới'}
-            </button>
-            <button style={styles.ghostButton} onClick={handleLogout}>
-              Đăng xuất
-            </button>
+            <div style={styles.heroActions}>
+              <button style={styles.primaryBtn} onClick={handleRefresh}>
+                {refreshing || loading ? 'Đang tải...' : 'Làm mới'}
+              </button>
+              <button style={styles.secondaryBtn} onClick={handleLogout}>
+                Đăng xuất
+              </button>
+            </div>
           </div>
         </section>
 
@@ -276,7 +284,7 @@ export default function DashboardPage() {
           </div>
 
           <div style={styles.summaryCard}>
-            <div style={styles.label}>Lãi/lỗ trong ngày</div>
+            <div style={styles.label}>Lãi/lỗ ngày</div>
             <div
               style={{
                 ...styles.summaryValue,
@@ -300,8 +308,8 @@ export default function DashboardPage() {
             <div
               style={{
                 marginTop: 4,
-                fontWeight: 800,
                 fontSize: 14,
+                fontWeight: 800,
                 color: summary.totalPnl >= 0 ? '#16a34a' : '#dc2626',
               }}
             >
@@ -312,6 +320,8 @@ export default function DashboardPage() {
         </section>
 
         <section style={styles.formCard}>
+          <div style={styles.blockTitle}>Thêm cổ phiếu</div>
+
           <form onSubmit={handleSubmit} style={styles.formGrid}>
             <input
               value={form.symbol}
@@ -348,7 +358,7 @@ export default function DashboardPage() {
               placeholder="Ghi chú"
               style={styles.inputFull}
             />
-            <button type="submit" style={styles.submitButton}>
+            <button type="submit" style={styles.primaryWideBtn}>
               Thêm mã
             </button>
           </form>
@@ -378,35 +388,35 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       onClick={() => handleDelete(holding.id, holding.symbol)}
-                      style={styles.deleteButton}
+                      style={styles.deleteBtn}
                     >
                       Xóa
                     </button>
                   </div>
 
-                  <div style={styles.priceMain}>
+                  <div style={styles.priceCard}>
                     <div style={styles.label}>Giá hiện tại</div>
                     <div style={styles.priceValue}>
                       {formatCompactPrice(quote?.price ?? row.currentPrice)}
                     </div>
 
                     <div style={styles.inlineChangeRow}>
-                      <div
+                      <span
                         style={{
                           ...styles.inlineChangeText,
                           color: getChangeColor(quote?.change),
                         }}
                       >
                         {formatChange(quote?.change)}
-                      </div>
-                      <div
+                      </span>
+                      <span
                         style={{
                           ...styles.inlineChangeText,
                           color: getChangeColor(quote?.pct),
                         }}
                       >
                         {formatPct(quote?.pct)}
-                      </div>
+                      </span>
                     </div>
                   </div>
 
@@ -415,14 +425,17 @@ export default function DashboardPage() {
                       <div style={styles.label}>Giá mua</div>
                       <div style={styles.miniValue}>{formatCurrency(Number(holding.buy_price))}</div>
                     </div>
+
                     <div style={styles.miniCard}>
                       <div style={styles.label}>Tổng mua</div>
                       <div style={styles.miniValue}>{formatCurrency(row.totalBuy)}</div>
                     </div>
+
                     <div style={styles.miniCard}>
                       <div style={styles.label}>Hiện tại</div>
                       <div style={styles.miniValue}>{formatCurrency(row.totalNow)}</div>
                     </div>
+
                     <div style={styles.miniCard}>
                       <div style={styles.label}>Lời / Lỗ</div>
                       <div
@@ -445,7 +458,7 @@ export default function DashboardPage() {
                     }}
                   >
                     <span style={{ fontWeight: 700 }}>Hiệu suất</span>
-                    <span style={{ fontWeight: 800, fontSize: 24 }}>
+                    <span style={{ fontWeight: 800, fontSize: 22 }}>
                       {row.pnlPct >= 0 ? '+' : ''}
                       {row.pnlPct.toFixed(2)}%
                     </span>
@@ -463,7 +476,7 @@ export default function DashboardPage() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: '100vh',
-    background: '#f3f6fb',
+    background: '#f4f7fb',
     color: '#0f172a',
     fontFamily:
       'Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, "Noto Sans", sans-serif',
@@ -476,52 +489,72 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
     gap: 12,
   },
-  topCard: {
-    background: 'linear-gradient(135deg, #0f172a, #1e293b)',
+  hero: {
+    background: 'linear-gradient(135deg, #0b1530, #12224a)',
     color: '#fff',
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 28,
+    padding: 18,
+    boxShadow: '0 14px 32px rgba(15,23,42,0.18)',
+  },
+  heroBadge: {
+    display: 'inline-flex',
+    width: 'fit-content',
+    padding: '7px 12px',
+    borderRadius: 999,
+    background: 'rgba(255,255,255,0.1)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    fontSize: 13,
+    fontWeight: 800,
+    letterSpacing: '0.02em',
+  },
+  heroTop: {
     display: 'grid',
     gap: 14,
+    marginTop: 14,
   },
-  topEmail: {
+  heroEmail: {
     fontSize: 12,
-    opacity: 0.8,
+    color: '#cbd5e1',
+    wordBreak: 'break-word',
   },
-  topTitle: {
-    margin: '4px 0 0',
-    fontSize: 28,
-    lineHeight: 1.05,
+  heroTitle: {
+    margin: '8px 0 0',
+    fontSize: 32,
+    lineHeight: 1.02,
+    letterSpacing: '-0.04em',
     fontWeight: 800,
-    letterSpacing: '-0.03em',
   },
-  topTime: {
-    marginTop: 10,
-    display: 'inline-block',
+  heroMetaRow: {
+    display: 'flex',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 14,
+  },
+  metaPill: {
     background: 'rgba(255,255,255,0.08)',
     border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: 14,
-    padding: '8px 10px',
+    borderRadius: 999,
+    padding: '8px 12px',
     fontSize: 13,
     color: '#e2e8f0',
   },
-  topActions: {
+  heroActions: {
     display: 'grid',
     gap: 10,
   },
-  primaryButton: {
+  primaryBtn: {
     border: 'none',
     borderRadius: 16,
-    padding: '12px 14px',
+    padding: '12px 16px',
     background: '#fff',
     color: '#0f172a',
     fontWeight: 800,
     fontSize: 15,
     cursor: 'pointer',
   },
-  ghostButton: {
+  secondaryBtn: {
     borderRadius: 16,
-    padding: '12px 14px',
+    padding: '12px 16px',
     background: 'transparent',
     color: '#fff',
     border: '1px solid rgba(255,255,255,0.2)',
@@ -531,15 +564,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   summaryGrid: {
     display: 'grid',
-    gap: 12,
     gridTemplateColumns: '1fr 1fr',
+    gap: 12,
   },
   summaryCard: {
     background: '#fff',
     borderRadius: 22,
     padding: 16,
     border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
   },
   label: {
     fontSize: 12,
@@ -549,45 +582,52 @@ const styles: Record<string, React.CSSProperties> = {
   summaryValue: {
     marginTop: 8,
     fontSize: 24,
+    lineHeight: 1.05,
     fontWeight: 800,
     letterSpacing: '-0.03em',
   },
   formCard: {
     background: '#fff',
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 16,
     border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
+  },
+  blockTitle: {
+    fontSize: 22,
+    fontWeight: 800,
+    letterSpacing: '-0.03em',
   },
   formGrid: {
     display: 'grid',
     gap: 10,
+    marginTop: 14,
     gridTemplateColumns: '1fr 1fr',
   },
   input: {
     width: '100%',
     border: '1px solid #dbe2ea',
-    borderRadius: 14,
-    padding: '12px 12px',
+    borderRadius: 16,
+    padding: '12px 14px',
     background: '#fff',
-    fontSize: 14,
+    fontSize: 15,
     outline: 'none',
   },
   inputFull: {
     width: '100%',
     gridColumn: 'span 2',
     border: '1px solid #dbe2ea',
-    borderRadius: 14,
-    padding: '12px 12px',
+    borderRadius: 16,
+    padding: '12px 14px',
     background: '#fff',
-    fontSize: 14,
+    fontSize: 15,
     outline: 'none',
   },
-  submitButton: {
+  primaryWideBtn: {
     gridColumn: 'span 2',
     border: 'none',
     borderRadius: 16,
-    padding: '13px 14px',
+    padding: '13px 16px',
     background: '#0f172a',
     color: '#fff',
     fontWeight: 800,
@@ -596,20 +636,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   errorBox: {
     marginTop: 10,
-    background: '#fff1f2',
-    border: '1px solid #fecdd3',
     color: '#be123c',
-    borderRadius: 14,
-    padding: 10,
     fontSize: 13,
+    fontWeight: 700,
   },
   infoCard: {
     background: '#fff',
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 16,
     border: '1px solid #e2e8f0',
+    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
     color: '#64748b',
-    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
   },
   cardsGrid: {
     display: 'grid',
@@ -617,10 +654,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stockCard: {
     background: '#fff',
-    borderRadius: 22,
+    borderRadius: 24,
     padding: 14,
     border: '1px solid #e2e8f0',
-    boxShadow: '0 8px 20px rgba(148,163,184,0.10)',
+    boxShadow: '0 8px 18px rgba(148,163,184,0.10)',
   },
   stockHead: {
     display: 'flex',
@@ -631,15 +668,15 @@ const styles: Record<string, React.CSSProperties> = {
   stockSymbol: {
     fontSize: 30,
     fontWeight: 800,
-    letterSpacing: '-0.04em',
     lineHeight: 1,
+    letterSpacing: '-0.04em',
   },
   stockMeta: {
     marginTop: 6,
     color: '#64748b',
     fontSize: 13,
   },
-  deleteButton: {
+  deleteBtn: {
     border: '1px solid #fecaca',
     background: '#fff',
     color: '#dc2626',
@@ -649,7 +686,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     cursor: 'pointer',
   },
-  priceMain: {
+  priceCard: {
     marginTop: 14,
     background: '#f8fafc',
     borderRadius: 18,
@@ -670,7 +707,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexWrap: 'wrap',
   },
   inlineChangeText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 800,
     lineHeight: 1.1,
   },
