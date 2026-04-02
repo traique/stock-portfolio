@@ -12,8 +12,18 @@ create table if not exists public.holdings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.watchlists (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  symbol text not null,
+  created_at timestamptz not null default now(),
+  unique (user_id, symbol)
+);
+
 create index if not exists idx_holdings_user_id on public.holdings(user_id);
 create index if not exists idx_holdings_symbol on public.holdings(symbol);
+create index if not exists idx_watchlists_user_id on public.watchlists(user_id);
+create index if not exists idx_watchlists_symbol on public.watchlists(symbol);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -32,11 +42,16 @@ for each row
 execute function public.set_updated_at();
 
 alter table public.holdings enable row level security;
+alter table public.watchlists enable row level security;
 
 drop policy if exists "Users can view own holdings" on public.holdings;
 drop policy if exists "Users can insert own holdings" on public.holdings;
 drop policy if exists "Users can update own holdings" on public.holdings;
 drop policy if exists "Users can delete own holdings" on public.holdings;
+drop policy if exists "Users can view own watchlists" on public.watchlists;
+drop policy if exists "Users can insert own watchlists" on public.watchlists;
+drop policy if exists "Users can update own watchlists" on public.watchlists;
+drop policy if exists "Users can delete own watchlists" on public.watchlists;
 
 create policy "Users can view own holdings"
 on public.holdings
@@ -56,5 +71,26 @@ with check (auth.uid() = user_id);
 
 create policy "Users can delete own holdings"
 on public.holdings
+for delete
+using (auth.uid() = user_id);
+
+create policy "Users can view own watchlists"
+on public.watchlists
+for select
+using (auth.uid() = user_id);
+
+create policy "Users can insert own watchlists"
+on public.watchlists
+for insert
+with check (auth.uid() = user_id);
+
+create policy "Users can update own watchlists"
+on public.watchlists
+for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create policy "Users can delete own watchlists"
+on public.watchlists
 for delete
 using (auth.uid() = user_id);

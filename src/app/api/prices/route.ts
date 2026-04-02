@@ -5,7 +5,7 @@ function normalizeSymbols(raw: string) {
 }
 
 function toYahooSymbol(symbol: string) {
-  return `${symbol}.VN`;
+  return symbol + '.VN';
 }
 
 function safeNumber(value: unknown) {
@@ -13,21 +13,32 @@ function safeNumber(value: unknown) {
   return Number.isFinite(n) ? n : 0;
 }
 
+function roundPrice(value: number) {
+  return Math.round(value / 10) * 10;
+}
+
+function estimateCeiling(previousClose: number) {
+  return roundPrice(previousClose * 1.07);
+}
+
+function estimateFloor(previousClose: number) {
+  return roundPrice(previousClose * 0.93);
+}
+
 async function getYahooFinance(symbol: string) {
   const ticker = toYahooSymbol(symbol);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1m&range=1d&_=${Date.now()}`;
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1m&range=1d&_=' + Date.now();
 
   const response = await fetch(url, {
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
       Accept: '*/*',
     },
     cache: 'no-store',
   });
 
   if (!response.ok) {
-    throw new Error(`Yahoo request failed for ${ticker}: ${response.status}`);
+    throw new Error('Yahoo request failed for ' + ticker + ': ' + response.status);
   }
 
   const data = await response.json();
@@ -35,15 +46,17 @@ async function getYahooFinance(symbol: string) {
   const meta = result?.meta;
 
   if (!meta) {
-    throw new Error(`Yahoo returned empty meta for ${ticker}`);
+    throw new Error('Yahoo returned empty meta for ' + ticker);
   }
 
   const price = safeNumber(meta.regularMarketPrice);
   const previousClose = safeNumber(meta.previousClose);
   const regularMarketVolume = safeNumber(meta.regularMarketVolume);
+  const dayHigh = safeNumber(meta.regularMarketDayHigh);
+  const dayLow = safeNumber(meta.regularMarketDayLow);
 
   if (!price || !previousClose) {
-    throw new Error(`Missing market data for ${ticker}`);
+    throw new Error('Missing market data for ' + ticker);
   }
 
   const change = price - previousClose;
@@ -56,6 +69,10 @@ async function getYahooFinance(symbol: string) {
     change,
     pct,
     previousClose,
+    ceilingPriceEstimate: estimateCeiling(previousClose),
+    floorPriceEstimate: estimateFloor(previousClose),
+    dayHigh,
+    dayLow,
     marketTime: meta.regularMarketTime ?? null,
     currency: meta.currency ?? 'VND',
     volume: regularMarketVolume,
@@ -87,6 +104,10 @@ export async function GET(request: NextRequest) {
             change: 0,
             pct: 0,
             previousClose: 0,
+            ceilingPriceEstimate: 0,
+            floorPriceEstimate: 0,
+            dayHigh: 0,
+            dayLow: 0,
             marketTime: null,
             currency: 'VND',
             volume: 0,
@@ -96,9 +117,7 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    const prices = Object.fromEntries(
-      results.filter((item) => Number(item.price) > 0).map((item) => [item.symbol, item.price])
-    );
+    const prices = Object.fromEntries(results.filter((item) => Number(item.price) > 0).map((item) => [item.symbol, item.price]));
 
     return NextResponse.json({
       prices,

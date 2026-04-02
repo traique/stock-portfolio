@@ -56,6 +56,7 @@ export default function HomePage() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [userId, setUserId] = useState('');
   const [showAuth, setShowAuth] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -68,6 +69,8 @@ export default function HomePage() {
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
+  const [watchlistReady, setWatchlistReady] = useState(false);
+  const lastSavedPayloadRef = useRef('');
 
   useEffect(() => {
     let mounted = true;
@@ -78,6 +81,7 @@ export default function HomePage() {
       const session = data.session;
       setIsLoggedIn(!!session);
       setUserEmail(session?.user?.email || '');
+      setUserId(session?.user?.id || '');
       setSessionChecked(true);
     }
 
@@ -88,6 +92,7 @@ export default function HomePage() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(!!session);
       setUserEmail(session?.user?.email || '');
+      setUserId(session?.user?.id || '');
       if (session) setShowAuth(false);
       setSessionChecked(true);
     });
@@ -99,25 +104,76 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!sessionChecked) return;
-    const key = getWatchlistKey(userEmail || undefined);
-    const savedWatchlist = localStorage.getItem(key);
-    if (savedWatchlist) {
-      try {
-        const parsed = JSON.parse(savedWatchlist);
-        if (Array.isArray(parsed) && parsed.length) {
-          setWatchlist(sortSymbols(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean)));
-          return;
-        }
-      } catch {}
+    async function loadWatchlist() {
+      if (!sessionChecked) return;
+      setWatchlistReady(false);
+
+      if (isLoggedIn && userId) {
+        try {
+          const { data, error } = await supabase
+            .from('watchlists')
+            .select('symbol')
+            .order('symbol', { ascending: true });
+
+          if (!error && Array.isArray(data) && data.length) {
+            const symbols = sortSymbols(data.map((row) => normalizeSymbol(String(row.symbol))).filter(Boolean));
+            setWatchlist(symbols);
+            lastSavedPayloadRef.current = JSON.stringify(symbols);
+            setWatchlistReady(true);
+            return;
+          }
+        } catch {}
+      }
+
+      const key = getWatchlistKey(userEmail || undefined);
+      const savedWatchlist = localStorage.getItem(key);
+      if (savedWatchlist) {
+        try {
+          const parsed = JSON.parse(savedWatchlist);
+          if (Array.isArray(parsed) && parsed.length) {
+            const symbols = sortSymbols(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
+            setWatchlist(symbols);
+            lastSavedPayloadRef.current = JSON.stringify(symbols);
+            setWatchlistReady(true);
+            return;
+          }
+        } catch {}
+      }
+
+      const fallback = sortSymbols(DEFAULT_WATCHLIST);
+      setWatchlist(fallback);
+      lastSavedPayloadRef.current = JSON.stringify(fallback);
+      setWatchlistReady(true);
     }
-    setWatchlist(sortSymbols(DEFAULT_WATCHLIST));
-  }, [sessionChecked, userEmail]);
+
+    loadWatchlist();
+  }, [sessionChecked, isLoggedIn, userEmail, userId]);
 
   useEffect(() => {
-    if (!sessionChecked) return;
-    localStorage.setItem(getWatchlistKey(userEmail || undefined), JSON.stringify(sortSymbols(watchlist)));
-  }, [watchlist, userEmail, sessionChecked]);
+    if (!sessionChecked || !watchlistReady) return;
+
+    const sorted = sortSymbols(watchlist);
+    const payload = JSON.stringify(sorted);
+    localStorage.setItem(getWatchlistKey(userEmail || undefined), payload);
+
+    if (payload === lastSavedPayloadRef.current) return;
+
+    async function persist() {
+      if (isLoggedIn && userId) {
+        try {
+          await supabase.from('watchlists').delete().eq('user_id', userId);
+          if (sorted.length) {
+            await supabase.from('watchlists').insert(
+              sorted.map((symbol) => ({ user_id: userId, symbol }))
+            );
+          }
+        } catch {}
+      }
+      lastSavedPayloadRef.current = payload;
+    }
+
+    persist();
+  }, [watchlist, userEmail, userId, isLoggedIn, sessionChecked, watchlistReady]);
 
   useEffect(() => {
     async function loadQuotes() {
@@ -154,8 +210,8 @@ export default function HomePage() {
       }
     }
 
-    loadQuotes();
-  }, [watchlist]);
+    if (watchlistReady) loadQuotes();
+  }, [watchlist, watchlistReady]);
 
   const breadth = useMemo(() => {
     const valid = quotes.filter((item) => Number.isFinite(item.pct));
@@ -273,11 +329,11 @@ export default function HomePage() {
         ) : null}
 
         <section className="ab-summary-grid">
-          <div className="ab-summary-card">
+          <div className="ab-summary-card ab-summary-accent up">
             <div className="ab-label">Mã tăng</div>
             <div className="ab-summary-value">{loading ? '--' : breadth.gainers}</div>
           </div>
-          <div className="ab-summary-card">
+          <div className="ab-summary-card ab-summary-accent down">
             <div className="ab-label">Mã giảm</div>
             <div className="ab-summary-value">{loading ? '--' : breadth.losers}</div>
           </div>

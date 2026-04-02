@@ -651,6 +651,65 @@ th {
   gap: 10px;
 }
 
+.ab-summary-accent.up {
+  background: linear-gradient(180deg, var(--card), rgba(34, 197, 94, 0.06));
+}
+
+.ab-summary-accent.down {
+  background: linear-gradient(180deg, var(--card), rgba(239, 68, 68, 0.06));
+}
+
+.ab-stat-card.up,
+.ab-stat-card.up .ab-summary-value,
+.ab-stat-card.up .ab-stat-sub {
+  color: var(--green);
+}
+
+.ab-stat-card.down,
+.ab-stat-card.down .ab-summary-value,
+.ab-stat-card.down .ab-stat-sub {
+  color: var(--red);
+}
+
+.ab-stat-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ab-stat-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.ab-band-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ab-band-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.ab-band-item span {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.ab-band-item strong {
+  font-size: 15px;
+  line-height: 1.1;
+}
+
 @media (max-width: 1024px) {
   .ab-summary-grid-4 {
     grid-template-columns: 1fr 1fr;
@@ -705,6 +764,10 @@ th {
 
   .ab-top-info.compact {
     font-size: 12px;
+  }
+
+  .ab-band-item strong {
+    font-size: 14px;
   }
 }
 
