@@ -10,6 +10,7 @@ type PricesResponse = { debug?: QuoteItem[]; error?: string };
 const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
 const formatPrice = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v));
 const formatPct = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : v < 0 ? '' : ''}${v.toFixed(2)}%`);
+const formatIndexChange = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : v < 0 ? '' : ''}${v.toFixed(2)}`);
 const normalizeSymbol = (s: string) => s.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 const sortSymbols = (s: string[]) => [...s].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
 const colorFor = (v?: number | null) => !Number.isFinite(v as number) ? 'var(--muted)' : (v as number) > 0 ? 'var(--green)' : (v as number) < 0 ? 'var(--red)' : 'var(--muted)';
@@ -212,7 +213,9 @@ export default function HomePage() {
             <span className="ab-soft-label ab-strip-head"><Activity size={14} />VN-Index</span>
             <div className="ab-strip-stack">
               <strong>{vnIndex ? formatPrice(vnIndex.price) : '--'}</strong>
-              <span style={{ color: colorFor(vnIndex?.pct) }}>{vnIndex ? formatPct(vnIndex.pct) : 'Đang tải'}</span>
+              <span style={{ color: colorFor(vnIndex?.pct) }}>
+                {vnIndex ? `${formatIndexChange(vnIndex.change)} · ${formatPct(vnIndex.pct)}` : 'Đang tải'}
+              </span>
             </div>
           </div>
           <div className="ab-strip-item"><span className="ab-soft-label">Mã tăng</span><strong className="positive">{loading ? '--' : breadth.gainers}</strong></div>
