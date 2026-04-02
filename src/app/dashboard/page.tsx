@@ -145,7 +145,6 @@ export default function DashboardPage() {
       window.location.href = '/';
       return;
     }
-
     const symbol = form.symbol.trim().toUpperCase();
     const buyPrice = Number(form.buy_price);
     const quantity = Number(form.quantity);
@@ -153,7 +152,6 @@ export default function DashboardPage() {
       setMessage('Nhập đủ mã, giá mua, số lượng');
       return;
     }
-
     const { error } = await supabase.from('holdings').insert({
       user_id: authData.user.id,
       symbol,
@@ -166,7 +164,6 @@ export default function DashboardPage() {
       setMessage(error.message);
       return;
     }
-
     setForm({ symbol: '', buy_price: '', quantity: '', buy_date: '', note: '' });
     await loadHoldings();
   }
@@ -191,58 +188,40 @@ export default function DashboardPage() {
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Danh mục cá nhân" isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
 
-        <section className="ab-dashboard-grid">
-          <div className="ab-dashboard-main">
-            <section className="ab-summary-grid ab-summary-grid-4 premium-summary-grid">
-              <article className="ab-premium-card ab-stat-premium neutral">
-                <div className="ab-stat-head"><Wallet size={16} /><span className="ab-soft-label">Tổng vốn</span></div>
-                <div className="ab-big-number dark">{formatCurrency(summary.totalBuy)}</div>
-              </article>
-              <article className="ab-premium-card ab-stat-premium neutral">
-                <div className="ab-stat-head"><PieChart size={16} /><span className="ab-soft-label">NAV</span></div>
-                <div className="ab-big-number dark">{formatCurrency(summary.totalNow)}</div>
-              </article>
-              <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
-                <div className="ab-stat-head">{dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}<span className="ab-soft-label">Lãi/lỗ ngày</span></div>
-                <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>{formatCurrency(dayPnl)}</div>
-              </article>
-              <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
-                <div className="ab-stat-head"><TrendingUp size={16} /><span className="ab-soft-label">Lãi/lỗ danh mục</span></div>
-                <div className="ab-big-number" style={{ color: getChangeColor(summary.totalPnl) }}>{formatCurrency(summary.totalPnl)}</div>
-                <div className="ab-stat-sub" style={{ color: getChangeColor(summary.totalPnl) }}>{summaryPct >= 0 ? '+' : ''}{summaryPct.toFixed(2)}%</div>
-              </article>
-            </section>
+        <section className="ab-summary-grid premium-summary-grid compact-top-grid">
+          <article className="ab-premium-card ab-stat-premium neutral">
+            <div className="ab-stat-head"><Wallet size={16} /><span className="ab-soft-label">Tổng vốn</span></div>
+            <div className="ab-big-number dark">{formatCurrency(summary.totalBuy)}</div>
+          </article>
+          <article className="ab-premium-card ab-stat-premium neutral">
+            <div className="ab-stat-head"><PieChart size={16} /><span className="ab-soft-label">NAV</span></div>
+            <div className="ab-big-number dark">{formatCurrency(summary.totalNow)}</div>
+          </article>
+          <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
+            <div className="ab-stat-head">{dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}<span className="ab-soft-label">Lãi/lỗ ngày</span></div>
+            <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>{formatCurrency(dayPnl)}</div>
+          </article>
+          <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
+            <div className="ab-stat-head"><TrendingUp size={16} /><span className="ab-soft-label">Lãi/lỗ danh mục</span></div>
+            <div className="ab-big-number" style={{ color: getChangeColor(summary.totalPnl) }}>{formatCurrency(summary.totalPnl)}</div>
+            <div className="ab-stat-sub" style={{ color: getChangeColor(summary.totalPnl) }}>{summaryPct >= 0 ? '+' : ''}{summaryPct.toFixed(2)}%</div>
+          </article>
+        </section>
 
-            <section className="ab-premium-card ab-form-shell">
-              <div className="ab-row-between align-center">
-                <div>
-                  <div className="ab-card-kicker">Thêm vị thế mới</div>
-                  <div className="ab-card-headline">Danh mục</div>
-                </div>
-                <button type="button" className="ab-btn ab-btn-subtle" onClick={loadHoldings}>
-                  {refreshing ? 'Đang tải...' : 'Làm mới'}
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmit} className="ab-form-grid premium-form-grid">
-                <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="Mã" required className="ab-input" />
-                <input value={form.buy_price} onChange={(e) => setForm({ ...form, buy_price: e.target.value })} type="number" placeholder="Giá mua" required className="ab-input" />
-                <input value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} type="number" placeholder="Số lượng" required className="ab-input" />
-                <input value={form.buy_date} onChange={(e) => setForm({ ...form, buy_date: e.target.value })} type="date" className="ab-input" />
-                <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ghi chú" className="ab-input ab-full" />
-                <button type="submit" className="ab-btn ab-btn-primary ab-full">Thêm mã</button>
-              </form>
-              {message ? <div className="ab-error">{message}</div> : null}
-            </section>
+        <section className="ab-premium-card ab-form-shell compact">
+          <div className="ab-row-between align-center compact-form-head">
+            <div><div className="ab-card-kicker">Thêm vị thế</div></div>
+            <button type="button" className="ab-btn ab-btn-subtle" onClick={loadHoldings}>{refreshing ? 'Đang tải...' : 'Làm mới'}</button>
           </div>
-
-          <aside className="ab-dashboard-side">
-            <section className="ab-premium-card ab-side-note-card">
-              <div className="ab-card-kicker">Tổng quan</div>
-              <div className="ab-card-headline small">Trạng thái tài khoản</div>
-              <div className="ab-side-note-text">Danh mục được ưu tiên hiển thị ngắn gọn, tập trung vào tiền thật và hiệu suất.</div>
-            </section>
-          </aside>
+          <form onSubmit={handleSubmit} className="ab-form-grid compact-form-grid">
+            <input value={form.symbol} onChange={(e) => setForm({ ...form, symbol: e.target.value })} placeholder="Mã" required className="ab-input" />
+            <input value={form.buy_price} onChange={(e) => setForm({ ...form, buy_price: e.target.value })} type="number" placeholder="Giá mua" required className="ab-input" />
+            <input value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} type="number" placeholder="Số lượng" required className="ab-input" />
+            <input value={form.buy_date} onChange={(e) => setForm({ ...form, buy_date: e.target.value })} type="date" className="ab-input" />
+            <button type="submit" className="ab-btn ab-btn-primary">Thêm mã</button>
+            <input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ghi chú" className="ab-input ab-full" />
+          </form>
+          {message ? <div className="ab-error">{message}</div> : null}
         </section>
 
         {loading ? (
@@ -260,46 +239,21 @@ export default function DashboardPage() {
                   <div className="ab-row-between align-start">
                     <div>
                       <div className="ab-symbol premium">{holding.symbol}</div>
-                      <div className="ab-soft-change" style={{ color: getChangeColor(quote?.change) }}>
-                        {formatChange(quote?.change)} · {formatPct(quote?.pct)}
-                      </div>
+                      <div className="ab-soft-change" style={{ color: getChangeColor(quote?.change) }}>{formatChange(quote?.change)} · {formatPct(quote?.pct)}</div>
                     </div>
                     <button type="button" className="ab-delete ghost" onClick={() => handleDelete(holding.id, holding.symbol)}>Xóa</button>
                   </div>
-
                   <div className="ab-price premium">{formatCompactPrice(quote?.price ?? row.currentPrice)}</div>
-
                   <div className="ab-position-stats">
-                    <div className="ab-stat-chip">
-                      <span>SL</span>
-                      <strong>{holding.quantity}</strong>
-                    </div>
-                    <div className="ab-stat-chip">
-                      <span>Giá mua</span>
-                      <strong>{formatCurrency(Number(holding.buy_price))}</strong>
-                    </div>
+                    <div className="ab-stat-chip"><span>SL</span><strong>{holding.quantity}</strong></div>
+                    <div className="ab-stat-chip"><span>Giá mua</span><strong>{formatCurrency(Number(holding.buy_price))}</strong></div>
                   </div>
-
                   <div className="ab-mini-grid premium">
-                    <div className="ab-mini-card premium">
-                      <div className="ab-soft-label">Tổng mua</div>
-                      <div className="ab-mini-value">{formatCurrency(row.totalBuy)}</div>
-                    </div>
-                    <div className="ab-mini-card premium">
-                      <div className="ab-soft-label">Hiện tại</div>
-                      <div className="ab-mini-value">{formatCurrency(row.totalNow)}</div>
-                    </div>
+                    <div className="ab-mini-card premium"><div className="ab-soft-label">Tổng mua</div><div className="ab-mini-value">{formatCurrency(row.totalBuy)}</div></div>
+                    <div className="ab-mini-card premium"><div className="ab-soft-label">Hiện tại</div><div className="ab-mini-value">{formatCurrency(row.totalNow)}</div></div>
                   </div>
-
-                  <div className={`ab-profit-pill ${positive ? 'up' : 'down'}`}>
-                    <span>Lãi / Lỗ</span>
-                    <strong>{formatCurrency(row.pnl)}</strong>
-                  </div>
-
-                  <div className="ab-performance premium" style={{ background: positive ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)', borderColor: positive ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)', color: positive ? 'var(--green)' : 'var(--red)' }}>
-                    <span>Hiệu suất vị thế</span>
-                    <strong>{row.pnlPct >= 0 ? '+' : ''}{row.pnlPct.toFixed(2)}%</strong>
-                  </div>
+                  <div className={`ab-profit-pill ${positive ? 'up' : 'down'}`}><span>Lãi / Lỗ</span><strong>{formatCurrency(row.pnl)}</strong></div>
+                  <div className="ab-performance premium" style={{ background: positive ? 'rgba(34,197,94,0.10)' : 'rgba(239,68,68,0.10)', borderColor: positive ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)', color: positive ? 'var(--green)' : 'var(--red)' }}><span>Hiệu suất vị thế</span><strong>{row.pnlPct >= 0 ? '+' : ''}{row.pnlPct.toFixed(2)}%</strong></div>
                 </article>
               );
             })}
