@@ -4,16 +4,17 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Solar } from 'lunar-javascript';
 import {
+  ArrowRight,
   BriefcaseBusiness,
+  Cloud,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSun,
   House,
   LogOut,
   Moon,
   Sun,
-  CloudSun,
-  CloudRain,
-  Cloud,
-  CloudFog,
-  CloudLightning,
 } from 'lucide-react';
 
 type ThemeMode = 'light' | 'dark';
@@ -66,6 +67,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
       if (!menuRef.current) return;
       if (!menuRef.current.contains(event.target as Node)) setMenuOpen(false);
     }
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -84,6 +86,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
 
         let lat = 10.7769;
         let lon = 106.7009;
+
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             if (!navigator.geolocation) return reject(new Error('Geolocation unavailable'));
@@ -132,28 +135,29 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
   }
 
   return (
-    <section className="ab-hero">
-      <div className="ab-hero-top compact">
-        <div className="ab-badge">LCTA</div>
+    <section className="ab-hero-premium">
+      <div className="ab-hero-topline">
+        <div className="ab-brand-mark">LCTA</div>
 
-        <div className="ab-top-right inline">
-          <button type="button" className="ab-icon-btn" onClick={toggleTheme} aria-label="Đổi giao diện">
+        <div className="ab-hero-actions">
+          <button type="button" className="ab-icon-glass" onClick={toggleTheme} aria-label="Đổi giao diện">
             {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
           </button>
 
           <div className="ab-account-wrap" ref={menuRef}>
             {isLoggedIn ? (
-              <button type="button" className="ab-account-btn compact" onClick={() => setMenuOpen((prev) => !prev)}>
-                {getDisplayName(email)}
+              <button type="button" className="ab-account-glass" onClick={() => setMenuOpen((prev) => !prev)}>
+                <span>{getDisplayName(email)}</span>
               </button>
             ) : (
-              <button type="button" className="ab-account-btn compact" onClick={onAuthOpen}>
-                Đăng nhập
+              <button type="button" className="ab-account-glass" onClick={onAuthOpen}>
+                <span>Đăng nhập</span>
+                <ArrowRight size={14} />
               </button>
             )}
 
             {menuOpen && isLoggedIn ? (
-              <div className="ab-account-menu">
+              <div className="ab-account-menu premium">
                 <div className="ab-account-name">{getDisplayName(email)}</div>
                 <div className="ab-account-email">{email}</div>
                 <button type="button" className="ab-menu-btn danger" onClick={onLogout}>
@@ -166,23 +170,25 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         </div>
       </div>
 
-      <div className="ab-hero-content compact">
-        <h1 className="ab-title compact">{title}</h1>
-        <div className="ab-top-info compact">
-          <WeatherIcon size={15} strokeWidth={2} />
-          <span>{infoLine || 'Đang tải...'}</span>
+      <div className="ab-hero-main">
+        <div className="ab-hero-copy">
+          <h1 className="ab-hero-title">{title}</h1>
+          <div className="ab-hero-subline">
+            <WeatherIcon size={15} strokeWidth={2} />
+            <span>{infoLine || 'Đang tải...'}</span>
+          </div>
         </div>
-      </div>
 
-      <div className="ab-nav-tabs compact">
-        <Link href="/" className={`ab-tab ${currentTab === 'home' ? 'active' : ''}`}>
-          <House size={15} />
-          <span>Home</span>
-        </Link>
-        <Link href="/dashboard" className={`ab-tab ${currentTab === 'dashboard' ? 'active' : ''}`}>
-          <BriefcaseBusiness size={15} />
-          <span>Danh mục</span>
-        </Link>
+        <div className="ab-premium-tabs">
+          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}>
+            <House size={15} />
+            <span>Home</span>
+          </Link>
+          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}>
+            <BriefcaseBusiness size={15} />
+            <span>Danh mục</span>
+          </Link>
+        </div>
       </div>
     </section>
   );
