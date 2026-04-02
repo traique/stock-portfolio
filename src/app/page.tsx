@@ -17,7 +17,7 @@ type PricesResponse = {
   error?: string;
 };
 
-const DEFAULT_WATCHLIST = ['FPT', 'HPG', 'VCB', 'BID'];
+const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
 
 function formatPrice(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
@@ -33,16 +33,12 @@ function formatPct(value?: number | null) {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-function formatVolume(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '--';
-  return new Intl.NumberFormat('vi-VN', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value);
+function normalizeSymbol(input: string) {
+  return input.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-function normalizeSymbol(input: string) {
-  return input.trim().toUpperCase().replace(/[^A-Z]/g, '');
+function sortSymbols(symbols: string[]) {
+  return [...symbols].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
 }
 
 function colorFor(value?: number | null) {
@@ -110,17 +106,17 @@ export default function HomePage() {
       try {
         const parsed = JSON.parse(savedWatchlist);
         if (Array.isArray(parsed) && parsed.length) {
-          setWatchlist(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
+          setWatchlist(sortSymbols(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean)));
           return;
         }
       } catch {}
     }
-    setWatchlist(DEFAULT_WATCHLIST);
+    setWatchlist(sortSymbols(DEFAULT_WATCHLIST));
   }, [sessionChecked, userEmail]);
 
   useEffect(() => {
     if (!sessionChecked) return;
-    localStorage.setItem(getWatchlistKey(userEmail || undefined), JSON.stringify(watchlist));
+    localStorage.setItem(getWatchlistKey(userEmail || undefined), JSON.stringify(sortSymbols(watchlist)));
   }, [watchlist, userEmail, sessionChecked]);
 
   useEffect(() => {
@@ -145,7 +141,10 @@ export default function HomePage() {
           setMarketError(data?.error || 'Không lấy được dữ liệu');
           setQuotes([]);
         } else {
-          setQuotes(data.debug || []);
+          const sorted = [...(data.debug || [])].sort((a, b) =>
+            a.symbol.localeCompare(b.symbol, 'vi', { numeric: true })
+          );
+          setQuotes(sorted);
         }
       } catch {
         setMarketError('Lỗi kết nối dữ liệu');
@@ -202,13 +201,13 @@ export default function HomePage() {
       setWatchError('Mã đã có');
       return;
     }
-    setWatchlist((prev) => [...prev, symbol]);
+    setWatchlist((prev) => sortSymbols([...prev, symbol]));
     setWatchInput('');
     setWatchError('');
   }
 
   function removeWatchSymbol(symbol: string) {
-    setWatchlist((prev) => prev.filter((item) => item !== symbol));
+    setWatchlist((prev) => sortSymbols(prev.filter((item) => item !== symbol)));
   }
 
   if (!sessionChecked) {
@@ -310,7 +309,6 @@ export default function HomePage() {
                 <div className="ab-row-between">
                   <div>
                     <div className="ab-symbol">{item.symbol}</div>
-                    <div className="ab-muted">KL: {formatVolume(item.volume)}</div>
                   </div>
 
                   <button
