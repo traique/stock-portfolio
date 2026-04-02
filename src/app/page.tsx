@@ -1,27 +1,19 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import AppShellHeader from '@/components/app-shell-header';
 
 type QuoteItem = {
   symbol: string;
-  ticker?: string;
   price: number;
   change: number;
   pct: number;
-  previousClose?: number;
-  marketTime?: number | null;
-  currency?: string;
   volume?: number;
-  error?: string;
 };
 
 type PricesResponse = {
-  prices?: Record<string, number>;
   debug?: QuoteItem[];
-  updatedAt?: string;
-  provider?: string;
   error?: string;
 };
 
@@ -49,12 +41,8 @@ function formatVolume(value?: number | null) {
   }).format(value);
 }
 
-function formatDateTime(value?: string) {
-  if (!value) return '--';
-  return new Intl.DateTimeFormat('vi-VN', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  }).format(new Date(value));
+function normalizeSymbol(input: string) {
+  return input.trim().toUpperCase().replace(/[^A-Z]/g, '');
 }
 
 function colorFor(value?: number | null) {
@@ -63,16 +51,6 @@ function colorFor(value?: number | null) {
   if (value < 0) return 'var(--red)';
   return 'var(--muted)';
 }
-
-function normalizeSymbol(input: string) {
-  return input.trim().toUpperCase().replace(/[^A-Z]/g, '');
-}
-
-function getDisplayName(email: string) {
-  return email.split('@')[0] || email;
-}
-
-type ThemeMode = 'light' | 'dark';
 
 export default function HomePage() {
   const [sessionChecked, setSessionChecked] = useState(false);
@@ -83,28 +61,14 @@ export default function HomePage() {
   const [authMessage, setAuthMessage] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_WATCHLIST);
   const [watchInput, setWatchInput] = useState('');
   const [watchError, setWatchError] = useState('');
-
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
-  const [updatedAt, setUpdatedAt] = useState('');
-  const [marketLoading, setMarketLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
 
-  const [theme, setTheme] = useState<ThemeMode>('light');
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
   useEffect(() => {
-    const savedTheme = localStorage.getItem('alphaboard_theme') as ThemeMode | null;
-    if (savedTheme === 'light' || savedTheme === 'dark') {
-      setTheme(savedTheme);
-      document.documentElement.dataset.theme = savedTheme;
-    } else {
-      document.documentElement.dataset.theme = 'light';
-    }
-
     const savedWatchlist = localStorage.getItem('alphaboard_watchlist');
     if (savedWatchlist) {
       try {
@@ -115,11 +79,6 @@ export default function HomePage() {
       } catch {}
     }
   }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    localStorage.setItem('alphaboard_theme', theme);
-  }, [theme]);
 
   useEffect(() => {
     localStorage.setItem('alphaboard_watchlist', JSON.stringify(watchlist));
@@ -153,43 +112,39 @@ export default function HomePage() {
     };
   }, []);
 
-  async function fetchQuotes(symbols: string[]) {
-    if (!symbols.length) return { debug: [], updatedAt: '' };
-
-    const response = await fetch(`/api/prices?symbols=${encodeURIComponent(symbols.join(','))}`, {
-      cache: 'no-store',
-    });
-
-    const data: PricesResponse = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data?.error || 'Không lấy được dữ liệu');
-    }
-
-    return {
-      debug: data.debug || [],
-      updatedAt: data.updatedAt || '',
-    };
-  }
-
   useEffect(() => {
-    async function loadMarket() {
-      setMarketLoading(true);
+    async function loadQuotes() {
+      if (!watchlist.length) {
+        setQuotes([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
       setMarketError('');
 
       try {
-        const data = await fetchQuotes(watchlist);
-        setQuotes(data.debug);
-        setUpdatedAt(data.updatedAt);
-      } catch (error) {
-        setMarketError(error instanceof Error ? error.message : 'Lỗi dữ liệu');
+        const response = await fetch(
+          `/api/prices?symbols=${encodeURIComponent(watchlist.join(','))}`,
+          { cache: 'no-store' }
+        );
+        const data: PricesResponse = await response.json();
+
+        if (!response.ok) {
+          setMarketError(data?.error || 'Không lấy được dữ liệu');
+          setQuotes([]);
+        } else {
+          setQuotes(data.debug || []);
+        }
+      } catch {
+        setMarketError('Lỗi kết nối dữ liệu');
         setQuotes([]);
       } finally {
-        setMarketLoading(false);
+        setLoading(false);
       }
     }
 
-    loadMarket();
+    loadQuotes();
   }, [watchlist]);
 
   const breadth = useMemo(() => {
@@ -228,17 +183,14 @@ export default function HomePage() {
 
   function addWatchSymbol(symbolRaw?: string) {
     const symbol = normalizeSymbol(symbolRaw ?? watchInput);
-
     if (!symbol) {
       setWatchError('Nhập mã hợp lệ');
       return;
     }
-
     if (watchlist.includes(symbol)) {
       setWatchError('Mã đã có');
       return;
     }
-
     setWatchlist((prev) => [...prev, symbol]);
     setWatchInput('');
     setWatchError('');
@@ -261,48 +213,16 @@ export default function HomePage() {
   return (
     <main className="ab-page">
       <div className="ab-shell">
-        <section className="ab-hero">
-          <div className="ab-hero-top">
-            <div className="ab-badge">AlphaBoard</div>
-
-            <button
-              type="button"
-              className="ab-icon-btn"
-              onClick={() => setSettingsOpen((prev) => !prev)}
-              aria-label="Tùy chỉnh"
-            >
-              ⚙️
-            </button>
-          </div>
-
-          <h1 className="ab-title">Danh mục đầu tư</h1>
-
-          <div className="ab-meta-row">
-            <div className="ab-pill">{formatDateTime(updatedAt)}</div>
-          </div>
-
-          {settingsOpen ? (
-            <div className="ab-settings">
-              <button
-                type="button"
-                className={`ab-chip ${theme === 'light' ? 'active' : ''}`}
-                onClick={() => setTheme('light')}
-              >
-                Sáng
-              </button>
-              <button
-                type="button"
-                className={`ab-chip ${theme === 'dark' ? 'active' : ''}`}
-                onClick={() => setTheme('dark')}
-              >
-                Tối
-              </button>
-            </div>
-          ) : null}
-        </section>
+        <AppShellHeader
+          title="Danh mục đầu tư"
+          isLoggedIn={isLoggedIn}
+          email={userEmail}
+          currentTab="home"
+          onLogout={handleLogout}
+        />
 
         {!isLoggedIn ? (
-          <section className="ab-card">
+          <section id="auth" className="ab-card">
             <div className="ab-section-title">
               {authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
             </div>
@@ -339,34 +259,16 @@ export default function HomePage() {
 
             {authMessage ? <div className="ab-note">{authMessage}</div> : null}
           </section>
-        ) : (
-          <section className="ab-card">
-            <div className="ab-row-between">
-              <div>
-                <div className="ab-label">Tài khoản</div>
-                <div className="ab-name">{getDisplayName(userEmail)}</div>
-              </div>
-
-              <div className="ab-action-stack">
-                <Link href="/dashboard" className="ab-btn ab-btn-primary">
-                  Vào danh mục
-                </Link>
-                <button type="button" onClick={handleLogout} className="ab-btn ab-btn-secondary">
-                  Đăng xuất
-                </button>
-              </div>
-            </div>
-          </section>
-        )}
+        ) : null}
 
         <section className="ab-summary-grid">
           <div className="ab-summary-card">
             <div className="ab-label">Mã tăng</div>
-            <div className="ab-summary-value">{marketLoading ? '--' : breadth.gainers}</div>
+            <div className="ab-summary-value">{loading ? '--' : breadth.gainers}</div>
           </div>
           <div className="ab-summary-card">
             <div className="ab-label">Mã giảm</div>
-            <div className="ab-summary-value">{marketLoading ? '--' : breadth.losers}</div>
+            <div className="ab-summary-value">{loading ? '--' : breadth.losers}</div>
           </div>
         </section>
 
@@ -430,370 +332,10 @@ export default function HomePage() {
               </article>
             ))}
 
-            {!marketLoading && quotes.length === 0 ? <div className="ab-note">Chưa có mã</div> : null}
+            {!loading && quotes.length === 0 ? <div className="ab-note">Chưa có mã</div> : null}
           </div>
         </section>
       </div>
-
-      <style jsx>{`
-        .ab-page {
-          min-height: 100vh;
-          background: var(--bg);
-          color: var(--text);
-          font-family:
-            Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial,
-            'Noto Sans', sans-serif;
-          transition: background 0.2s ease, color 0.2s ease;
-        }
-
-        .ab-shell {
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 12px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .ab-hero,
-        .ab-card,
-        .ab-summary-card,
-        .ab-watch-card {
-          transition:
-            background 0.2s ease,
-            border-color 0.2s ease,
-            color 0.2s ease,
-            box-shadow 0.2s ease;
-        }
-
-        .ab-hero {
-          background: linear-gradient(135deg, #0b1530, #12224a);
-          color: #fff;
-          border-radius: 28px;
-          padding: 18px;
-          box-shadow: 0 14px 32px rgba(15, 23, 42, 0.18);
-        }
-
-        .ab-hero-top,
-        .ab-row-between {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 12px;
-        }
-
-        .ab-badge {
-          display: inline-flex;
-          width: fit-content;
-          padding: 7px 12px;
-          border-radius: 999px;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          font-size: 13px;
-          font-weight: 800;
-          letter-spacing: 0.02em;
-        }
-
-        .ab-icon-btn {
-          width: 42px;
-          height: 42px;
-          border-radius: 14px;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          background: rgba(255, 255, 255, 0.08);
-          color: #fff;
-          font-size: 18px;
-          cursor: pointer;
-        }
-
-        .ab-title {
-          margin: 14px 0 0;
-          font-size: 34px;
-          line-height: 1.02;
-          letter-spacing: -0.04em;
-          font-weight: 800;
-        }
-
-        .ab-meta-row {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-top: 16px;
-        }
-
-        .ab-pill {
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 999px;
-          padding: 8px 12px;
-          font-size: 13px;
-          color: #e2e8f0;
-        }
-
-        .ab-settings {
-          display: flex;
-          gap: 8px;
-          margin-top: 12px;
-          flex-wrap: wrap;
-        }
-
-        .ab-chip {
-          border: 1px solid var(--border);
-          background: var(--soft);
-          color: var(--text);
-          border-radius: 999px;
-          padding: 8px 10px;
-          font-weight: 700;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        .ab-chip.active {
-          background: var(--text);
-          color: var(--card);
-          border-color: var(--text);
-        }
-
-        .ab-card {
-          background: var(--card);
-          border-radius: 24px;
-          padding: 16px;
-          border: 1px solid var(--border);
-          box-shadow: 0 8px 18px rgba(148, 163, 184, 0.1);
-        }
-
-        .ab-section-title {
-          font-size: 22px;
-          font-weight: 800;
-          letter-spacing: -0.03em;
-        }
-
-        .ab-label {
-          font-size: 13px;
-          color: var(--muted);
-          font-weight: 700;
-        }
-
-        .ab-name {
-          margin-top: 6px;
-          font-size: 22px;
-          font-weight: 800;
-          letter-spacing: -0.03em;
-          word-break: break-word;
-        }
-
-        .ab-action-stack {
-          display: grid;
-          gap: 10px;
-          min-width: 160px;
-        }
-
-        .ab-btn {
-          border-radius: 16px;
-          padding: 12px 16px;
-          font-weight: 800;
-          font-size: 15px;
-          text-decoration: none;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-        }
-
-        .ab-btn-primary {
-          border: none;
-          background: var(--primary);
-          color: #fff;
-        }
-
-        .ab-btn-secondary {
-          border: 1px solid var(--border);
-          background: var(--card);
-          color: var(--text);
-        }
-
-        .ab-form {
-          display: grid;
-          gap: 10px;
-          margin-top: 14px;
-        }
-
-        .ab-input {
-          width: 100%;
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 12px 14px;
-          background: var(--card);
-          color: var(--text);
-          font-size: 15px;
-          outline: none;
-        }
-
-        .ab-link-btn {
-          margin-top: 10px;
-          border: none;
-          background: transparent;
-          padding: 0;
-          text-align: left;
-          color: var(--text);
-          font-size: 14px;
-          font-weight: 700;
-          cursor: pointer;
-        }
-
-        .ab-note {
-          margin-top: 10px;
-          color: var(--muted);
-          font-size: 14px;
-        }
-
-        .ab-error {
-          margin-top: 10px;
-          color: var(--red);
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .ab-summary-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-
-        .ab-summary-card {
-          background: var(--card);
-          border-radius: 22px;
-          padding: 16px;
-          border: 1px solid var(--border);
-          box-shadow: 0 8px 18px rgba(148, 163, 184, 0.1);
-        }
-
-        .ab-summary-value {
-          margin-top: 8px;
-          font-size: 34px;
-          line-height: 1;
-          font-weight: 800;
-          letter-spacing: -0.04em;
-        }
-
-        .ab-add-row {
-          display: grid;
-          grid-template-columns: 1fr auto;
-          gap: 10px;
-          margin-top: 14px;
-        }
-
-        .ab-quick-row {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-top: 10px;
-        }
-
-        .ab-watch-grid {
-          display: grid;
-          gap: 10px;
-          margin-top: 12px;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .ab-watch-card {
-          background: var(--soft);
-          border-radius: 20px;
-          padding: 14px;
-          border: 1px solid var(--border);
-        }
-
-        .ab-symbol {
-          font-size: 30px;
-          line-height: 1;
-          font-weight: 800;
-          letter-spacing: -0.04em;
-        }
-
-        .ab-muted {
-          margin-top: 6px;
-          font-size: 13px;
-          color: var(--muted);
-        }
-
-        .ab-delete {
-          border: 1px solid #fecaca;
-          background: var(--card);
-          color: var(--red);
-          border-radius: 14px;
-          padding: 8px 10px;
-          font-weight: 700;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        .ab-price {
-          margin-top: 14px;
-          font-size: 40px;
-          line-height: 1;
-          font-weight: 800;
-          letter-spacing: -0.04em;
-        }
-
-        .ab-change-row {
-          margin-top: 10px;
-          display: flex;
-          gap: 14px;
-          flex-wrap: wrap;
-          font-size: 18px;
-          font-weight: 800;
-        }
-
-        :global(:root) {
-          --bg: #f4f7fb;
-          --card: #ffffff;
-          --soft: #f8fafc;
-          --text: #0f172a;
-          --muted: #64748b;
-          --border: #dbe2ea;
-          --primary: #0f172a;
-          --green: #16a34a;
-          --red: #dc2626;
-        }
-
-        :global(:root[data-theme='dark']) {
-          --bg: #0b1220;
-          --card: #111827;
-          --soft: #172033;
-          --text: #f8fafc;
-          --muted: #94a3b8;
-          --border: #243041;
-          --primary: #2563eb;
-          --green: #22c55e;
-          --red: #f87171;
-        }
-
-        @media (max-width: 900px) {
-          .ab-watch-grid {
-            grid-template-columns: 1fr;
-          }
-        }
-
-        @media (max-width: 720px) {
-          .ab-row-between,
-          .ab-hero-top {
-            flex-direction: column;
-          }
-
-          .ab-action-stack {
-            width: 100%;
-            min-width: 0;
-          }
-
-          .ab-add-row {
-            grid-template-columns: 1fr;
-          }
-
-          .ab-summary-grid {
-            grid-template-columns: 1fr 1fr;
-          }
-        }
-      `}</style>
     </main>
   );
-  }
+}
