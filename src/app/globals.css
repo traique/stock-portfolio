@@ -9,8 +9,14 @@ body {
   min-height: 100%;
 }
 
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 body {
-  font-family: Inter, Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), 'Be Vietnam Pro', Inter, Arial, Helvetica, sans-serif;
   background: #f3f6fb;
   color: #0f172a;
 }
