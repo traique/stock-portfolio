@@ -5,6 +5,7 @@ function normalizeSymbols(raw: string) {
 }
 
 function toYahooSymbol(symbol: string) {
+  if (symbol === 'VNINDEX' || symbol === '^VNINDEX') return '^VNINDEX';
   return symbol + '.VN';
 }
 
@@ -27,7 +28,7 @@ function estimateFloor(previousClose: number) {
 
 async function getYahooFinance(symbol: string) {
   const ticker = toYahooSymbol(symbol);
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + ticker + '?interval=1m&range=1d&_=' + Date.now();
+  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(ticker) + '?interval=1m&range=1d&_=' + Date.now();
 
   const response = await fetch(url, {
     headers: {

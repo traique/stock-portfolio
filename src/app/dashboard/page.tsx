@@ -53,6 +53,10 @@ function statTone(value: number) {
   return value >= 0 ? 'up' : 'down';
 }
 
+function SummarySkeleton() {
+  return <article className="ab-premium-card ab-stat-premium"><div className="ab-skeleton skeleton-line short" /><div className="ab-skeleton skeleton-price medium" /></article>;
+}
+
 export default function DashboardPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [prices, setPrices] = useState<PriceMap>({});
@@ -127,15 +131,11 @@ export default function DashboardPage() {
   const summaryPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
   const quoteMap = useMemo(() => getQuoteMap(quotes), [quotes]);
 
-  const dayPnl = useMemo(
-    () =>
-      holdings.reduce((sum, holding) => {
-        const quote = quoteMap.get(holding.symbol.toUpperCase());
-        const change = Number(quote?.change || 0);
-        return sum + change * Number(holding.quantity || 0);
-      }, 0),
-    [holdings, quoteMap]
-  );
+  const dayPnl = useMemo(() => holdings.reduce((sum, holding) => {
+    const quote = quoteMap.get(holding.symbol.toUpperCase());
+    const change = Number(quote?.change || 0);
+    return sum + change * Number(holding.quantity || 0);
+  }, 0), [holdings, quoteMap]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -152,14 +152,7 @@ export default function DashboardPage() {
       setMessage('Nhập đủ mã, giá mua, số lượng');
       return;
     }
-    const { error } = await supabase.from('holdings').insert({
-      user_id: authData.user.id,
-      symbol,
-      buy_price: buyPrice,
-      quantity,
-      buy_date: form.buy_date || null,
-      note: form.note.trim() || null,
-    });
+    const { error } = await supabase.from('holdings').insert({ user_id: authData.user.id, symbol, buy_price: buyPrice, quantity, buy_date: form.buy_date || null, note: form.note.trim() || null });
     if (error) {
       setMessage(error.message);
       return;
@@ -189,23 +182,34 @@ export default function DashboardPage() {
         <AppShellHeader title="Danh mục cá nhân" isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
 
         <section className="ab-summary-grid premium-summary-grid compact-top-grid">
-          <article className="ab-premium-card ab-stat-premium neutral">
-            <div className="ab-stat-head"><Wallet size={16} /><span className="ab-soft-label">Tổng vốn</span></div>
-            <div className="ab-big-number dark">{formatCurrency(summary.totalBuy)}</div>
-          </article>
-          <article className="ab-premium-card ab-stat-premium neutral">
-            <div className="ab-stat-head"><PieChart size={16} /><span className="ab-soft-label">NAV</span></div>
-            <div className="ab-big-number dark">{formatCurrency(summary.totalNow)}</div>
-          </article>
-          <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
-            <div className="ab-stat-head">{dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}<span className="ab-soft-label">Lãi/lỗ ngày</span></div>
-            <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>{formatCurrency(dayPnl)}</div>
-          </article>
-          <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
-            <div className="ab-stat-head"><TrendingUp size={16} /><span className="ab-soft-label">Lãi/lỗ danh mục</span></div>
-            <div className="ab-big-number" style={{ color: getChangeColor(summary.totalPnl) }}>{formatCurrency(summary.totalPnl)}</div>
-            <div className="ab-stat-sub" style={{ color: getChangeColor(summary.totalPnl) }}>{summaryPct >= 0 ? '+' : ''}{summaryPct.toFixed(2)}%</div>
-          </article>
+          {loading ? (
+            <>
+              <SummarySkeleton />
+              <SummarySkeleton />
+              <SummarySkeleton />
+              <SummarySkeleton />
+            </>
+          ) : (
+            <>
+              <article className="ab-premium-card ab-stat-premium neutral">
+                <div className="ab-stat-head"><Wallet size={16} /><span className="ab-soft-label">Tổng vốn</span></div>
+                <div className="ab-big-number dark">{formatCurrency(summary.totalBuy)}</div>
+              </article>
+              <article className="ab-premium-card ab-stat-premium neutral">
+                <div className="ab-stat-head"><PieChart size={16} /><span className="ab-soft-label">NAV</span></div>
+                <div className="ab-big-number dark">{formatCurrency(summary.totalNow)}</div>
+              </article>
+              <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
+                <div className="ab-stat-head">{dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}<span className="ab-soft-label">Lãi/lỗ ngày</span></div>
+                <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>{formatCurrency(dayPnl)}</div>
+              </article>
+              <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
+                <div className="ab-stat-head"><TrendingUp size={16} /><span className="ab-soft-label">Lãi/lỗ danh mục</span></div>
+                <div className="ab-big-number" style={{ color: getChangeColor(summary.totalPnl) }}>{formatCurrency(summary.totalPnl)}</div>
+                <div className="ab-stat-sub" style={{ color: getChangeColor(summary.totalPnl) }}>{summaryPct >= 0 ? '+' : ''}{summaryPct.toFixed(2)}%</div>
+              </article>
+            </>
+          )}
         </section>
 
         <section className="ab-premium-card ab-form-shell compact">
@@ -225,7 +229,10 @@ export default function DashboardPage() {
         </section>
 
         {loading ? (
-          <section className="ab-premium-card">Đang tải...</section>
+          <section className="ab-position-grid">
+            <article className="ab-premium-card ab-position-card ab-skeleton-card"><div className="ab-skeleton skeleton-title" /><div className="ab-skeleton skeleton-price" /><div className="ab-skeleton skeleton-line" /><div className="ab-skeleton skeleton-line short" /></article>
+            <article className="ab-premium-card ab-position-card ab-skeleton-card"><div className="ab-skeleton skeleton-title" /><div className="ab-skeleton skeleton-price" /><div className="ab-skeleton skeleton-line" /><div className="ab-skeleton skeleton-line short" /></article>
+          </section>
         ) : holdings.length === 0 ? (
           <section className="ab-premium-card">Chưa có mã nào</section>
         ) : (
