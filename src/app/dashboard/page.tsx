@@ -239,11 +239,11 @@ export default function DashboardPage() {
                   <div className="ab-row-between align-start">
                     <div>
                       <div className="ab-symbol premium">{holding.symbol}</div>
-                      <div className="ab-soft-change" style={{ color: getChangeColor(quote?.change) }}>{formatChange(quote?.change)} · {formatPct(quote?.pct)}</div>
                     </div>
                     <button type="button" className="ab-delete ghost" onClick={() => handleDelete(holding.id, holding.symbol)}>Xóa</button>
                   </div>
                   <div className="ab-price premium">{formatCompactPrice(quote?.price ?? row.currentPrice)}</div>
+                  <div className="ab-soft-change under-price" style={{ color: getChangeColor(quote?.change) }}>{formatChange(quote?.change)} · {formatPct(quote?.pct)}</div>
                   <div className="ab-position-stats">
                     <div className="ab-stat-chip"><span>SL</span><strong>{holding.quantity}</strong></div>
                     <div className="ab-stat-chip"><span>Giá mua</span><strong>{formatCurrency(Number(holding.buy_price))}</strong></div>
