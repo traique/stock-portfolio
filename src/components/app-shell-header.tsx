@@ -8,7 +8,6 @@ import {
   House,
   LogOut,
   Moon,
-  Settings2,
   Sun,
   CloudSun,
   CloudRain,
@@ -25,6 +24,7 @@ type Props = {
   isLoggedIn: boolean;
   currentTab: 'home' | 'dashboard';
   onLogout?: () => void;
+  onAuthOpen?: () => void;
 };
 
 function getDisplayName(email?: string) {
@@ -47,7 +47,7 @@ function getWeatherIcon(code: number | null) {
   return CloudSun;
 }
 
-export default function AppShellHeader({ title, email, isLoggedIn, currentTab, onLogout }: Props) {
+export default function AppShellHeader({ title, email, isLoggedIn, currentTab, onLogout, onAuthOpen }: Props) {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [menuOpen, setMenuOpen] = useState(false);
   const [infoLine, setInfoLine] = useState('');
@@ -79,13 +79,11 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
           timeZone: 'Asia/Ho_Chi_Minh',
         }).format(now);
         const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
-
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
-        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${lunar.getYear()} ÂL`;
+        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${now.getFullYear()} ÂL`;
 
         let lat = 10.7769;
         let lon = 106.7009;
-
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             if (!navigator.geolocation) return reject(new Error('Geolocation unavailable'));
@@ -115,7 +113,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         }).format(now);
         const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
-        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${lunar.getYear()} ÂL`;
+        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${now.getFullYear()} ÂL`;
         setInfoLine(`${solarText} · ${lunarText}`);
         setWeatherCode(null);
       }
@@ -135,57 +133,54 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
 
   return (
     <section className="ab-hero">
-      <div className="ab-hero-top">
-        <div className="ab-badge">AlphaBoard</div>
+      <div className="ab-hero-top compact">
+        <div className="ab-badge">LCTA</div>
 
-        <div className="ab-top-right">
+        <div className="ab-top-right inline">
           <button type="button" className="ab-icon-btn" onClick={toggleTheme} aria-label="Đổi giao diện">
-            {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+            {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
           </button>
 
           <div className="ab-account-wrap" ref={menuRef}>
-            <button type="button" className="ab-account-btn" onClick={() => setMenuOpen((prev) => !prev)}>
-              {isLoggedIn ? getDisplayName(email) : 'Đăng nhập'}
-            </button>
+            {isLoggedIn ? (
+              <button type="button" className="ab-account-btn compact" onClick={() => setMenuOpen((prev) => !prev)}>
+                {getDisplayName(email)}
+              </button>
+            ) : (
+              <button type="button" className="ab-account-btn compact" onClick={onAuthOpen}>
+                Đăng nhập
+              </button>
+            )}
 
-            {menuOpen ? (
+            {menuOpen && isLoggedIn ? (
               <div className="ab-account-menu">
-                {isLoggedIn ? (
-                  <>
-                    <div className="ab-account-name">{getDisplayName(email)}</div>
-                    <div className="ab-account-email">{email}</div>
-                    <button type="button" className="ab-menu-btn danger" onClick={onLogout}>
-                      <LogOut size={16} />
-                      <span>Đăng xuất</span>
-                    </button>
-                  </>
-                ) : (
-                  <Link href="/#auth" className="ab-menu-btn">
-                    <Settings2 size={16} />
-                    <span>Đăng nhập</span>
-                  </Link>
-                )}
+                <div className="ab-account-name">{getDisplayName(email)}</div>
+                <div className="ab-account-email">{email}</div>
+                <button type="button" className="ab-menu-btn danger" onClick={onLogout}>
+                  <LogOut size={16} />
+                  <span>Đăng xuất</span>
+                </button>
               </div>
             ) : null}
           </div>
         </div>
       </div>
 
-      <div className="ab-hero-content">
-        <h1 className="ab-title">{title}</h1>
-        <div className="ab-top-info">
-          <WeatherIcon size={16} strokeWidth={2} />
+      <div className="ab-hero-content compact">
+        <h1 className="ab-title compact">{title}</h1>
+        <div className="ab-top-info compact">
+          <WeatherIcon size={15} strokeWidth={2} />
           <span>{infoLine || 'Đang tải...'}</span>
         </div>
       </div>
 
-      <div className="ab-nav-tabs">
+      <div className="ab-nav-tabs compact">
         <Link href="/" className={`ab-tab ${currentTab === 'home' ? 'active' : ''}`}>
-          <House size={16} />
+          <House size={15} />
           <span>Home</span>
         </Link>
         <Link href="/dashboard" className={`ab-tab ${currentTab === 'dashboard' ? 'active' : ''}`}>
-          <BriefcaseBusiness size={16} />
+          <BriefcaseBusiness size={15} />
           <span>Danh mục</span>
         </Link>
       </div>

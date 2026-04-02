@@ -52,10 +52,15 @@ function colorFor(value?: number | null) {
   return 'var(--muted)';
 }
 
+function getWatchlistKey(email?: string) {
+  return `lcta_watchlist_${email ? email.toLowerCase() : 'guest'}`;
+}
+
 export default function HomePage() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [showAuth, setShowAuth] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authMessage, setAuthMessage] = useState('');
@@ -67,22 +72,6 @@ export default function HomePage() {
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
-
-  useEffect(() => {
-    const savedWatchlist = localStorage.getItem('alphaboard_watchlist');
-    if (savedWatchlist) {
-      try {
-        const parsed = JSON.parse(savedWatchlist);
-        if (Array.isArray(parsed) && parsed.length) {
-          setWatchlist(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
-        }
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('alphaboard_watchlist', JSON.stringify(watchlist));
-  }, [watchlist]);
 
   useEffect(() => {
     let mounted = true;
@@ -103,6 +92,7 @@ export default function HomePage() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsLoggedIn(!!session);
       setUserEmail(session?.user?.email || '');
+      if (session) setShowAuth(false);
       setSessionChecked(true);
     });
 
@@ -111,6 +101,27 @@ export default function HomePage() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!sessionChecked) return;
+    const key = getWatchlistKey(userEmail || undefined);
+    const savedWatchlist = localStorage.getItem(key);
+    if (savedWatchlist) {
+      try {
+        const parsed = JSON.parse(savedWatchlist);
+        if (Array.isArray(parsed) && parsed.length) {
+          setWatchlist(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
+          return;
+        }
+      } catch {}
+    }
+    setWatchlist(DEFAULT_WATCHLIST);
+  }, [sessionChecked, userEmail]);
+
+  useEffect(() => {
+    if (!sessionChecked) return;
+    localStorage.setItem(getWatchlistKey(userEmail || undefined), JSON.stringify(watchlist));
+  }, [watchlist, userEmail, sessionChecked]);
 
   useEffect(() => {
     async function loadQuotes() {
@@ -219,9 +230,10 @@ export default function HomePage() {
           email={userEmail}
           currentTab="home"
           onLogout={handleLogout}
+          onAuthOpen={() => setShowAuth((prev) => !prev)}
         />
 
-        {!isLoggedIn ? (
+        {showAuth && !isLoggedIn ? (
           <section id="auth" className="ab-card">
             <div className="ab-section-title">
               {authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
@@ -287,19 +299,6 @@ export default function HomePage() {
             <button type="button" onClick={() => addWatchSymbol()} className="ab-btn ab-btn-primary">
               Thêm
             </button>
-          </div>
-
-          <div className="ab-quick-row">
-            {['FPT', 'HPG', 'VCB', 'BID', 'CTG', 'MWG'].map((symbol) => (
-              <button
-                key={symbol}
-                type="button"
-                className="ab-chip"
-                onClick={() => addWatchSymbol(symbol)}
-              >
-                + {symbol}
-              </button>
-            ))}
           </div>
 
           {watchError ? <div className="ab-error">{watchError}</div> : null}
