@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
