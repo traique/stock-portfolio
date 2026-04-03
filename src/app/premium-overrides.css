@@ -1,34 +1,32 @@
 :root {
-  --premium-ring: rgba(255, 255, 255, 0.72);
-  --premium-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
-  --premium-shadow-strong: 0 24px 68px rgba(15, 23, 42, 0.14);
-  --premium-glow: radial-gradient(circle at top left, rgba(255,255,255,0.9), transparent 36%);
+  --premium-ring: rgba(255, 255, 255, 0.7);
+  --premium-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  --premium-shadow-strong: 0 22px 56px rgba(15, 23, 42, 0.12);
+  --premium-glow: radial-gradient(circle at top center, rgba(255,255,255,0.72), transparent 34%);
 }
 
 :root[data-theme='dark'] {
   --premium-ring: rgba(255, 255, 255, 0.08);
-  --premium-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
-  --premium-shadow-strong: 0 24px 68px rgba(0, 0, 0, 0.5);
-  --premium-glow: radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 32%);
+  --premium-shadow: 0 16px 40px rgba(0, 0, 0, 0.34);
+  --premium-shadow-strong: 0 22px 56px rgba(0, 0, 0, 0.46);
+  --premium-glow: radial-gradient(circle at top center, rgba(255,255,255,0.08), transparent 30%);
 }
 
 .ab-page {
   background:
-    radial-gradient(circle at top center, rgba(37, 99, 235, 0.08), transparent 26%),
-    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.72), transparent 18%),
-    var(--bg);
+    radial-gradient(circle at top center, rgba(59, 130, 246, 0.06), transparent 24%),
+    linear-gradient(180deg, #f5f7fb 0%, #eef3f8 100%);
 }
 
 :root[data-theme='dark'] .ab-page {
   background:
-    radial-gradient(circle at top center, rgba(59, 130, 246, 0.14), transparent 24%),
-    radial-gradient(circle at top left, rgba(255,255,255,0.05), transparent 18%),
-    linear-gradient(180deg, #050b14 0%, #08111d 100%);
+    radial-gradient(circle at top center, rgba(59, 130, 246, 0.12), transparent 20%),
+    linear-gradient(180deg, #07101a 0%, #0a1320 100%);
 }
 
 .ab-shell {
   max-width: 1180px;
-  gap: 18px;
+  gap: 16px;
 }
 
 .ab-premium-card,
@@ -50,13 +48,13 @@
   inset: 0;
   pointer-events: none;
   background: var(--premium-glow);
-  opacity: 0.75;
+  opacity: 0.55;
 }
 
 .ab-premium-card,
 .ab-watch-card,
 .ab-position-card {
-  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82));
+  background: linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.86));
   border: 1px solid var(--premium-ring);
   box-shadow: var(--premium-shadow);
 }
@@ -64,53 +62,54 @@
 :root[data-theme='dark'] .ab-premium-card,
 :root[data-theme='dark'] .ab-watch-card,
 :root[data-theme='dark'] .ab-position-card {
-  background: linear-gradient(180deg, rgba(12,18,30,0.96), rgba(11,18,31,0.9));
+  background: linear-gradient(180deg, rgba(12,18,30,0.96), rgba(10,16,26,0.92));
 }
 
 .ab-premium-card:hover,
 .ab-watch-card:hover,
 .ab-position-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: var(--premium-shadow-strong);
 }
 
+/* HERO: bỏ gradient ngang */
 .ab-hero-premium {
   padding: 14px 16px 16px;
-  border-radius: 30px;
-  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.14);
   background:
-    radial-gradient(circle at 18% 12%, rgba(255,255,255,0.16), transparent 22%),
-    linear-gradient(135deg, #071327 0%, #10234b 54%, #1f3d79 100%);
+    radial-gradient(circle at top center, rgba(255,255,255,0.12), transparent 28%),
+    linear-gradient(180deg, #0d1e42 0%, #102653 100%);
 }
 
 :root[data-theme='dark'] .ab-hero-premium {
   background:
-    radial-gradient(circle at 18% 12%, rgba(255,255,255,0.08), transparent 20%),
-    linear-gradient(135deg, #07111f 0%, #0a1730 52%, #143062 100%);
+    radial-gradient(circle at top center, rgba(255,255,255,0.06), transparent 24%),
+    linear-gradient(180deg, #08111f 0%, #0b1730 100%);
 }
 
 .ab-brand-mark {
   padding: 8px 14px;
   border-radius: 999px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
 .ab-hero-title {
   font-size: clamp(30px, 4vw, 42px);
-  letter-spacing: -0.065em;
+  letter-spacing: -0.06em;
 }
 
 .ab-hero-subline {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255,255,255,0.16);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255,255,255,0.14);
 }
 
 .ab-premium-tabs {
   padding: 4px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
 }
 
 .ab-premium-tab {
@@ -123,56 +122,49 @@
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
+/* MARKET STRIP */
 .ab-market-strip-pro {
   grid-template-columns: 1.2fr 0.7fr 0.7fr 0.9fr;
-  gap: 14px;
+  gap: 12px;
   padding: 4px;
 }
 
 .ab-strip-item {
-  min-height: 64px;
-}
-
-.ab-strip-item:not(.vnindex) {
-  padding-left: 10px;
+  min-height: 62px;
 }
 
 .ab-strip-item strong {
-  font-size: clamp(28px, 4vw, 36px);
+  font-size: clamp(26px, 4vw, 34px);
 }
 
-.ab-strip-item.wide,
-.ab-strip-item.vnindex {
-  border-color: var(--border-strong);
+.ab-strip-stack {
+  gap: 8px;
 }
 
-.ab-card-headline {
-  font-size: clamp(24px, 3vw, 30px);
+.ab-strip-stack span {
+  font-size: 13px;
+  font-weight: 800;
 }
 
+/* WATCHLIST */
 .ab-watch-shell,
 .ab-form-shell,
 .ab-movers-card,
 .ab-tone-card,
 .ab-position-card {
-  border-radius: 28px;
-}
-
-.ab-watch-grid.premium,
-.ab-position-grid {
-  gap: 14px;
+  border-radius: 26px;
 }
 
 .ab-watch-card.premium,
 .ab-position-card {
-  border-radius: 24px;
+  border-radius: 22px;
   padding: 18px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.74), rgba(255,255,255,0.56));
+  background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,255,255,0.6));
 }
 
 :root[data-theme='dark'] .ab-watch-card.premium,
 :root[data-theme='dark'] .ab-position-card {
-  background: linear-gradient(180deg, rgba(17,24,39,0.82), rgba(10,16,28,0.76));
+  background: linear-gradient(180deg, rgba(17,24,39,0.84), rgba(10,16,28,0.78));
 }
 
 .ab-symbol.premium {
@@ -207,26 +199,17 @@
 }
 
 .ab-mini-card.premium {
-  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.56));
+  background: linear-gradient(180deg, rgba(255,255,255,0.74), rgba(255,255,255,0.58));
 }
 
 :root[data-theme='dark'] .ab-mini-card.premium {
   background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
 }
 
-.ab-form-shell.compact {
-  padding: 16px;
-}
-
 .ab-input {
   height: 48px;
   border-radius: 18px;
-  background: rgba(255,255,255,0.72);
-}
-
-textarea.ab-input,
-input.ab-full.ab-input {
-  min-height: 48px;
+  background: rgba(255,255,255,0.78);
 }
 
 :root[data-theme='dark'] .ab-input {
@@ -238,14 +221,15 @@ input.ab-full.ab-input {
   border-radius: 18px;
 }
 
+/* bỏ gradient đậm ngang ở nút */
 .ab-btn-primary {
-  background: linear-gradient(135deg, #0b1530, #163161 62%, #214489);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 24px rgba(15,23,42,0.18);
+  background: linear-gradient(180deg, #10254f 0%, #153066 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 22px rgba(15,23,42,0.16);
 }
 
 :root[data-theme='dark'] .ab-btn-primary {
-  background: linear-gradient(135deg, #dbe8ff, #c5d6f6 58%, #a9c1ef 100%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 12px 24px rgba(0,0,0,0.28);
+  background: linear-gradient(180deg, #dbe8ff 0%, #c3d6f7 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 10px 22px rgba(0,0,0,0.24);
 }
 
 .ab-summary-grid.premium-summary-grid {
@@ -253,7 +237,7 @@ input.ab-full.ab-input {
 }
 
 .ab-stat-premium {
-  border-radius: 24px;
+  border-radius: 22px;
 }
 
 .ab-big-number {
@@ -274,7 +258,7 @@ input.ab-full.ab-input {
 
 .ab-commodity-card,
 .ab-fuel-card {
-  border-radius: 28px;
+  border-radius: 26px;
   padding: 18px;
 }
 
@@ -316,10 +300,10 @@ input.ab-full.ab-input {
 }
 
 .ab-commodity-panel {
-  border-radius: 22px;
+  border-radius: 20px;
   padding: 16px;
   border: 1px solid var(--border);
-  background: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.52);
 }
 
 :root[data-theme='dark'] .ab-commodity-panel {
@@ -347,10 +331,27 @@ input.ab-full.ab-input {
   font-weight: 700;
 }
 
+/* MOBILE */
 @media (max-width: 980px) {
+  .ab-home-grid,
+  .premium-summary-grid,
+  .compact-form-grid,
+  .ab-market-strip-pro,
   .ab-commodity-grid,
   .ab-fuel-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ab-watch-grid.premium,
+  .ab-position-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ab-strip-item.vnindex,
+  .ab-strip-item.wide {
+    border: 0;
+    padding-left: 0;
+    padding-right: 0;
   }
 }
 
@@ -362,7 +363,44 @@ input.ab-full.ab-input {
 
   .ab-hero-premium {
     padding: 14px;
-    border-radius: 26px;
+    border-radius: 24px;
+  }
+
+  .ab-hero-topline {
+    align-items: center;
+  }
+
+  .ab-hero-actions {
+    gap: 8px;
+  }
+
+  .ab-icon-glass {
+    width: 42px;
+    height: 42px;
+  }
+
+  .ab-account-glass {
+    max-width: 148px;
+    height: 42px;
+    padding: 0 14px;
+    font-size: 14px;
+  }
+
+  .ab-hero-main {
+    margin-top: 12px;
+    gap: 12px;
+  }
+
+  .ab-hero-title {
+    font-size: 26px;
+    line-height: 1.02;
+  }
+
+  .ab-hero-subline {
+    width: 100%;
+    justify-content: flex-start;
+    font-size: 12px;
+    padding: 9px 12px;
   }
 
   .ab-premium-tabs {
@@ -378,16 +416,136 @@ input.ab-full.ab-input {
 
   .ab-premium-tab {
     flex: 0 0 auto;
+    min-width: max-content;
+    padding: 10px 14px;
+    font-size: 14px;
   }
 
-  .ab-watch-card.premium,
+  .ab-market-strip-pro {
+    gap: 0;
+    padding: 0;
+  }
+
+  .ab-strip-item {
+    min-height: auto;
+    padding: 12px 2px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ab-strip-item:last-child {
+    border-bottom: 0;
+  }
+
+  .ab-strip-item strong {
+    font-size: 22px;
+  }
+
+  .ab-strip-stack {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .ab-card-headline {
+    font-size: 20px;
+  }
+
+  .ab-watch-shell,
+  .ab-form-shell,
+  .ab-movers-card,
+  .ab-tone-card,
   .ab-position-card,
   .ab-premium-card,
   .ab-card {
-    border-radius: 24px;
+    border-radius: 22px;
   }
 
+  .ab-watch-card.premium,
+  .ab-position-card {
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .ab-symbol.premium {
+    font-size: 24px;
+  }
+
+  .ab-price.premium {
+    font-size: 30px;
+    margin-top: 10px;
+  }
+
+  .ab-soft-change.under-price {
+    margin-top: 8px;
+    font-size: 13px;
+    padding: 6px 9px;
+  }
+
+  .ab-add-row,
+  .ab-mini-grid.premium,
   .ab-commodity-dual {
     grid-template-columns: 1fr;
+  }
+
+  .ab-input,
+  .ab-btn {
+    height: 46px;
+  }
+
+  .ab-watch-count {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .ab-commodity-card,
+  .ab-fuel-card {
+    border-radius: 22px;
+    padding: 16px;
+  }
+
+  .ab-commodity-value,
+  .ab-fuel-value {
+    font-size: 28px;
+  }
+}
+
+@media (max-width: 560px) {
+  .ab-shell {
+    padding: 10px;
+  }
+
+  .ab-hero-premium {
+    border-radius: 22px;
+  }
+
+  .ab-brand-mark {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .ab-icon-glass,
+  .ab-account-glass {
+    border-radius: 14px;
+  }
+
+  .ab-account-glass {
+    max-width: 132px;
+    padding: 0 12px;
+  }
+
+  .ab-hero-title {
+    font-size: 24px;
+  }
+
+  .ab-premium-tab {
+    padding: 10px 13px;
+  }
+
+  .ab-strip-item strong {
+    font-size: 20px;
+  }
+
+  .ab-big-number {
+    font-size: 28px;
   }
 }
