@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as cheerio from 'cheerio';
 
 type OilCard = {
   code: string;
@@ -14,74 +15,107 @@ type OilTarget = {
   code: string;
   name: string;
   aliases: string[];
-  source: 'petrolimex' | 'pvoil';
+  source: 'petrolimex';
 };
 
 const TARGETS: OilTarget[] = [
-  { code: 'RON95V', name: 'RON95-V', aliases: ['Xăng RON 95-V', 'RON 95-V', 'RON95-V'], source: 'petrolimex' },
-  { code: 'RON95III', name: 'RON95-III', aliases: ['Xăng RON 95-III', 'RON 95-III', 'RON95-III'], source: 'petrolimex' },
-  { code: 'E10RON95III', name: 'E10 RON95-III', aliases: ['Xăng E10 RON 95-III', 'E10 RON95-III', 'E10 RON 95-III'], source: 'petrolimex' },
-  { code: 'E5RON92II', name: 'E5 RON92-II', aliases: ['Xăng E5 RON 92-II', 'E5 RON 92-II', 'E5RON92-II'], source: 'petrolimex' },
-  { code: 'DO005SII', name: 'Diesel 0.05S-II', aliases: ['DO 0,05S-II', 'DO 0.05S-II'], source: 'petrolimex' },
-  { code: 'DO0001SV', name: 'Diesel 0.001S-V', aliases: ['DO 0,001S-V', 'DO 0.001S-V'], source: 'petrolimex' },
-  { code: 'KO2K', name: 'Dầu hỏa 2-K', aliases: ['Dầu hỏa 2-K', 'Dầu KO'], source: 'petrolimex' },
+  {
+    code: 'RON95V',
+    name: 'RON95-V',
+    aliases: ['xăng ron 95-v', 'ron 95-v', 'ron95-v'],
+    source: 'petrolimex',
+  },
+  {
+    code: 'RON95III',
+    name: 'RON95-III',
+    aliases: ['xăng ron 95-iii', 'ron 95-iii', 'ron95-iii'],
+    source: 'petrolimex',
+  },
+  {
+    code: 'E10RON95III',
+    name: 'E10 RON95-III',
+    aliases: ['xăng e10 ron 95-iii', 'e10 ron95-iii', 'e10 ron 95-iii'],
+    source: 'petrolimex',
+  },
+  {
+    code: 'E5RON92II',
+    name: 'E5 RON92-II',
+    aliases: ['xăng e5 ron 92-ii', 'e5 ron 92-ii', 'e5 ron92-ii'],
+    source: 'petrolimex',
+  },
+  {
+    code: 'DO005SII',
+    name: 'Diesel 0.05S-II',
+    aliases: ['do 0,05s-ii', 'do 0.05s-ii', '0,05s-ii', '0.05s-ii'],
+    source: 'petrolimex',
+  },
+  {
+    code: 'DO0001SV',
+    name: 'Diesel 0.001S-V',
+    aliases: ['do 0,001s-v', 'do 0.001s-v', '0,001s-v', '0.001s-v'],
+    source: 'petrolimex',
+  },
+  {
+    code: 'KO2K',
+    name: 'Dầu hỏa 2-K',
+    aliases: ['dầu hỏa 2-k', 'dầu ko', 'dau hoa 2-k'],
+    source: 'petrolimex',
+  },
 ];
 
-function parseThousands(raw?: string | null) {
+function normalizeText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseViInt(raw: string | null | undefined): number | null {
   if (!raw) return null;
-  const normalized = raw.replace(/[.,\s]/g, '').replace(/[^\d-+]/g, '');
-  const value = Number(normalized);
-  return Number.isFinite(value) ? value : null;
+  const cleaned = raw.replace(/[^\d+-]/g, '');
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
 }
 
-function cleanHtml(html: string) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s+/g, ' ');
+function extractCells($row: cheerio.Cheerio<any>) {
+  const cells: string[] = [];
+  $row.find('td,th').each((_, el) => {
+    const text = cheerio.load(el).text().replace(/\s+/g, ' ').trim();
+    cells.push(text);
+  });
+  return cells;
 }
 
-function findTableSection(text: string, marker: string) {
-  const start = text.indexOf(marker);
-  if (start < 0) return text;
-  return text.slice(start, start + 5000);
-}
+function findBestTable($: cheerio.CheerioAPI) {
+  let bestTable: cheerio.Cheerio<any> | null = null;
+  let bestScore = -1;
 
-function pickPetrolimexValue(text: string, aliases: string[]) {
-  for (const alias of aliases) {
-    const index = text.toLowerCase().indexOf(alias.toLowerCase());
-    if (index >= 0) {
-      const snippet = text.slice(index, index + 260);
-      const numbers = snippet.match(/[+\-]?\d{1,3}(?:[.,]\d{3})+/g) || [];
+  $('table').each((_, table) => {
+    const $table = $(table);
+    const text = normalizeText($table.text());
 
-      // Bảng hiện tại:
-      // [tăng giảm hiện tại, tăng giảm kỳ trước, giá vùng 1, giá vùng 2]
-      // Ở ảnh bạn gửi thì tăng giảm hiện tại = 0, còn "so với kỳ trước" là +820, +760...
-      if (numbers.length >= 4) {
-        return {
-          change: parseThousands(numbers[1]),
-          price: parseThousands(numbers[2]),
-        };
-      }
+    let score = 0;
+    if (text.includes('gia vung 1')) score += 2;
+    if (text.includes('gia vung 2')) score += 2;
+    if (text.includes('tang giam ky truoc')) score += 2;
+    if (text.includes('xang ron 95-v')) score += 1;
+    if (text.includes('do 0,001s-v') || text.includes('do 0.001s-v')) score += 1;
 
-      if (numbers.length >= 3) {
-        return {
-          change: parseThousands(numbers[0]),
-          price: parseThousands(numbers[1]),
-        };
-      }
-
-      if (numbers.length >= 2) {
-        return {
-          change: 0,
-          price: parseThousands(numbers[0]),
-        };
-      }
+    if (score > bestScore) {
+      bestScore = score;
+      bestTable = $table;
     }
-  }
-  return null;
+  });
+
+  return bestTable;
+}
+
+function rowMatches(name: string, aliases: string[]) {
+  const normalized = normalizeText(name);
+  return aliases.some((alias) => normalized.includes(normalizeText(alias)));
 }
 
 export async function GET() {
@@ -95,21 +129,35 @@ export async function GET() {
     });
 
     if (!response.ok) {
-      throw new Error('Fuel source failed: ' + response.status);
+      throw new Error(`Fuel source failed: ${response.status}`);
     }
 
     const html = await response.text();
-    const text = cleanHtml(html);
-    const petrolimexSection = findTableSection(text, 'Bảng giá theo Petrolimex');
+    const $ = cheerio.load(html);
+
+    const $table = findBestTable($);
+    if (!$table || !$table.length) {
+      throw new Error('Không tìm thấy bảng giá xăng phù hợp');
+    }
+
+    const rows = $table.find('tr').toArray().map((tr) => extractCells($(tr)));
 
     const cards: OilCard[] = TARGETS.map((target) => {
-      const row = pickPetrolimexValue(petrolimexSection, target.aliases);
+      const matchedRow = rows.find((cells) => {
+        if (!cells.length) return false;
+        return rowMatches(cells[0], target.aliases);
+      });
+
+      // Kỳ vọng thứ tự cột:
+      // 0 tên | 1 tăng giảm hiện tại | 2 tăng giảm kỳ trước | 3 giá vùng 1 | 4 giá vùng 2
+      const price = matchedRow?.[3] ? parseViInt(matchedRow[3]) : null;
+      const change = matchedRow?.[2] ? parseViInt(matchedRow[2]) : 0;
 
       return {
         code: target.code,
         name: target.name,
-        price: row?.price ?? null,   // giá vùng 1
-        change: row?.change ?? 0,    // tăng giảm so với kỳ trước
+        price,
+        change,
         unit: 'VND/lít',
         source: target.source,
         updatedAt: new Date().toISOString(),
@@ -123,6 +171,9 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message, provider: 'giaxanghomnay' }, { status: 500 });
+    return NextResponse.json(
+      { error: message, provider: 'giaxanghomnay' },
+      { status: 500 }
+    );
   }
 }
