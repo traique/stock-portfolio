@@ -72,6 +72,7 @@ export async function GET() {
     const cards: GoldCard[] = GOLD_TYPES.map((config, index) => {
       const result = settled[index];
       const row = result.status === 'fulfilled' ? result.value.row : null;
+
       return {
         code: config.code,
         name: config.name,
@@ -94,4 +95,4 @@ export async function GET() {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, provider: 'vang.today' }, { status: 500 });
   }
-                                                    }
+                             }
