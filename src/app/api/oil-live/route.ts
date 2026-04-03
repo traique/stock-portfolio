@@ -27,9 +27,9 @@ const TARGETS: OilTarget[] = [
   { code: 'KO2K', name: 'Dầu hỏa 2-K', aliases: ['Dầu hỏa 2-K', 'Dầu KO'], source: 'petrolimex' },
 ];
 
-function parseViNumber(raw?: string | null) {
+function parseThousands(raw?: string | null) {
   if (!raw) return null;
-  const normalized = raw.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
+  const normalized = raw.replace(/[.,\s]/g, '').replace(/[^\d-]/g, '');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : null;
 }
@@ -46,23 +46,30 @@ function cleanHtml(html: string) {
 function findTableSection(text: string, marker: string) {
   const start = text.indexOf(marker);
   if (start < 0) return text;
-  return text.slice(start, start + 4000);
+  return text.slice(start, start + 5000);
 }
 
 function pickPetrolimexValue(text: string, aliases: string[]) {
   for (const alias of aliases) {
     const index = text.toLowerCase().indexOf(alias.toLowerCase());
     if (index >= 0) {
-      const snippet = text.slice(index, index + 220);
-      const numbers = snippet.match(/[+\-]?\d{1,3}(?:[\.,]\d{3})+/g) || [];
-      if (numbers.length >= 4) {
-        return { change: parseViNumber(numbers[0]), price: parseViNumber(numbers[2]) };
-      }
+      const snippet = text.slice(index, index + 260);
+
+      const numbers = snippet.match(/[+\-]?\d{1,3}(?:[.,]\d{3})+/g) || [];
+      // Dạng bảng hiện tại thường là:
+      // [tăng/giảm kỳ trước, giá vùng 1, giá vùng 2]
+      // hoặc [giá vùng 1, giá vùng 2] nếu cột biến động không match
       if (numbers.length >= 3) {
-        return { change: parseViNumber(numbers[0]), price: parseViNumber(numbers[2]) ?? parseViNumber(numbers[1]) };
+        return {
+          change: parseThousands(numbers[0]),
+          price: parseThousands(numbers[1]),
+        };
       }
       if (numbers.length >= 2) {
-        return { change: parseViNumber(numbers[0]), price: parseViNumber(numbers[1]) };
+        return {
+          change: 0,
+          price: parseThousands(numbers[0]),
+        };
       }
     }
   }
