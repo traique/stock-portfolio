@@ -83,6 +83,35 @@ async function fetchGoldApiType(code: GoldCode) {
   return { row, payload };
 }
 
+function extractWorldGoldFromText(text: string) {
+  const compact = text.replace(/\s+/g, ' ');
+
+  const aroundSymbol =
+    compact.match(/XAU\/USD.{0,800}/i)?.[0] ||
+    compact.match(/Vàng Thế Giới.{0,800}/i)?.[0] ||
+    compact.match(/Vàng thế giới.{0,800}/i)?.[0] ||
+    compact.match(/World Gold.{0,800}/i)?.[0] ||
+    compact;
+
+  const priceMatch = aroundSymbol.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+
+  const changeCandidates = [...aroundSymbol.matchAll(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/g)]
+    .map((m) => toNumber(m[1]))
+    .filter((v): v is number => v !== null);
+
+  const price = priceMatch ? toNumber(priceMatch[1]) : null;
+
+  // Chọn change có trị tuyệt đối lớn nhất để tránh bắt nhầm +0.90
+  const change =
+    changeCandidates.length > 0
+      ? changeCandidates.reduce((best, current) =>
+          Math.abs(current) > Math.abs(best) ? current : best
+        )
+      : null;
+
+  return { price, change };
+}
+
 async function scrapeWorldGoldFromDetailPage() {
   const response = await fetch('https://www.vang.today/vi/chi-tiet/XAUUSD', {
     headers: {
@@ -96,20 +125,7 @@ async function scrapeWorldGoldFromDetailPage() {
 
   const html = await response.text();
   const $ = cheerio.load(html);
-  const text = $.text().replace(/\s+/g, ' ');
-
-  const aroundSymbol =
-    text.match(/XAU\/USD.{0,500}/i)?.[0] ||
-    text.match(/Vàng thế giới.{0,500}/i)?.[0] ||
-    text;
-
-  const priceMatch = aroundSymbol.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-  const changeMatch = aroundSymbol.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-
-  return {
-    price: priceMatch ? toNumber(priceMatch[1]) : null,
-    change: changeMatch ? toNumber(changeMatch[1]) : null,
-  };
+  return extractWorldGoldFromText($.text());
 }
 
 async function scrapeWorldGoldFromHomePage() {
@@ -125,21 +141,7 @@ async function scrapeWorldGoldFromHomePage() {
 
   const html = await response.text();
   const $ = cheerio.load(html);
-  const text = $.text().replace(/\s+/g, ' ');
-
-  const aroundSymbol =
-    text.match(/XAU\/USD.{0,500}/i)?.[0] ||
-    text.match(/Vàng Thế Giới.{0,500}/i)?.[0] ||
-    text.match(/World Gold.{0,500}/i)?.[0] ||
-    text;
-
-  const priceMatch = aroundSymbol.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-  const changeMatch = aroundSymbol.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-
-  return {
-    price: priceMatch ? toNumber(priceMatch[1]) : null,
-    change: changeMatch ? toNumber(changeMatch[1]) : null,
-  };
+  return extractWorldGoldFromText($.text());
 }
 
 async function fetchGoldType(code: GoldCode) {
@@ -161,28 +163,32 @@ async function fetchGoldType(code: GoldCode) {
       payload?.lastPrice
     );
 
-    let worldChange = pickFirstNumber(
-      row?.change,
-      row?.change_value,
-      row?.change_sell,
-      row?.change_buy,
-      payload?.change,
-      payload?.change_value,
-      payload?.change_sell,
-      payload?.change_buy
-    );
+    // Không ưu tiên change từ API nữa vì đang sai
+    let worldChange: number | null = null;
 
-    if (worldPrice === null) {
-      const detailFallback = await scrapeWorldGoldFromDetailPage();
-      worldPrice = detailFallback.price;
-      worldChange = worldChange ?? detailFallback.change;
-    }
+    const detailFallback = await scrapeWorldGoldFromDetailPage();
+    if (worldPrice === null) worldPrice = detailFallback.price;
+    worldChange = detailFallback.change;
 
-    if (worldPrice === null) {
+    if (worldPrice === null || worldChange === null) {
       const homeFallback = await scrapeWorldGoldFromHomePage();
-      worldPrice = homeFallback.price;
+      worldPrice = worldPrice ?? homeFallback.price;
       worldChange = worldChange ?? homeFallback.change;
     }
+
+    // Chỉ khi scrape không ra mới fallback sang API
+    worldChange =
+      worldChange ??
+      pickFirstNumber(
+        row?.change,
+        row?.change_value,
+        row?.change_sell,
+        row?.change_buy,
+        payload?.change,
+        payload?.change_value,
+        payload?.change_sell,
+        payload?.change_buy
+      );
 
     return {
       buy: worldPrice,
@@ -261,4 +267,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-      }
+}
