@@ -27,14 +27,32 @@ const GOLD_TYPES: Array<{
 
 function toNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const cleaned = value.replace(/,/g, '').trim();
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  return null;
 }
 
 function toIsoFromUnix(value: unknown): string | null {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
   return new Date(n * 1000).toISOString();
+}
+
+function pickFirstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const n = toNumber(value);
+    if (n !== null) return n;
+  }
+  return null;
 }
 
 async function fetchGoldType(code: GoldCode) {
@@ -61,27 +79,63 @@ async function fetchGoldType(code: GoldCode) {
 
   const row = rowFromArray || rowFromObject || payload || {};
 
-  const buy = toNumber(row?.buy);
-  const sell = toNumber(row?.sell);
-  const value = toNumber(row?.value);
-  const price = toNumber(row?.price);
+  if (code === 'XAUUSD') {
+    const worldPrice = pickFirstNumber(
+      row?.price,
+      row?.value,
+      row?.sell,
+      row?.buy,
+      row?.last_price,
+      row?.lastPrice,
+      payload?.price,
+      payload?.value,
+      payload?.sell,
+      payload?.buy,
+      payload?.last_price,
+      payload?.lastPrice
+    );
 
-  const resolvedBuy = buy ?? value ?? price;
-  const resolvedSell = sell ?? buy ?? value ?? price;
+    const worldChange = pickFirstNumber(
+      row?.change,
+      row?.change_value,
+      row?.change_sell,
+      row?.change_buy,
+      payload?.change,
+      payload?.change_value,
+      payload?.change_sell,
+      payload?.change_buy
+    );
 
-  const changeBuy =
-    toNumber(row?.change_buy) ??
-    toNumber(row?.change) ??
-    toNumber(row?.change_value);
+    return {
+      buy: worldPrice,
+      sell: worldPrice,
+      changeBuy: worldChange,
+      changeSell: worldChange,
+      updatedAt:
+        toIsoFromUnix(row?.update_time) ||
+        toIsoFromUnix(payload?.current_time) ||
+        null,
+    };
+  }
 
-  const changeSell =
-    toNumber(row?.change_sell) ??
-    toNumber(row?.change) ??
-    toNumber(row?.change_value);
+  const buy = pickFirstNumber(row?.buy, row?.price, row?.value);
+  const sell = pickFirstNumber(row?.sell, row?.buy, row?.price, row?.value);
+
+  const changeBuy = pickFirstNumber(
+    row?.change_buy,
+    row?.change,
+    row?.change_value
+  );
+
+  const changeSell = pickFirstNumber(
+    row?.change_sell,
+    row?.change,
+    row?.change_value
+  );
 
   return {
-    buy: resolvedBuy,
-    sell: resolvedSell,
+    buy,
+    sell,
     changeBuy,
     changeSell,
     updatedAt:
@@ -129,4 +183,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-    }
+}
