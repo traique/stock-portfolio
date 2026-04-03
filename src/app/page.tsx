@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
+import { Activity, Sparkles, TrendingDown, TrendingUp, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 
@@ -208,19 +208,29 @@ export default function HomePage() {
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Radar đầu tư" isLoggedIn={isLoggedIn} email={userEmail} currentTab="home" onLogout={handleLogout} onAuthOpen={() => setShowAuth((p) => !p)} />
 
-        <section className="ab-premium-card ab-market-strip ab-market-strip-pro">
-          <div className="ab-strip-item vnindex">
+        <section className="ab-premium-card ab-market-strip-pro ab-market-board-premium">
+          <div className="ab-strip-vnindex">
             <span className="ab-soft-label ab-strip-head"><Activity size={14} />VN-Index</span>
-            <div className="ab-strip-stack">
-              <strong>{vnIndex ? formatPrice(vnIndex.price) : '--'}</strong>
-              <span style={{ color: colorFor(vnIndex?.pct) }}>
-                {vnIndex ? `${formatIndexChange(vnIndex.change)} · ${formatPct(vnIndex.pct)}` : 'Đang tải'}
-              </span>
+            <div className="ab-strip-vnindex-main">{vnIndex ? formatPrice(vnIndex.price) : '--'}</div>
+            <div className="ab-strip-vnindex-change" style={{ color: colorFor(vnIndex?.pct) }}>
+              {vnIndex ? `${formatIndexChange(vnIndex.change)} · ${formatPct(vnIndex.pct)}` : 'Đang tải'}
             </div>
           </div>
-          <div className="ab-strip-item"><span className="ab-soft-label">Mã tăng</span><strong className="positive">{loading ? '--' : breadth.gainers}</strong></div>
-          <div className="ab-strip-item"><span className="ab-soft-label">Mã giảm</span><strong className="negative">{loading ? '--' : breadth.losers}</strong></div>
-          <div className="ab-strip-item wide"><span className="ab-soft-label">Biến động TB</span><strong style={{ color: colorFor(breadth.avgPct) }}>{Number.isFinite(breadth.avgPct) ? formatPct(breadth.avgPct) : 'N/A'}</strong></div>
+
+          <div className="ab-strip-metrics">
+            <div className="ab-metric-cell">
+              <span>Mã tăng</span>
+              <strong className="positive">{loading ? '--' : breadth.gainers}</strong>
+            </div>
+            <div className="ab-metric-cell">
+              <span>Mã giảm</span>
+              <strong className="negative">{loading ? '--' : breadth.losers}</strong>
+            </div>
+            <div className="ab-metric-cell wide">
+              <span>Biến động TB</span>
+              <strong style={{ color: colorFor(breadth.avgPct) }}>{Number.isFinite(breadth.avgPct) ? formatPct(breadth.avgPct) : 'N/A'}</strong>
+            </div>
+          </div>
         </section>
 
         {showAuth && !isLoggedIn ? (
@@ -239,29 +249,32 @@ export default function HomePage() {
         <section className="ab-home-grid single-focus">
           <section className="ab-premium-card ab-watch-shell compact-watch-shell">
             <div className="ab-row-between align-center">
-              <div>
-                <div className="ab-card-kicker">Danh sách theo dõi cá nhân</div>
-                <div className="ab-card-headline">Nhịp giá ưu tiên</div>
-              </div>
+              <div className="ab-card-kicker">Danh sách theo dõi cá nhân</div>
               <div className="ab-watch-count">{quotes.length} mã</div>
             </div>
+
             <div className="ab-add-row premium compact">
               <input value={watchInput} onChange={(e) => setWatchInput(e.target.value)} placeholder="Nhập mã cổ phiếu" className="ab-input" />
               <button type="button" onClick={() => addWatchSymbol()} className="ab-btn ab-btn-primary">Thêm</button>
             </div>
+
             {watchError ? <div className="ab-error">{watchError}</div> : null}
             {marketError ? <div className="ab-error">{marketError}</div> : null}
+
             <div className="ab-watch-grid premium compact">
               {loading ? (
                 Array.from({ length: Math.min(4, Math.max(2, watchlist.length || 2)) }).map((_, index) => <LoadingCard key={index} />)
               ) : quotes.length ? (
                 quotes.map((item) => (
-                  <article key={item.symbol} className="ab-watch-card premium compact">
+                  <article key={item.symbol} className="ab-watch-card premium compact tighter">
                     <div className="ab-row-between align-start">
                       <div className="ab-symbol-wrap">
                         <div className="ab-symbol premium compact">{item.symbol}</div>
+                        <div className="ab-soft-label mini-top">Theo dõi</div>
                       </div>
-                      <button type="button" className="ab-delete ghost" onClick={() => removeWatchSymbol(item.symbol)}>Xóa</button>
+                      <button type="button" className="ab-delete icon-only" onClick={() => removeWatchSymbol(item.symbol)} aria-label={`Xóa ${item.symbol}`}>
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                     <div className="ab-price premium compact">{formatPrice(item.price)}</div>
                     <div className="ab-soft-change under-price" style={{ color: colorFor(item.change) }}>{formatPrice(item.change)} · {formatPct(item.pct)}</div>
@@ -301,6 +314,7 @@ export default function HomePage() {
                 )) : <div className="ab-note">Chưa có dữ liệu tăng giá.</div>}
               </div>
             </section>
+
             <section className="ab-premium-card ab-tone-card compact-side-card">
               <div className="ab-card-kicker">Nhịp thị trường</div>
               <div className="ab-tone-content">
@@ -313,4 +327,4 @@ export default function HomePage() {
       </div>
     </main>
   );
-}
+      }
