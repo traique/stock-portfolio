@@ -1,4 +1,5 @@
 import './globals.css';
+import './premium-overrides.css';
 import type { Metadata } from 'next';
 import { Be_Vietnam_Pro } from 'next/font/google';
 
@@ -11,7 +12,7 @@ const beVietnamPro = Be_Vietnam_Pro({
 
 export const metadata: Metadata = {
   title: 'LCTA',
-  description: 'Danh mục đầu tư',
+  description: 'Radar đầu tư premium',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
