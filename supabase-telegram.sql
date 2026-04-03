@@ -4,9 +4,9 @@ create table if not exists public.telegram_settings (
   chat_id text not null,
   is_enabled boolean not null default false,
   notify_daily boolean not null default true,
-  notify_threshold boolean not null default true,
+  notify_threshold boolean not null default false,
   threshold_pct numeric(8,2) not null default 3,
-  daily_hour_utc smallint not null default 9 check (daily_hour_utc between 0 and 23),
+  daily_hour_utc smallint not null default 8 check (daily_hour_utc between 0 and 23),
   last_daily_sent_at timestamptz,
   last_alert_key text,
   last_alert_sent_at timestamptz,
@@ -23,9 +23,14 @@ create table if not exists public.alert_logs (
   sent_at timestamptz not null default now()
 );
 
-create index if not exists idx_telegram_settings_user_id on public.telegram_settings(user_id);
-create index if not exists idx_alert_logs_user_id on public.alert_logs(user_id);
-create index if not exists idx_alert_logs_sent_at on public.alert_logs(sent_at desc);
+create index if not exists idx_telegram_settings_user_id
+  on public.telegram_settings(user_id);
+
+create index if not exists idx_alert_logs_user_id
+  on public.alert_logs(user_id);
+
+create index if not exists idx_alert_logs_sent_at
+  on public.alert_logs(sent_at desc);
 
 create or replace function public.set_updated_at()
 returns trigger
