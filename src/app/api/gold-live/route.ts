@@ -51,7 +51,7 @@ function toIsoFromUnix(value: unknown): string | null {
 function pickFirstNumber(...values: unknown[]): number | null {
   for (const value of values) {
     const n = toNumber(value);
-    if (n !== null) return n;
+    if (n !== null && n !== 0) return n;
   }
   return null;
 }
@@ -80,14 +80,11 @@ async function fetchGoldApiType(code: GoldCode) {
 
   const row = rowFromArray || rowFromObject || payload || {};
 
-  return {
-    row,
-    payload,
-  };
+  return { row, payload };
 }
 
-async function fetchWorldGoldFallback() {
-  const response = await fetch('https://vang.today/vi/chi-tiet/XAUUSD', {
+async function scrapeWorldGoldFromDetailPage() {
+  const response = await fetch('https://www.vang.today/vi/chi-tiet/XAUUSD', {
     headers: {
       'User-Agent': 'Mozilla/5.0',
       Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -101,14 +98,48 @@ async function fetchWorldGoldFallback() {
   const $ = cheerio.load(html);
   const text = $.text().replace(/\s+/g, ' ');
 
-  // Bắt kiểu: "$4,634.30" và "+13.40" / "-152.80"
-  const priceMatch = text.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-  const changeMatch = text.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+  const aroundSymbol =
+    text.match(/XAU\/USD.{0,500}/i)?.[0] ||
+    text.match(/Vàng thế giới.{0,500}/i)?.[0] ||
+    text;
 
-  const price = priceMatch ? toNumber(priceMatch[1]) : null;
-  const change = changeMatch ? toNumber(changeMatch[1]) : null;
+  const priceMatch = aroundSymbol.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+  const changeMatch = aroundSymbol.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
 
-  return { price, change };
+  return {
+    price: priceMatch ? toNumber(priceMatch[1]) : null,
+    change: changeMatch ? toNumber(changeMatch[1]) : null,
+  };
+}
+
+async function scrapeWorldGoldFromHomePage() {
+  const response = await fetch('https://www.vang.today/', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) return { price: null, change: null };
+
+  const html = await response.text();
+  const $ = cheerio.load(html);
+  const text = $.text().replace(/\s+/g, ' ');
+
+  const aroundSymbol =
+    text.match(/XAU\/USD.{0,500}/i)?.[0] ||
+    text.match(/Vàng Thế Giới.{0,500}/i)?.[0] ||
+    text.match(/World Gold.{0,500}/i)?.[0] ||
+    text;
+
+  const priceMatch = aroundSymbol.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+  const changeMatch = aroundSymbol.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+
+  return {
+    price: priceMatch ? toNumber(priceMatch[1]) : null,
+    change: changeMatch ? toNumber(changeMatch[1]) : null,
+  };
 }
 
 async function fetchGoldType(code: GoldCode) {
@@ -142,9 +173,15 @@ async function fetchGoldType(code: GoldCode) {
     );
 
     if (worldPrice === null) {
-      const fallback = await fetchWorldGoldFallback();
-      worldPrice = fallback.price;
-      worldChange = worldChange ?? fallback.change;
+      const detailFallback = await scrapeWorldGoldFromDetailPage();
+      worldPrice = detailFallback.price;
+      worldChange = worldChange ?? detailFallback.change;
+    }
+
+    if (worldPrice === null) {
+      const homeFallback = await scrapeWorldGoldFromHomePage();
+      worldPrice = homeFallback.price;
+      worldChange = worldChange ?? homeFallback.change;
     }
 
     return {
@@ -224,4 +261,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+      }
