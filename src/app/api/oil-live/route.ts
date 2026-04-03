@@ -29,7 +29,7 @@ const TARGETS: OilTarget[] = [
 
 function parseThousands(raw?: string | null) {
   if (!raw) return null;
-  const normalized = raw.replace(/[.,\s]/g, '').replace(/[^\d-]/g, '');
+  const normalized = raw.replace(/[.,\s]/g, '').replace(/[^\d-+]/g, '');
   const value = Number(normalized);
   return Number.isFinite(value) ? value : null;
 }
@@ -54,17 +54,25 @@ function pickPetrolimexValue(text: string, aliases: string[]) {
     const index = text.toLowerCase().indexOf(alias.toLowerCase());
     if (index >= 0) {
       const snippet = text.slice(index, index + 260);
-
       const numbers = snippet.match(/[+\-]?\d{1,3}(?:[.,]\d{3})+/g) || [];
-      // Dạng bảng hiện tại thường là:
-      // [tăng/giảm kỳ trước, giá vùng 1, giá vùng 2]
-      // hoặc [giá vùng 1, giá vùng 2] nếu cột biến động không match
+
+      // Bảng hiện tại:
+      // [tăng giảm hiện tại, tăng giảm kỳ trước, giá vùng 1, giá vùng 2]
+      // Ở ảnh bạn gửi thì tăng giảm hiện tại = 0, còn "so với kỳ trước" là +820, +760...
+      if (numbers.length >= 4) {
+        return {
+          change: parseThousands(numbers[1]),
+          price: parseThousands(numbers[2]),
+        };
+      }
+
       if (numbers.length >= 3) {
         return {
           change: parseThousands(numbers[0]),
           price: parseThousands(numbers[1]),
         };
       }
+
       if (numbers.length >= 2) {
         return {
           change: 0,
@@ -96,11 +104,12 @@ export async function GET() {
 
     const cards: OilCard[] = TARGETS.map((target) => {
       const row = pickPetrolimexValue(petrolimexSection, target.aliases);
+
       return {
         code: target.code,
         name: target.name,
-        price: row?.price ?? null,
-        change: row?.change ?? 0,
+        price: row?.price ?? null,   // giá vùng 1
+        change: row?.change ?? 0,    // tăng giảm so với kỳ trước
         unit: 'VND/lít',
         source: target.source,
         updatedAt: new Date().toISOString(),
@@ -116,4 +125,4 @@ export async function GET() {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, provider: 'giaxanghomnay' }, { status: 500 });
   }
-}
+                         }
