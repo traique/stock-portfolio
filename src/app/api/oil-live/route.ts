@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import * as cheerio from 'cheerio';
+import type { AnyNode } from 'domhandler';
 
 type OilCard = {
   code: string;
@@ -80,17 +81,24 @@ function parseViInt(raw: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function extractCells($row: cheerio.Cheerio<any>) {
+function extractCells(
+  $: cheerio.CheerioAPI,
+  row: AnyNode
+): string[] {
   const cells: string[] = [];
-  $row.find('td,th').each((_, el) => {
-    const text = cheerio.load(el).text().replace(/\s+/g, ' ').trim();
-    cells.push(text);
-  });
+  $(row)
+    .find('td,th')
+    .each((_, el) => {
+      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      cells.push(text);
+    });
   return cells;
 }
 
-function findBestTable($: cheerio.CheerioAPI) {
-  let bestTable: cheerio.Cheerio<any> | null = null;
+function findBestTable(
+  $: cheerio.CheerioAPI
+): cheerio.Cheerio<AnyNode> | null {
+  let bestTable: cheerio.Cheerio<AnyNode> | null = null;
   let bestScore = -1;
 
   $('table').each((_, table) => {
@@ -136,11 +144,14 @@ export async function GET() {
     const $ = cheerio.load(html);
 
     const $table = findBestTable($);
-    if (!$table || !$table.length) {
+    if ($table === null || $table.length === 0) {
       throw new Error('Không tìm thấy bảng giá xăng phù hợp');
     }
 
-    const rows = $table.find('tr').toArray().map((tr) => extractCells($(tr)));
+    const rows = $table
+      .find('tr')
+      .toArray()
+      .map((tr) => extractCells($, tr));
 
     const cards: OilCard[] = TARGETS.map((target) => {
       const matchedRow = rows.find((cells) => {
@@ -148,10 +159,9 @@ export async function GET() {
         return rowMatches(cells[0], target.aliases);
       });
 
-      // Kỳ vọng thứ tự cột:
       // 0 tên | 1 tăng giảm hiện tại | 2 tăng giảm kỳ trước | 3 giá vùng 1 | 4 giá vùng 2
-      const price = matchedRow?.[3] ? parseViInt(matchedRow[3]) : null;
       const change = matchedRow?.[2] ? parseViInt(matchedRow[2]) : 0;
+      const price = matchedRow?.[3] ? parseViInt(matchedRow[3]) : null;
 
       return {
         code: target.code,
@@ -176,4 +186,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
+      }
