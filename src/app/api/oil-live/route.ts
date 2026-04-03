@@ -29,8 +29,8 @@ const TARGETS: OilTarget[] = [
 
 function parseViNumber(raw?: string | null) {
   if (!raw) return null;
-  const value = Number(raw.replace(/\./g, '').replace(/,/g, '.').replace(/[^
-\d.-]/g, ''));
+  const normalized = raw.replace(/\./g, '').replace(/,/g, '.').replace(/[^\d.-]/g, '');
+  const value = Number(normalized);
   return Number.isFinite(value) ? value : null;
 }
 
@@ -100,7 +100,11 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ provider: 'giaxanghomnay', updatedAt: new Date().toISOString(), cards });
+    return NextResponse.json({
+      provider: 'giaxanghomnay',
+      updatedAt: new Date().toISOString(),
+      cards,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, provider: 'giaxanghomnay' }, { status: 500 });
