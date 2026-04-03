@@ -1,10 +1,25 @@
 'use client';
 
-import { ArrowDownRight, ArrowUpRight, PieChart, Send, TrendingUp, Wallet } from 'lucide-react';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  PieChart,
+  Send,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
-import { calcHolding, calcSummary, formatCurrency, Holding, PriceMap } from '@/lib/calculations';
+import {
+  calcHolding,
+  calcSummary,
+  formatCurrency,
+  Holding,
+  PriceMap,
+} from '@/lib/calculations';
 
 type QuoteDebugItem = {
   symbol: string;
@@ -95,7 +110,6 @@ function clampHour(value: number) {
   return Math.min(23, Math.max(0, Math.floor(value)));
 }
 
-// Việt Nam UTC+7, không DST
 function vnHourToUtc(vnHour: number) {
   return (clampHour(vnHour) - 7 + 24) % 24;
 }
@@ -108,10 +122,15 @@ export default function DashboardPage() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [prices, setPrices] = useState<PriceMap>({});
   const [quotes, setQuotes] = useState<QuoteDebugItem[]>([]);
+  const [vnIndex, setVnIndex] = useState<QuoteDebugItem | null>(null);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState('');
+
+  const [positionOpen, setPositionOpen] = useState(false);
+  const [telegramOpen, setTelegramOpen] = useState(false);
+
   const [form, setForm] = useState({
     symbol: '',
     buy_price: '',
@@ -137,7 +156,6 @@ export default function DashboardPage() {
       const response = await fetch('/api/telegram/settings', {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       const payload = await response.json();
 
       if (response.ok && payload?.settings) {
@@ -224,14 +242,27 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadVnIndex = useCallback(async () => {
+    try {
+      const response = await fetch('/api/prices?symbols=VNINDEX', { cache: 'no-store' });
+      const data: PricesResponse = await response.json();
+      const item = data?.debug?.[0];
+      setVnIndex(item && Number(item.price) > 0 ? item : null);
+    } catch {
+      setVnIndex(null);
+    }
+  }, []);
+
   useEffect(() => {
     loadHoldings();
     loadTelegramSettings();
-  }, [loadHoldings, loadTelegramSettings]);
+    loadVnIndex();
+  }, [loadHoldings, loadTelegramSettings, loadVnIndex]);
 
   useEffect(() => {
-    if (holdings.length > 0) loadPrices(holdings);
-    else {
+    if (holdings.length > 0) {
+      loadPrices(holdings);
+    } else {
       setPrices({});
       setQuotes([]);
     }
@@ -291,7 +322,7 @@ export default function DashboardPage() {
       buy_date: '',
       note: '',
     });
-
+    setPositionOpen(false);
     await loadHoldings();
   }
 
@@ -323,6 +354,7 @@ export default function DashboardPage() {
         setTelegramMessage(payload?.error || 'Không lưu được cấu hình');
       } else {
         setTelegramMessage('Đã lưu cấu hình Telegram');
+        setTelegramOpen(false);
       }
     } catch {
       setTelegramMessage('Không lưu được cấu hình');
@@ -439,140 +471,28 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="ab-premium-card ab-form-shell compact">
-          <div className="ab-row-between align-center compact-form-head">
-            <div>
-              <div className="ab-card-kicker">Thêm vị thế</div>
+        {vnIndex ? (
+          <section className="ab-premium-card ab-form-shell compact">
+            <div className="ab-row-between align-center">
+              <div>
+                <div className="ab-card-kicker">VN-Index</div>
+                <div className="ab-card-headline small">{formatCompactPrice(vnIndex.price)}</div>
+              </div>
+              <div
+                className="ab-soft-change under-price"
+                style={{ color: getChangeColor(vnIndex.change) }}
+              >
+                {formatChange(vnIndex.change)} · {formatPct(vnIndex.pct)}
+              </div>
             </div>
-            <button type="button" className="ab-btn ab-btn-subtle" onClick={loadHoldings}>
-              {refreshing ? 'Đang tải...' : 'Làm mới'}
-            </button>
-          </div>
+          </section>
+        ) : null}
 
-          <form onSubmit={handleSubmit} className="ab-form-grid compact-form-grid">
-            <input
-              value={form.symbol}
-              onChange={(e) => setForm({ ...form, symbol: e.target.value })}
-              placeholder="Mã"
-              required
-              className="ab-input"
-            />
-            <input
-              value={form.buy_price}
-              onChange={(e) => setForm({ ...form, buy_price: e.target.value })}
-              type="number"
-              placeholder="Giá mua"
-              required
-              className="ab-input"
-            />
-            <input
-              value={form.quantity}
-              onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              type="number"
-              placeholder="Số lượng"
-              required
-              className="ab-input"
-            />
-            <input
-              value={form.buy_date}
-              onChange={(e) => setForm({ ...form, buy_date: e.target.value })}
-              type="date"
-              className="ab-input"
-            />
-            <button type="submit" className="ab-btn ab-btn-primary">
-              Thêm mã
-            </button>
-            <input
-              value={form.note}
-              onChange={(e) => setForm({ ...form, note: e.target.value })}
-              placeholder="Ghi chú"
-              className="ab-input ab-full"
-            />
-          </form>
-
-          {message ? <div className="ab-error">{message}</div> : null}
-        </section>
-
-        <section className="ab-premium-card ab-form-shell compact">
-          <div className="ab-row-between align-center compact-form-head">
-            <div>
-              <div className="ab-card-kicker">Telegram</div>
-              <div className="ab-soft-label">1 bot chung · mỗi user một chat ID riêng</div>
-            </div>
-
-            <button
-              type="button"
-              className="ab-btn ab-btn-subtle"
-              onClick={handleTelegramTest}
-              disabled={telegramTesting || telegramLoading}
-            >
-              <Send size={14} />
-              {telegramTesting ? 'Đang gửi...' : 'Gửi test'}
-            </button>
-          </div>
-
-          <form onSubmit={handleSaveTelegram} className="ab-form-grid compact-form-grid">
-            <input
-              value={telegram.chat_id}
-              onChange={(e) => setTelegram({ ...telegram, chat_id: e.target.value })}
-              placeholder="Nhập chat_id Telegram"
-              className="ab-input ab-full"
-            />
-
-            <label className="ab-toggle-row">
-              <input
-                type="checkbox"
-                checked={telegram.is_enabled}
-                onChange={(e) =>
-                  setTelegram({ ...telegram, is_enabled: e.target.checked })
-                }
-              />
-              <span>Bật báo cáo Telegram</span>
-            </label>
-
-            <label className="ab-toggle-row">
-              <input
-                type="checkbox"
-                checked={telegram.notify_daily}
-                onChange={(e) =>
-                  setTelegram({ ...telegram, notify_daily: e.target.checked })
-                }
-              />
-              <span>Nhận báo cáo cuối ngày</span>
-            </label>
-
-            <input
-              value={telegram.daily_hour_vn}
-              onChange={(e) =>
-                setTelegram({
-                  ...telegram,
-                  daily_hour_vn: clampHour(Number(e.target.value || 15)),
-                })
-              }
-              type="number"
-              min={0}
-              max={23}
-              className="ab-input"
-              placeholder="Giờ Việt Nam"
-            />
-
-            <div className="ab-note">
-              Nhập theo giờ Việt Nam. Hệ thống sẽ tự đổi sang UTC khi lưu.
-              Mặc định <strong>15</strong> = sau 15:00 Việt Nam.
-            </div>
-
-            <button type="submit" className="ab-btn ab-btn-primary">
-              {telegramSaving ? 'Đang lưu...' : 'Lưu cấu hình'}
-            </button>
-          </form>
-
-          <div className="ab-note">
-            Cách lấy chat_id: mở bot Telegram, bấm <strong>/start</strong>, rồi lấy
-            chat_id từ <strong>getUpdates</strong>.
-          </div>
-
-          {telegramMessage ? <div className="ab-error">{telegramMessage}</div> : null}
-        </section>
+        {message ? (
+          <section className="ab-premium-card ab-form-shell compact">
+            <div className="ab-error">{message}</div>
+          </section>
+        ) : null}
 
         {loading ? (
           <section className="ab-position-grid">
@@ -590,7 +510,9 @@ export default function DashboardPage() {
             </article>
           </section>
         ) : holdings.length === 0 ? (
-          <section className="ab-premium-card">Chưa có mã nào</section>
+          <section className="ab-premium-card ab-form-shell compact">
+            <div className="ab-note">Chưa có vị thế nào trong danh mục</div>
+          </section>
         ) : (
           <section className="ab-position-grid">
             {holdings.map((holding) => {
@@ -674,6 +596,160 @@ export default function DashboardPage() {
             })}
           </section>
         )}
+
+        <section className="ab-premium-card ab-form-shell compact">
+          <button
+            type="button"
+            className="ab-row-between align-center ab-section-toggle"
+            onClick={() => setPositionOpen((v) => !v)}
+          >
+            <div>
+              <div className="ab-card-kicker">Danh mục</div>
+              <div className="ab-card-headline small">Thêm vị thế</div>
+            </div>
+            {positionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+
+          {positionOpen ? (
+            <form onSubmit={handleSubmit} className="ab-form-grid compact-form-grid mt-16">
+              <input
+                value={form.symbol}
+                onChange={(e) => setForm({ ...form, symbol: e.target.value })}
+                placeholder="Mã"
+                required
+                className="ab-input"
+              />
+              <input
+                value={form.buy_price}
+                onChange={(e) => setForm({ ...form, buy_price: e.target.value })}
+                type="number"
+                placeholder="Giá mua"
+                required
+                className="ab-input"
+              />
+              <input
+                value={form.quantity}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                type="number"
+                placeholder="Số lượng"
+                required
+                className="ab-input"
+              />
+              <input
+                value={form.buy_date}
+                onChange={(e) => setForm({ ...form, buy_date: e.target.value })}
+                type="date"
+                className="ab-input"
+              />
+              <input
+                value={form.note}
+                onChange={(e) => setForm({ ...form, note: e.target.value })}
+                placeholder="Ghi chú"
+                className="ab-input ab-full"
+              />
+              <button type="submit" className="ab-btn ab-btn-primary">
+                Thêm mã
+              </button>
+            </form>
+          ) : null}
+        </section>
+
+        <section className="ab-premium-card ab-form-shell compact">
+          <button
+            type="button"
+            className="ab-row-between align-center ab-section-toggle"
+            onClick={() => setTelegramOpen((v) => !v)}
+          >
+            <div>
+              <div className="ab-card-kicker">Telegram</div>
+              <div className="ab-card-headline small">Báo cáo cuối ngày</div>
+            </div>
+            {telegramOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+
+          {telegramOpen ? (
+            <>
+              <form onSubmit={handleSaveTelegram} className="ab-form-grid compact-form-grid mt-16">
+                <input
+                  value={telegram.chat_id}
+                  onChange={(e) => setTelegram({ ...telegram, chat_id: e.target.value })}
+                  placeholder="Nhập chat_id Telegram"
+                  className="ab-input ab-full"
+                />
+
+                <label className="ab-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={telegram.is_enabled}
+                    onChange={(e) =>
+                      setTelegram({ ...telegram, is_enabled: e.target.checked })
+                    }
+                  />
+                  <span>Bật báo cáo Telegram</span>
+                </label>
+
+                <label className="ab-toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={telegram.notify_daily}
+                    onChange={(e) =>
+                      setTelegram({ ...telegram, notify_daily: e.target.checked })
+                    }
+                  />
+                  <span>Nhận báo cáo cuối ngày</span>
+                </label>
+
+                <input
+                  value={telegram.daily_hour_vn}
+                  onChange={(e) =>
+                    setTelegram({
+                      ...telegram,
+                      daily_hour_vn: clampHour(Number(e.target.value || 15)),
+                    })
+                  }
+                  type="number"
+                  min={0}
+                  max={23}
+                  className="ab-input"
+                  placeholder="Giờ Việt Nam"
+                />
+
+                <div className="ab-note">
+                  Nhập theo giờ Việt Nam. Hệ thống tự đổi sang UTC khi lưu. Mặc định{' '}
+                  <strong>15</strong> = sau 15:00 Việt Nam.
+                </div>
+
+                <div className="ab-row-gap">
+                  <button type="submit" className="ab-btn ab-btn-primary">
+                    {telegramSaving ? 'Đang lưu...' : 'Lưu cấu hình'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="ab-btn ab-btn-subtle"
+                    onClick={handleTelegramTest}
+                    disabled={telegramTesting || telegramLoading}
+                  >
+                    <Send size={14} />
+                    {telegramTesting ? 'Đang gửi...' : 'Gửi test'}
+                  </button>
+                </div>
+              </form>
+
+              <div className="ab-note mt-12">
+                Báo cáo chỉ tập trung vào <strong>danh mục đang nắm giữ</strong>, gồm tổng
+                vốn, NAV, lãi/lỗ danh mục, VN-Index và các vị thế trong danh mục.
+              </div>
+
+              <div className="ab-note mt-12">
+                Cách lấy chat_id: mở bot Telegram, bấm <strong>/start</strong>, rồi lấy
+                chat_id từ <strong>getUpdates</strong>.
+              </div>
+
+              {telegramMessage ? <div className="ab-error mt-12">{telegramMessage}</div> : null}
+            </>
+          ) : null}
+        </section>
       </div>
     </main>
   );
