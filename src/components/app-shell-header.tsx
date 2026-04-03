@@ -11,6 +11,8 @@ import {
   CloudLightning,
   CloudRain,
   CloudSun,
+  Droplets,
+  Gem,
   House,
   LogOut,
   Moon,
@@ -23,7 +25,7 @@ type Props = {
   title: string;
   email?: string;
   isLoggedIn: boolean;
-  currentTab: 'home' | 'dashboard';
+  currentTab: 'home' | 'dashboard' | 'gold' | 'oil';
   onLogout?: () => void;
   onAuthOpen?: () => void;
 };
@@ -76,10 +78,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
     async function buildInfo() {
       try {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-        const weekday = new Intl.DateTimeFormat('vi-VN', {
-          weekday: 'long',
-          timeZone: 'Asia/Ho_Chi_Minh',
-        }).format(now);
+        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
         const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
         const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${now.getFullYear()} ÂL`;
@@ -90,19 +89,13 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         try {
           const position = await new Promise<GeolocationPosition>((resolve, reject) => {
             if (!navigator.geolocation) return reject(new Error('Geolocation unavailable'));
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 4000,
-              maximumAge: 15 * 60 * 1000,
-            });
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000, maximumAge: 15 * 60 * 1000 });
           });
           lat = position.coords.latitude;
           lon = position.coords.longitude;
         } catch {}
 
-        const response = await fetch(
-          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FHo_Chi_Minh`,
-          { cache: 'no-store' }
-        );
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FHo_Chi_Minh`, { cache: 'no-store' });
         const data = await response.json();
         const temp = Math.round(Number(data?.current?.temperature_2m ?? 24));
         const code = Number.isFinite(Number(data?.current?.weather_code)) ? Number(data.current.weather_code) : null;
@@ -110,10 +103,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         setInfoLine(`${solarText} · ${lunarText} · ${temp}°C`);
       } catch {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-        const weekday = new Intl.DateTimeFormat('vi-VN', {
-          weekday: 'long',
-          timeZone: 'Asia/Ho_Chi_Minh',
-        }).format(now);
+        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
         const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
         const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${now.getFullYear()} ÂL`;
@@ -180,14 +170,10 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         </div>
 
         <div className="ab-premium-tabs">
-          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}>
-            <House size={15} />
-            <span>Home</span>
-          </Link>
-          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}>
-            <BriefcaseBusiness size={15} />
-            <span>Danh mục</span>
-          </Link>
+          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}><House size={15} /><span>Home</span></Link>
+          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}><BriefcaseBusiness size={15} /><span>Danh mục</span></Link>
+          <Link href="/gold" className={`ab-premium-tab ${currentTab === 'gold' ? 'active' : ''}`}><Gem size={15} /><span>Giá vàng</span></Link>
+          <Link href="/oil" className={`ab-premium-tab ${currentTab === 'oil' ? 'active' : ''}`}><Droplets size={15} /><span>Giá xăng</span></Link>
         </div>
       </div>
     </section>
