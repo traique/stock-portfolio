@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '@/lib/supabase-server';
 import {
   buildDailyMessage,
-  buildThresholdAlert,
-  pickThresholdHit,
   sendTelegramMessage,
   shouldSendDaily,
   TelegramSettingRow,
@@ -45,7 +43,8 @@ export async function GET(request: NextRequest) {
   const { data: settingsRows, error: settingsError } = await supabaseServer
     .from('telegram_settings')
     .select('*')
-    .eq('is_enabled', true);
+    .eq('is_enabled', true)
+    .eq('notify_daily', true);
 
   if (settingsError) {
     return NextResponse.json({ error: settingsError.message }, { status: 500 });
@@ -53,10 +52,15 @@ export async function GET(request: NextRequest) {
 
   let processed = 0;
   let sent = 0;
-  const details: Array<{ user_id: string; kind?: string; status: string }> = [];
+  const details: Array<{ user_id: string; status: string }> = [];
 
   for (const settings of (settingsRows || []) as TelegramSettingRow[]) {
     processed += 1;
+
+    if (!shouldSendDaily(settings.last_daily_sent_at, now, settings.daily_hour_utc)) {
+      details.push({ user_id: settings.user_id, status: 'skip:not_time' });
+      continue;
+    }
 
     const { data: holdingsRows } = await supabaseServer
       .from('holdings')
@@ -70,70 +74,31 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const symbols = [...new Set(holdings.map((h) => h.symbol.toUpperCase()))];
-    const { prices, debug } = await loadPrices(symbols);
-    const { data: userData } = await supabaseServer.auth.admin.getUserById(settings.user_id);
-    const email = userData.user?.email || 'user@lcta.local';
-
     try {
-      if (settings.notify_daily && shouldSendDaily(settings.last_daily_sent_at, now, settings.daily_hour_utc)) {
-        const { debug: vnDebug } = await loadPrices(['VNINDEX']);
-        const vnIndex = vnDebug?.[0] || null;
-        const text = buildDailyMessage(email, holdings, prices, debug, vnIndex);
-        await sendTelegramMessage(settings.chat_id, text);
+      const symbols = [...new Set(holdings.map((h) => h.symbol.toUpperCase()))];
+      const { prices, debug } = await loadPrices(symbols);
+      const { debug: vnDebug } = await loadPrices(['VNINDEX']);
+      const vnIndex = vnDebug?.[0] || null;
 
-        await supabaseServer
-          .from('telegram_settings')
-          .update({ last_daily_sent_at: now.toISOString() })
-          .eq('user_id', settings.user_id);
+      const { data: userData } = await supabaseServer.auth.admin.getUserById(settings.user_id);
+      const email = userData.user?.email || 'user@lcta.local';
 
-        await supabaseServer.from('alert_logs').insert({
-          user_id: settings.user_id,
-          alert_type: 'daily',
-          message: text,
-        });
+      const text = buildDailyMessage(email, holdings, prices, debug, vnIndex);
+      await sendTelegramMessage(settings.chat_id, text);
 
-        sent += 1;
-        details.push({ user_id: settings.user_id, kind: 'daily', status: 'sent' });
-        continue;
-      }
+      await supabaseServer
+        .from('telegram_settings')
+        .update({ last_daily_sent_at: now.toISOString() })
+        .eq('user_id', settings.user_id);
 
-      if (settings.notify_threshold) {
-        const hit = pickThresholdHit(holdings, debug, Number(settings.threshold_pct || 3));
-        if (hit) {
-          const alertKey = `${hit.holding.symbol}:${Math.round(hit.quote.pct * 100)}`;
-          const recentlySent =
-            settings.last_alert_key === alertKey &&
-            settings.last_alert_sent_at &&
-            now.getTime() - new Date(settings.last_alert_sent_at).getTime() < 60 * 60 * 1000;
+      await supabaseServer.from('alert_logs').insert({
+        user_id: settings.user_id,
+        alert_type: 'daily',
+        message: text,
+      });
 
-          if (!recentlySent) {
-            const text = buildThresholdAlert(email, hit.quote, hit.holding, prices);
-            await sendTelegramMessage(settings.chat_id, text);
-
-            await supabaseServer
-              .from('telegram_settings')
-              .update({
-                last_alert_key: alertKey,
-                last_alert_sent_at: now.toISOString(),
-              })
-              .eq('user_id', settings.user_id);
-
-            await supabaseServer.from('alert_logs').insert({
-              user_id: settings.user_id,
-              alert_type: 'threshold',
-              alert_key: alertKey,
-              message: text,
-            });
-
-            sent += 1;
-            details.push({ user_id: settings.user_id, kind: 'threshold', status: 'sent' });
-            continue;
-          }
-        }
-      }
-
-      details.push({ user_id: settings.user_id, status: 'skip:no_alert' });
+      sent += 1;
+      details.push({ user_id: settings.user_id, status: 'sent' });
     } catch (error) {
       details.push({
         user_id: settings.user_id,
