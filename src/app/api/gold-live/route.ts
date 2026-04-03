@@ -50,18 +50,24 @@ async function fetchGoldType(code: GoldCode) {
   const fromObject = payload?.data && !Array.isArray(payload.data) ? payload.data : null;
   const row = fromArray || fromObject || payload;
 
+  const buy = asNumber(row?.buy);
+  const sell = asNumber(row?.sell);
+  const value = asNumber(row?.value);
+
   return {
-    buy: asNumber(row?.buy),
-    sell: asNumber(row?.sell),
-    changeBuy: asNumber(row?.change_buy),
-    changeSell: asNumber(row?.change_sell),
+    buy: buy ?? value,
+    sell: sell ?? buy ?? value,
+    changeBuy: asNumber(row?.change_buy) ?? asNumber(row?.change),
+    changeSell: asNumber(row?.change_sell) ?? asNumber(row?.change),
     updatedAt: asIsoFromUnix(row?.update_time) || asIsoFromUnix(payload?.current_time),
   };
 }
 
 export async function GET() {
   try {
-    const settled = await Promise.allSettled(GOLD_TYPES.map(async (config) => ({ config, row: await fetchGoldType(config.code) })));
+    const settled = await Promise.allSettled(
+      GOLD_TYPES.map(async (config) => ({ config, row: await fetchGoldType(config.code) }))
+    );
 
     const cards: GoldCard[] = GOLD_TYPES.map((config, index) => {
       const result = settled[index];
@@ -79,9 +85,13 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ provider: 'vang.today', updatedAt: new Date().toISOString(), cards });
+    return NextResponse.json({
+      provider: 'vang.today',
+      updatedAt: new Date().toISOString(),
+      cards,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, provider: 'vang.today' }, { status: 500 });
   }
-}
+                                                    }
