@@ -1,0 +1,393 @@
+:root {
+  --premium-ring: rgba(255, 255, 255, 0.72);
+  --premium-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+  --premium-shadow-strong: 0 24px 68px rgba(15, 23, 42, 0.14);
+  --premium-glow: radial-gradient(circle at top left, rgba(255,255,255,0.9), transparent 36%);
+}
+
+:root[data-theme='dark'] {
+  --premium-ring: rgba(255, 255, 255, 0.08);
+  --premium-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  --premium-shadow-strong: 0 24px 68px rgba(0, 0, 0, 0.5);
+  --premium-glow: radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 32%);
+}
+
+.ab-page {
+  background:
+    radial-gradient(circle at top center, rgba(37, 99, 235, 0.08), transparent 26%),
+    radial-gradient(circle at 0% 0%, rgba(255, 255, 255, 0.72), transparent 18%),
+    var(--bg);
+}
+
+:root[data-theme='dark'] .ab-page {
+  background:
+    radial-gradient(circle at top center, rgba(59, 130, 246, 0.14), transparent 24%),
+    radial-gradient(circle at top left, rgba(255,255,255,0.05), transparent 18%),
+    linear-gradient(180deg, #050b14 0%, #08111d 100%);
+}
+
+.ab-shell {
+  max-width: 1180px;
+  gap: 18px;
+}
+
+.ab-premium-card,
+.ab-card,
+.ab-watch-card,
+.ab-stock-card,
+.ab-summary-card,
+.ab-hero-premium,
+.ab-position-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.ab-premium-card::before,
+.ab-position-card::before,
+.ab-watch-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--premium-glow);
+  opacity: 0.75;
+}
+
+.ab-premium-card,
+.ab-watch-card,
+.ab-position-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.82));
+  border: 1px solid var(--premium-ring);
+  box-shadow: var(--premium-shadow);
+}
+
+:root[data-theme='dark'] .ab-premium-card,
+:root[data-theme='dark'] .ab-watch-card,
+:root[data-theme='dark'] .ab-position-card {
+  background: linear-gradient(180deg, rgba(12,18,30,0.96), rgba(11,18,31,0.9));
+}
+
+.ab-premium-card:hover,
+.ab-watch-card:hover,
+.ab-position-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--premium-shadow-strong);
+}
+
+.ab-hero-premium {
+  padding: 14px 16px 16px;
+  border-radius: 30px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255,255,255,0.16), transparent 22%),
+    linear-gradient(135deg, #071327 0%, #10234b 54%, #1f3d79 100%);
+}
+
+:root[data-theme='dark'] .ab-hero-premium {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255,255,255,0.08), transparent 20%),
+    linear-gradient(135deg, #07111f 0%, #0a1730 52%, #143062 100%);
+}
+
+.ab-brand-mark {
+  padding: 8px 14px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.ab-hero-title {
+  font-size: clamp(30px, 4vw, 42px);
+  letter-spacing: -0.065em;
+}
+
+.ab-hero-subline {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255,255,255,0.16);
+}
+
+.ab-premium-tabs {
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.ab-premium-tab {
+  border: none;
+  background: transparent;
+  padding: 10px 16px;
+}
+
+.ab-premium-tab.active {
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.ab-market-strip-pro {
+  grid-template-columns: 1.2fr 0.7fr 0.7fr 0.9fr;
+  gap: 14px;
+  padding: 4px;
+}
+
+.ab-strip-item {
+  min-height: 64px;
+}
+
+.ab-strip-item:not(.vnindex) {
+  padding-left: 10px;
+}
+
+.ab-strip-item strong {
+  font-size: clamp(28px, 4vw, 36px);
+}
+
+.ab-strip-item.wide,
+.ab-strip-item.vnindex {
+  border-color: var(--border-strong);
+}
+
+.ab-card-headline {
+  font-size: clamp(24px, 3vw, 30px);
+}
+
+.ab-watch-shell,
+.ab-form-shell,
+.ab-movers-card,
+.ab-tone-card,
+.ab-position-card {
+  border-radius: 28px;
+}
+
+.ab-watch-grid.premium,
+.ab-position-grid {
+  gap: 14px;
+}
+
+.ab-watch-card.premium,
+.ab-position-card {
+  border-radius: 24px;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.74), rgba(255,255,255,0.56));
+}
+
+:root[data-theme='dark'] .ab-watch-card.premium,
+:root[data-theme='dark'] .ab-position-card {
+  background: linear-gradient(180deg, rgba(17,24,39,0.82), rgba(10,16,28,0.76));
+}
+
+.ab-symbol.premium {
+  font-size: clamp(28px, 4vw, 34px);
+}
+
+.ab-price.premium {
+  font-size: clamp(38px, 5vw, 48px);
+}
+
+.ab-soft-change.under-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme='dark'] .ab-soft-change.under-price {
+  background: rgba(255,255,255,0.06);
+}
+
+.ab-stat-chip,
+.ab-watch-count,
+.ab-mini-card.premium,
+.ab-mini-row,
+.ab-delete.ghost,
+.ab-menu-btn,
+.ab-btn-subtle {
+  border-color: var(--premium-ring);
+}
+
+.ab-mini-card.premium {
+  background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.56));
+}
+
+:root[data-theme='dark'] .ab-mini-card.premium {
+  background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03));
+}
+
+.ab-form-shell.compact {
+  padding: 16px;
+}
+
+.ab-input {
+  height: 48px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.72);
+}
+
+textarea.ab-input,
+input.ab-full.ab-input {
+  min-height: 48px;
+}
+
+:root[data-theme='dark'] .ab-input {
+  background: rgba(255,255,255,0.04);
+}
+
+.ab-btn {
+  height: 48px;
+  border-radius: 18px;
+}
+
+.ab-btn-primary {
+  background: linear-gradient(135deg, #0b1530, #163161 62%, #214489);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 24px rgba(15,23,42,0.18);
+}
+
+:root[data-theme='dark'] .ab-btn-primary {
+  background: linear-gradient(135deg, #dbe8ff, #c5d6f6 58%, #a9c1ef 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 12px 24px rgba(0,0,0,0.28);
+}
+
+.ab-summary-grid.premium-summary-grid {
+  gap: 14px;
+}
+
+.ab-stat-premium {
+  border-radius: 24px;
+}
+
+.ab-big-number {
+  font-size: clamp(30px, 4vw, 40px);
+}
+
+.ab-profit-pill,
+.ab-performance.premium {
+  border-radius: 20px;
+}
+
+.ab-commodity-grid,
+.ab-fuel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ab-commodity-card,
+.ab-fuel-card {
+  border-radius: 28px;
+  padding: 18px;
+}
+
+.ab-commodity-title {
+  font-size: clamp(26px, 4vw, 34px);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.ab-commodity-title.small {
+  font-size: clamp(24px, 3.5vw, 30px);
+}
+
+.ab-commodity-subtitle {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ab-commodity-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--soft);
+  border: 1px solid var(--border);
+}
+
+.ab-commodity-dual {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.ab-commodity-panel {
+  border-radius: 22px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.5);
+}
+
+:root[data-theme='dark'] .ab-commodity-panel {
+  background: rgba(255,255,255,0.04);
+}
+
+.ab-commodity-panel.single {
+  margin-top: 16px;
+}
+
+.ab-commodity-value,
+.ab-fuel-value {
+  margin-top: 10px;
+  font-size: clamp(34px, 4.8vw, 46px);
+  line-height: 0.96;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  word-break: break-word;
+}
+
+.ab-fuel-unit {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
+  .ab-commodity-grid,
+  .ab-fuel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .ab-shell {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .ab-hero-premium {
+    padding: 14px;
+    border-radius: 26px;
+  }
+
+  .ab-premium-tabs {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+
+  .ab-premium-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ab-premium-tab {
+    flex: 0 0 auto;
+  }
+
+  .ab-watch-card.premium,
+  .ab-position-card,
+  .ab-premium-card,
+  .ab-card {
+    border-radius: 24px;
+  }
+
+  .ab-commodity-dual {
+    grid-template-columns: 1fr;
+  }
+}
