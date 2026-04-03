@@ -125,4 +125,4 @@ export async function GET() {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: message, provider: 'giaxanghomnay' }, { status: 500 });
   }
-                         }
+}
