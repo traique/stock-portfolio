@@ -86,28 +86,27 @@ async function fetchGoldApiType(code: GoldCode) {
 function extractWorldGoldFromText(text: string) {
   const compact = text.replace(/\s+/g, ' ');
 
-  const aroundSymbol =
+  const block =
+    compact.match(/Vàng Thế Giới.{0,400}XAU\/USD.{0,800}/i)?.[0] ||
+    compact.match(/Vàng thế giới.{0,400}XAU\/USD.{0,800}/i)?.[0] ||
     compact.match(/XAU\/USD.{0,800}/i)?.[0] ||
-    compact.match(/Vàng Thế Giới.{0,800}/i)?.[0] ||
-    compact.match(/Vàng thế giới.{0,800}/i)?.[0] ||
-    compact.match(/World Gold.{0,800}/i)?.[0] ||
     compact;
 
-  const priceMatch = aroundSymbol.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
-
-  const changeCandidates = [...aroundSymbol.matchAll(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/g)]
-    .map((m) => toNumber(m[1]))
-    .filter((v): v is number => v !== null);
-
+  const priceMatch = block.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
   const price = priceMatch ? toNumber(priceMatch[1]) : null;
 
-  // Chọn change có trị tuyệt đối lớn nhất để tránh bắt nhầm +0.90
-  const change =
-    changeCandidates.length > 0
-      ? changeCandidates.reduce((best, current) =>
-          Math.abs(current) > Math.abs(best) ? current : best
-        )
-      : null;
+  if (price === null) {
+    return { price: null, change: null };
+  }
+
+  const priceLiteral = priceMatch?.[0] ?? '';
+  const afterPrice = priceLiteral ? block.slice(block.indexOf(priceLiteral) + priceLiteral.length, block.indexOf(priceLiteral) + priceLiteral.length + 160) : block;
+
+  const nearChangeMatch =
+    afterPrice.match(/[↑↗]?\s*([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/) ||
+    afterPrice.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+
+  const change = nearChangeMatch ? toNumber(nearChangeMatch[1]) : null;
 
   return { price, change };
 }
@@ -163,11 +162,10 @@ async function fetchGoldType(code: GoldCode) {
       payload?.lastPrice
     );
 
-    // Không ưu tiên change từ API nữa vì đang sai
     let worldChange: number | null = null;
 
     const detailFallback = await scrapeWorldGoldFromDetailPage();
-    if (worldPrice === null) worldPrice = detailFallback.price;
+    worldPrice = worldPrice ?? detailFallback.price;
     worldChange = detailFallback.change;
 
     if (worldPrice === null || worldChange === null) {
@@ -176,7 +174,6 @@ async function fetchGoldType(code: GoldCode) {
       worldChange = worldChange ?? homeFallback.change;
     }
 
-    // Chỉ khi scrape không ra mới fallback sang API
     worldChange =
       worldChange ??
       pickFirstNumber(
