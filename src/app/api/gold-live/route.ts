@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import * as cheerio from 'cheerio';
 
 type GoldCode = 'SJL1L10' | 'SJ9999' | 'XAUUSD';
 
@@ -33,7 +34,7 @@ function toNumber(value: unknown): number | null {
   }
 
   if (typeof value === 'string') {
-    const cleaned = value.replace(/,/g, '').trim();
+    const cleaned = value.replace(/[$,\s]/g, '').trim();
     const n = Number(cleaned);
     return Number.isFinite(n) ? n : null;
   }
@@ -55,7 +56,7 @@ function pickFirstNumber(...values: unknown[]): number | null {
   return null;
 }
 
-async function fetchGoldType(code: GoldCode) {
+async function fetchGoldApiType(code: GoldCode) {
   const response = await fetch(`https://www.vang.today/api/prices?type=${code}`, {
     headers: {
       Accept: 'application/json',
@@ -79,8 +80,42 @@ async function fetchGoldType(code: GoldCode) {
 
   const row = rowFromArray || rowFromObject || payload || {};
 
+  return {
+    row,
+    payload,
+  };
+}
+
+async function fetchWorldGoldFallback() {
+  const response = await fetch('https://vang.today/vi/chi-tiet/XAUUSD', {
+    headers: {
+      'User-Agent': 'Mozilla/5.0',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+    cache: 'no-store',
+  });
+
+  if (!response.ok) return { price: null, change: null };
+
+  const html = await response.text();
+  const $ = cheerio.load(html);
+  const text = $.text().replace(/\s+/g, ' ');
+
+  // Bắt kiểu: "$4,634.30" và "+13.40" / "-152.80"
+  const priceMatch = text.match(/\$ ?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+  const changeMatch = text.match(/([+-]\d{1,3}(?:,\d{3})*(?:\.\d+)?)/);
+
+  const price = priceMatch ? toNumber(priceMatch[1]) : null;
+  const change = changeMatch ? toNumber(changeMatch[1]) : null;
+
+  return { price, change };
+}
+
+async function fetchGoldType(code: GoldCode) {
+  const { row, payload } = await fetchGoldApiType(code);
+
   if (code === 'XAUUSD') {
-    const worldPrice = pickFirstNumber(
+    let worldPrice = pickFirstNumber(
       row?.price,
       row?.value,
       row?.sell,
@@ -95,7 +130,7 @@ async function fetchGoldType(code: GoldCode) {
       payload?.lastPrice
     );
 
-    const worldChange = pickFirstNumber(
+    let worldChange = pickFirstNumber(
       row?.change,
       row?.change_value,
       row?.change_sell,
@@ -106,6 +141,12 @@ async function fetchGoldType(code: GoldCode) {
       payload?.change_buy
     );
 
+    if (worldPrice === null) {
+      const fallback = await fetchWorldGoldFallback();
+      worldPrice = fallback.price;
+      worldChange = worldChange ?? fallback.change;
+    }
+
     return {
       buy: worldPrice,
       sell: worldPrice,
@@ -114,7 +155,7 @@ async function fetchGoldType(code: GoldCode) {
       updatedAt:
         toIsoFromUnix(row?.update_time) ||
         toIsoFromUnix(payload?.current_time) ||
-        null,
+        new Date().toISOString(),
     };
   }
 
