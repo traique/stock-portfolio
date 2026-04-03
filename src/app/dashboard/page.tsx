@@ -600,14 +600,16 @@ export default function DashboardPage() {
         <section className="ab-premium-card ab-form-shell compact">
           <button
             type="button"
-            className="ab-row-between align-center ab-section-toggle"
+            className="ab-section-toggle"
             onClick={() => setPositionOpen((v) => !v)}
           >
-            <div>
+            <div className="ab-section-toggle-copy">
               <div className="ab-card-kicker">Danh mục</div>
-              <div className="ab-card-headline small">Thêm vị thế</div>
+              <div className="ab-section-toggle-title">Thêm vị thế</div>
             </div>
-            {positionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            <div className="ab-section-toggle-icon">
+              {positionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
           </button>
 
           {positionOpen ? (
@@ -657,14 +659,16 @@ export default function DashboardPage() {
         <section className="ab-premium-card ab-form-shell compact">
           <button
             type="button"
-            className="ab-row-between align-center ab-section-toggle"
+            className="ab-section-toggle"
             onClick={() => setTelegramOpen((v) => !v)}
           >
-            <div>
+            <div className="ab-section-toggle-copy">
               <div className="ab-card-kicker">Telegram</div>
-              <div className="ab-card-headline small">Báo cáo cuối ngày</div>
+              <div className="ab-section-toggle-title">Báo cáo cuối ngày</div>
             </div>
-            {telegramOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            <div className="ab-section-toggle-icon">
+              {telegramOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
           </button>
 
           {telegramOpen ? (
@@ -738,7 +742,7 @@ export default function DashboardPage() {
 
               <div className="ab-note mt-12">
                 Báo cáo chỉ tập trung vào <strong>danh mục đang nắm giữ</strong>, gồm tổng
-                vốn, NAV, lãi/lỗ danh mục, VN-Index và các vị thế trong danh mục.
+                vốn, NAV, lãi/lỗ danh mục và VN-Index.
               </div>
 
               <div className="ab-note mt-12">
@@ -753,4 +757,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-}
+    }
