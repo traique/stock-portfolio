@@ -13,7 +13,7 @@ export type TelegramSettingRow = {
   last_alert_sent_at: string | null;
 };
 
-type QuoteDebugItem = {
+export type QuoteDebugItem = {
   symbol: string;
   price: number;
   change: number;
@@ -35,7 +35,19 @@ export function formatPrice(value: number) {
 }
 
 export function formatPct(value: number) {
-  return `${value > 0 ? '+' : value < 0 ? '' : ''}${value.toFixed(2)}%`;
+  const safe = Number.isFinite(value) ? value : 0;
+  return `${safe > 0 ? '+' : safe < 0 ? '' : ''}${safe.toFixed(2)}%`;
+}
+
+function formatUpdatedTime(date = new Date()) {
+  return new Intl.DateTimeFormat('vi-VN', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
 }
 
 export async function sendTelegramMessage(chatId: string, text: string) {
@@ -55,6 +67,7 @@ export async function sendTelegramMessage(chatId: string, text: string) {
   });
 
   const payload = await response.json();
+
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.description || 'Telegram send failed');
   }
@@ -73,37 +86,50 @@ export function buildDailyMessage(
   const pnlPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
 
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
+
   const rows = holdings
     .map((holding) => {
       const row = calcHolding(holding, prices);
       const quote = quoteMap.get(holding.symbol.toUpperCase());
+
       return {
         symbol: holding.symbol,
-        price: quote?.price || row.currentPrice || 0,
-        pct: quote?.pct || 0,
+        quantity: Number(holding.quantity || 0),
+        price: Number(quote?.price || row.currentPrice || 0),
+        dayPct: Number(quote?.pct || 0),
+        pnl: Number(row.pnl || 0),
+        pnlPct: Number(row.pnlPct || 0),
       };
     })
-    .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
-    .slice(0, 5);
+    .sort((a, b) => a.symbol.localeCompare(b.symbol, 'vi', { numeric: true }));
 
   const lines = [
-    `📊 <b>LCTA · Báo cáo danh mục</b>`,
+    `📊 <b>LCTA · Tổng kết cuối ngày</b>`,
     ``,
     `👤 ${email.split('@')[0]}`,
+    `Tổng số mã: <b>${rows.length}</b>`,
+    `Tổng vốn: <b>${formatVnd(summary.totalBuy)}</b>`,
     `NAV: <b>${formatVnd(summary.totalNow)}</b>`,
     `Lãi/Lỗ: <b>${summary.totalPnl >= 0 ? '+' : ''}${formatVnd(summary.totalPnl)}</b> (${formatPct(pnlPct)})`,
   ];
 
   if (vnIndex && Number.isFinite(vnIndex.price)) {
-    lines.push(`VN-Index: <b>${formatPrice(vnIndex.price)}</b> (${formatPct(vnIndex.pct)})`);
+    lines.push(
+      `VN-Index: <b>${formatPrice(vnIndex.price)}</b> (${formatPct(vnIndex.pct)})`
+    );
   }
 
   if (rows.length) {
-    lines.push('', `Mã nổi bật:`);
+    lines.push('', `Chi tiết danh mục:`);
     rows.forEach((row) => {
-      lines.push(`• <b>${row.symbol}</b>: ${formatPrice(row.price)} · ${formatPct(row.pct)}`);
+      const marker = row.pnl >= 0 ? '📈' : '📉';
+      lines.push(
+        `${marker} <b>${row.symbol}</b> (${row.quantity}): ${formatPrice(row.price)} (${formatPct(row.dayPct)}) · ${row.pnl >= 0 ? '+' : ''}${formatVnd(row.pnl)} (${formatPct(row.pnlPct)})`
+      );
     });
   }
+
+  lines.push('', `🕒 Cập nhật: <b>${formatUpdatedTime()}</b>`);
 
   return lines.join('\n');
 }
@@ -125,6 +151,7 @@ export function buildThresholdAlert(
     `Biến động ngày: <b>${formatPct(quote.pct)}</b>`,
     `Lãi/Lỗ vị thế: <b>${row.pnl >= 0 ? '+' : ''}${formatVnd(row.pnl)}</b>`,
     `Hiệu suất vị thế: <b>${formatPct(row.pnlPct)}</b>`,
+    `🕒 Cập nhật: <b>${formatUpdatedTime()}</b>`,
   ].join('\n');
 }
 
@@ -133,6 +160,7 @@ export function shouldSendDaily(lastDailySentAt: string | null, now: Date, daily
   if (!lastDailySentAt) return true;
 
   const last = new Date(lastDailySentAt);
+
   return (
     last.getUTCFullYear() !== now.getUTCFullYear() ||
     last.getUTCMonth() !== now.getUTCMonth() ||
