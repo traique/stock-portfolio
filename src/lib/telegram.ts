@@ -104,12 +104,12 @@ export function buildDailyMessage(
     .sort((a, b) => a.symbol.localeCompare(b.symbol, 'vi', { numeric: true }));
 
   const lines = [
-    `📊 <b>LCTA · Tổng kết cuối ngày</b>`,
+    `📊 <b>Tổng kết </b>`,
     ``,
     `👤 ${email.split('@')[0]}`,
     `Tổng số mã: <b>${rows.length}</b>`,
     `Tổng vốn: <b>${formatVnd(summary.totalBuy)}</b>`,
-    `NAV: <b>${formatVnd(summary.totalNow)}</b>`,
+    `Tổng giá trị thị trường: <b>${formatVnd(summary.totalNow)}</b>`,
     `Lãi/Lỗ: <b>${summary.totalPnl >= 0 ? '+' : ''}${formatVnd(summary.totalPnl)}</b> (${formatPct(pnlPct)})`,
   ];
 
