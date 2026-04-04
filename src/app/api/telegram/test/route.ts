@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { sendTelegramMessage } from '@/lib/telegram';
+import { buildDailyMessage, QuoteDebugItem, sendTelegramMessage } from '@/lib/telegram';
+import type { Holding, PriceMap } from '@/lib/calculations';
 
 function getUserClient(accessToken: string) {
   return createClient(
@@ -20,6 +21,27 @@ function getUserClient(accessToken: string) {
   );
 }
 
+async function loadPrices(symbols: string[]) {
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
+  if (!baseUrl) throw new Error('Missing NEXT_PUBLIC_SITE_URL');
+
+  const normalizedBase = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
+
+  const response = await fetch(
+    `${normalizedBase}/api/prices?symbols=${encodeURIComponent(symbols.join(','))}`,
+    { cache: 'no-store' }
+  );
+
+  const payload = await response.json();
+
+  return {
+    prices: (payload?.prices || {}) as PriceMap,
+    debug: (payload?.debug || []) as QuoteDebugItem[],
+  };
+}
+
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get('authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
@@ -30,20 +52,43 @@ export async function POST(request: NextRequest) {
   const user = userRes.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: settings, error } = await supabase
+  const { data: settings, error: settingsError } = await supabase
     .from('telegram_settings')
     .select('*')
     .eq('user_id', user.id)
     .maybeSingle();
 
-  if (error || !settings?.chat_id) {
+  if (settingsError || !settings?.chat_id) {
     return NextResponse.json({ error: 'Chưa cấu hình Telegram' }, { status: 400 });
   }
 
-  await sendTelegramMessage(
-    settings.chat_id,
-    `✅ <b>LCTA</b>\n\nKết nối Telegram thành công cho <b>${(user.email || '').split('@')[0]}</b>.`
-  );
+  const { data: holdingsRows, error: holdingsError } = await supabase
+    .from('holdings')
+    .select('*')
+    .order('symbol', { ascending: true });
 
-  return NextResponse.json({ ok: true });
+  if (holdingsError) {
+    return NextResponse.json({ error: holdingsError.message }, { status: 500 });
+  }
+
+  const holdings = (holdingsRows || []) as Holding[];
+
+  if (!holdings.length) {
+    return NextResponse.json({ error: 'Chưa có vị thế trong danh mục' }, { status: 400 });
+  }
+
+  const symbols = [...new Set(holdings.map((h) => h.symbol.toUpperCase()))];
+  const { prices, debug } = await loadPrices(symbols);
+  const { debug: vnDebug } = await loadPrices(['VNINDEX']);
+  const vnIndex = vnDebug?.[0] || null;
+
+  const text = buildDailyMessage(user.email || 'user@lcta.local', holdings, prices, debug, vnIndex);
+
+  await sendTelegramMessage(settings.chat_id, text);
+
+  return NextResponse.json({
+    ok: true,
+    sent: true,
+    preview: text,
+  });
 }
