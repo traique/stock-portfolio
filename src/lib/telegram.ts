@@ -1,4 +1,12 @@
-import { calcHolding, calcSummary, Holding, PriceMap } from '@/lib/calculations';
+import {
+  calcHolding,
+  calcPosition,
+  calcSummary,
+  groupHoldingsBySymbol,
+  Holding,
+  PositionGroup,
+  PriceMap,
+} from '@/lib/calculations';
 
 export type TelegramSettingRow = {
   user_id: string;
@@ -86,15 +94,16 @@ export function buildDailyMessage(
   const pnlPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
 
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
+  const positions = groupHoldingsBySymbol(holdings);
 
-  const rows = holdings
-    .map((holding) => {
-      const row = calcHolding(holding, prices);
-      const quote = quoteMap.get(holding.symbol.toUpperCase());
+  const rows = positions
+    .map((position) => {
+      const row = calcPosition(position, prices);
+      const quote = quoteMap.get(position.symbol.toUpperCase());
 
       return {
-        symbol: holding.symbol,
-        quantity: Number(holding.quantity || 0),
+        symbol: position.symbol,
+        quantity: Number(position.quantity || 0),
         price: Number(quote?.price || row.currentPrice || 0),
         dayPct: Number(quote?.pct || 0),
         pnl: Number(row.pnl || 0),
@@ -104,7 +113,7 @@ export function buildDailyMessage(
     .sort((a, b) => a.symbol.localeCompare(b.symbol, 'vi', { numeric: true }));
 
   const lines = [
-    `📊 <b>Tổng kết </b>`,
+    `📊 <b>Tổng kết</b>`,
     ``,
     `👤 ${email.split('@')[0]}`,
     `Tổng số mã: <b>${rows.length}</b>`,
@@ -114,13 +123,11 @@ export function buildDailyMessage(
   ];
 
   if (vnIndex && Number.isFinite(vnIndex.price)) {
-    lines.push(
-      `VN-Index: <b>${formatPrice(vnIndex.price)}</b> (${formatPct(vnIndex.pct)})`
-    );
+    lines.push(`VN-Index: <b>${formatPrice(vnIndex.price)}</b> (${formatPct(vnIndex.pct)})`);
   }
 
   if (rows.length) {
-    lines.push('', `Chi tiết danh mục:`);
+    lines.push('', `Chi tiết vị thế:`);
     rows.forEach((row) => {
       const marker = row.pnl >= 0 ? '📈' : '📉';
       lines.push(
@@ -173,17 +180,24 @@ export function pickThresholdHit(
   quotes: QuoteDebugItem[],
   thresholdPct: number
 ) {
+  const positions = groupHoldingsBySymbol(holdings);
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
 
-  const hits = holdings
-    .map((holding) => {
-      const quote = quoteMap.get(holding.symbol.toUpperCase());
+  const hits = positions
+    .map((position) => {
+      const quote = quoteMap.get(position.symbol.toUpperCase());
       if (!quote) return null;
       if (Math.abs(quote.pct) < thresholdPct) return null;
-      return { holding, quote };
+      return { position, quote };
     })
-    .filter(Boolean) as Array<{ holding: Holding; quote: QuoteDebugItem }>;
+    .filter(Boolean) as Array<{ position: PositionGroup; quote: QuoteDebugItem }>;
 
   hits.sort((a, b) => Math.abs(b.quote.pct) - Math.abs(a.quote.pct));
-  return hits[0] || null;
-}
+
+  if (!hits[0]) return null;
+
+  return {
+    holding: hits[0].position.holdings[0],
+    quote: hits[0].quote,
+  };
+                                      }
