@@ -735,7 +735,7 @@ export default function DashboardPage() {
                     disabled={telegramTesting || telegramLoading}
                   >
                     <Send size={14} />
-                    {telegramTesting ? 'Đang gửi...' : 'Gửi test'}
+                    {telegramTesting ? 'Đang gửi...' : 'Gửi báo cáo'}
                   </button>
                 </div>
               </form>
