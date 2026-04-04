@@ -14,10 +14,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 import {
-  calcHolding,
+  calcPosition,
   calcSummary,
   formatCurrency,
+  groupHoldingsBySymbol,
   Holding,
+  PositionGroup,
   PriceMap,
 } from '@/lib/calculations';
 
@@ -130,6 +132,7 @@ export default function DashboardPage() {
 
   const [positionOpen, setPositionOpen] = useState(false);
   const [telegramOpen, setTelegramOpen] = useState(false);
+  const [expandedSymbols, setExpandedSymbols] = useState<Record<string, boolean>>({});
 
   const [form, setForm] = useState({
     symbol: '',
@@ -268,18 +271,19 @@ export default function DashboardPage() {
     }
   }, [holdings, loadPrices]);
 
+  const positions = useMemo(() => groupHoldingsBySymbol(holdings), [holdings]);
   const summary = useMemo(() => calcSummary(holdings, prices), [holdings, prices]);
   const summaryPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
   const quoteMap = useMemo(() => getQuoteMap(quotes), [quotes]);
 
   const dayPnl = useMemo(
     () =>
-      holdings.reduce((sum, holding) => {
-        const quote = quoteMap.get(holding.symbol.toUpperCase());
+      positions.reduce((sum, position) => {
+        const quote = quoteMap.get(position.symbol.toUpperCase());
         const change = Number(quote?.change || 0);
-        return sum + change * Number(holding.quantity || 0);
+        return sum + change * Number(position.quantity || 0);
       }, 0),
-    [holdings, quoteMap]
+    [positions, quoteMap]
   );
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -378,19 +382,19 @@ export default function DashboardPage() {
       const payload = await response.json();
 
       if (!response.ok) {
-        setTelegramMessage(payload?.error || 'Không gửi được tin test');
+        setTelegramMessage(payload?.error || 'Không gửi được báo cáo');
       } else {
-        setTelegramMessage('Đã gửi tin test tới Telegram');
+        setTelegramMessage('Đã gửi báo cáo tới Telegram');
       }
     } catch {
-      setTelegramMessage('Không gửi được tin test');
+      setTelegramMessage('Không gửi được báo cáo');
     } finally {
       setTelegramTesting(false);
     }
   }
 
   async function handleDelete(id: string, symbol: string) {
-    if (!window.confirm('Xóa ' + symbol + '?')) return;
+    if (!window.confirm('Xóa lệnh mua của ' + symbol + '?')) return;
 
     const { error } = await supabase.from('holdings').delete().eq('id', id);
 
@@ -400,6 +404,10 @@ export default function DashboardPage() {
     }
 
     await loadHoldings();
+  }
+
+  function toggleSymbol(symbol: string) {
+    setExpandedSymbols((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
   }
 
   async function handleLogout() {
@@ -439,7 +447,7 @@ export default function DashboardPage() {
               <article className="ab-premium-card ab-stat-premium neutral">
                 <div className="ab-stat-head">
                   <PieChart size={16} />
-                  <span className="ab-soft-label">NAV</span>
+                  <span className="ab-soft-label">Tổng giá trị</span>
                 </div>
                 <div className="ab-big-number dark">{formatCurrency(summary.totalNow)}</div>
               </article>
@@ -509,30 +517,37 @@ export default function DashboardPage() {
               <div className="ab-skeleton skeleton-line short" />
             </article>
           </section>
-        ) : holdings.length === 0 ? (
+        ) : positions.length === 0 ? (
           <section className="ab-premium-card ab-form-shell compact">
             <div className="ab-note">Chưa có vị thế nào trong danh mục</div>
           </section>
         ) : (
           <section className="ab-position-grid">
-            {holdings.map((holding) => {
-              const row = calcHolding(holding, prices);
-              const quote = quoteMap.get(holding.symbol.toUpperCase());
+            {positions.map((position) => {
+              const row = calcPosition(position, prices);
+              const quote = quoteMap.get(position.symbol.toUpperCase());
               const positive = row.pnl >= 0;
+              const isExpanded = !!expandedSymbols[position.symbol];
 
               return (
-                <article key={holding.id} className="ab-premium-card ab-position-card">
+                <article key={position.symbol} className="ab-premium-card ab-position-card">
                   <div className="ab-row-between align-start">
                     <div>
-                      <div className="ab-symbol premium">{holding.symbol}</div>
+                      <div className="ab-symbol premium">{position.symbol}</div>
+                      <div className="ab-soft-label mini-top">
+                        {position.holdings.length} lệnh mua · SL {position.quantity}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="ab-delete ghost"
-                      onClick={() => handleDelete(holding.id, holding.symbol)}
-                    >
-                      Xóa
-                    </button>
+
+                    {position.holdings.length > 1 ? (
+                      <button
+                        type="button"
+                        className="ab-delete ghost"
+                        onClick={() => toggleSymbol(position.symbol)}
+                      >
+                        {isExpanded ? 'Ẩn lệnh' : 'Xem lệnh'}
+                      </button>
+                    ) : null}
                   </div>
 
                   <div className="ab-price premium">
@@ -548,12 +563,12 @@ export default function DashboardPage() {
 
                   <div className="ab-position-stats">
                     <div className="ab-stat-chip">
-                      <span>SL</span>
-                      <strong>{holding.quantity}</strong>
+                      <span>SL tổng</span>
+                      <strong>{position.quantity}</strong>
                     </div>
                     <div className="ab-stat-chip">
-                      <span>Giá mua</span>
-                      <strong>{formatCurrency(Number(holding.buy_price))}</strong>
+                      <span>Giá vốn TB</span>
+                      <strong>{formatCurrency(position.avgBuyPrice)}</strong>
                     </div>
                   </div>
 
@@ -591,6 +606,30 @@ export default function DashboardPage() {
                       {row.pnlPct.toFixed(2)}%
                     </strong>
                   </div>
+
+                  {isExpanded ? (
+                    <div className="ab-mini-list" style={{ marginTop: 14 }}>
+                      {position.holdings.map((holding) => (
+                        <div key={holding.id} className="ab-mini-row">
+                          <div>
+                            <div className="ab-mini-symbol">
+                              {holding.buy_date || 'Không ngày'} · SL {holding.quantity}
+                            </div>
+                            <div className="ab-mini-price">
+                              Giá mua {formatCurrency(Number(holding.buy_price))}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="ab-delete ghost"
+                            onClick={() => handleDelete(holding.id, holding.symbol)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -605,7 +644,7 @@ export default function DashboardPage() {
           >
             <div className="ab-section-toggle-copy">
               <div className="ab-card-kicker">Danh mục</div>
-              <div className="ab-section-toggle-title">Thêm vị thế</div>
+              <div className="ab-section-toggle-title">Thêm lệnh mua</div>
             </div>
             <div className="ab-section-toggle-icon">
               {positionOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -650,7 +689,7 @@ export default function DashboardPage() {
                 className="ab-input ab-full"
               />
               <button type="submit" className="ab-btn ab-btn-primary">
-                Thêm mã
+                Thêm lệnh mua
               </button>
             </form>
           ) : null}
@@ -741,8 +780,8 @@ export default function DashboardPage() {
               </form>
 
               <div className="ab-note mt-12">
-                Báo cáo chỉ tập trung vào <strong>danh mục đang nắm giữ</strong>, gồm tổng
-                vốn, NAV, lãi/lỗ danh mục và VN-Index.
+                Báo cáo tập trung theo <strong>vị thế gộp theo mã</strong>, dù một mã có nhiều
+                lệnh mua riêng.
               </div>
 
               <div className="ab-note mt-12">
@@ -757,4 +796,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-    }
+        }
