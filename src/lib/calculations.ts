@@ -10,6 +10,21 @@ export type Holding = {
   updated_at: string;
 };
 
+export type Transaction = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  transaction_type: 'BUY' | 'SELL';
+  price: number;
+  quantity: number;
+  trade_date: string | null;
+  note: string | null;
+  avg_cost: number | null;
+  realized_pnl: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PriceMap = Record<string, number>;
 
 export type PositionGroup = {
@@ -70,7 +85,7 @@ export function groupHoldingsBySymbol(holdings: Holding[]): PositionGroup[] {
         holdings: items.sort((a, b) => {
           const aTime = a.buy_date ? new Date(a.buy_date).getTime() : 0;
           const bTime = b.buy_date ? new Date(b.buy_date).getTime() : 0;
-          return bTime - aTime;
+          return aTime - bTime;
         }),
         quantity,
         avgBuyPrice,
@@ -110,6 +125,20 @@ export function calcSummary(holdings: Holding[], prices: PriceMap) {
     },
     { totalBuy: 0, totalNow: 0, totalPnl: 0 }
   );
+}
+
+export function calcRealizedSummary(transactions: Transaction[]) {
+  return transactions
+    .filter((tx) => tx.transaction_type === 'SELL')
+    .reduce(
+      (acc, tx) => {
+        const realized = Number(tx.realized_pnl || 0);
+        acc.totalSellOrders += 1;
+        acc.totalRealizedPnl += realized;
+        return acc;
+      },
+      { totalSellOrders: 0, totalRealizedPnl: 0 }
+    );
 }
 
 export function formatCurrency(value: number) {
