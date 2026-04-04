@@ -200,4 +200,4 @@ export function pickThresholdHit(
     holding: hits[0].position.holdings[0],
     quote: hits[0].quote,
   };
-                                      }
+    }
