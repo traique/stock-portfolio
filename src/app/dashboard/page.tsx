@@ -19,7 +19,6 @@ import {
   formatCurrency,
   groupHoldingsBySymbol,
   Holding,
-  PositionGroup,
   PriceMap,
 } from '@/lib/calculations';
 
@@ -796,4 +795,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-        }
+                               }
