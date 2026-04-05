@@ -1,10 +1,13 @@
 import {
-  calcHolding,
+  calcCashSummary,
   calcPosition,
+  calcRealizedSummary,
   calcSummary,
+  deriveOpenHoldings,
+  enrichTransactions,
   groupHoldingsBySymbol,
-  Holding,
-  PositionGroup,
+  Transaction,
+  CashTransaction,
   PriceMap,
 } from '@/lib/calculations';
 
@@ -85,16 +88,20 @@ export async function sendTelegramMessage(chatId: string, text: string) {
 
 export function buildDailyMessage(
   email: string,
-  holdings: Holding[],
+  transactions: Transaction[],
+  cashTransactions: CashTransaction[],
   prices: PriceMap,
   quotes: QuoteDebugItem[],
   vnIndex?: QuoteDebugItem | null
 ) {
-  const summary = calcSummary(holdings, prices);
-  const pnlPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
-
+  const openHoldings = deriveOpenHoldings(transactions);
+  const positions = groupHoldingsBySymbol(openHoldings);
+  const summary = calcSummary(openHoldings, prices);
+  const realized = calcRealizedSummary(transactions);
+  const cash = calcCashSummary(cashTransactions, transactions);
+  const totalPnl = summary.totalPnl + realized.totalRealizedPnl;
+  const nav = cash.cashOnHand + summary.totalNow;
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
-  const positions = groupHoldingsBySymbol(holdings);
 
   const rows = positions
     .map((position) => {
@@ -117,9 +124,13 @@ export function buildDailyMessage(
     ``,
     `👤 ${email.split('@')[0]}`,
     `Tổng số mã: <b>${rows.length}</b>`,
-    `Tổng vốn: <b>${formatVnd(summary.totalBuy)}</b>`,
+    `Vốn nạp ròng: <b>${formatVnd(cash.netCapital)}</b>`,
+    `Tiền mặt: <b>${formatVnd(cash.cashOnHand)}</b>`,
     `Tổng giá trị thị trường: <b>${formatVnd(summary.totalNow)}</b>`,
-    `Lãi/Lỗ: <b>${summary.totalPnl >= 0 ? '+' : ''}${formatVnd(summary.totalPnl)}</b> (${formatPct(pnlPct)})`,
+    `NAV: <b>${formatVnd(nav)}</b>`,
+    `Lãi/Lỗ tạm tính: <b>${summary.totalPnl >= 0 ? '+' : ''}${formatVnd(summary.totalPnl)}</b>`,
+    `Lãi/Lỗ đã chốt: <b>${realized.totalRealizedPnl >= 0 ? '+' : ''}${formatVnd(realized.totalRealizedPnl)}</b>`,
+    `Tổng lãi/Lỗ: <b>${totalPnl >= 0 ? '+' : ''}${formatVnd(totalPnl)}</b>`,
   ];
 
   if (vnIndex && Number.isFinite(vnIndex.price)) {
@@ -141,27 +152,6 @@ export function buildDailyMessage(
   return lines.join('\n');
 }
 
-export function buildThresholdAlert(
-  email: string,
-  quote: QuoteDebugItem,
-  holding: Holding,
-  prices: PriceMap
-) {
-  const row = calcHolding(holding, prices);
-
-  return [
-    `🚨 <b>LCTA · Cảnh báo biến động</b>`,
-    ``,
-    `👤 ${email.split('@')[0]}`,
-    `Mã: <b>${holding.symbol}</b>`,
-    `Giá hiện tại: <b>${formatPrice(quote.price)}</b>`,
-    `Biến động ngày: <b>${formatPct(quote.pct)}</b>`,
-    `Lãi/Lỗ vị thế: <b>${row.pnl >= 0 ? '+' : ''}${formatVnd(row.pnl)}</b>`,
-    `Hiệu suất vị thế: <b>${formatPct(row.pnlPct)}</b>`,
-    `🕒 Cập nhật: <b>${formatUpdatedTime()}</b>`,
-  ].join('\n');
-}
-
 export function shouldSendDaily(lastDailySentAt: string | null, now: Date, dailyHourUtc: number) {
   if (now.getUTCHours() !== dailyHourUtc) return false;
   if (!lastDailySentAt) return true;
@@ -176,11 +166,12 @@ export function shouldSendDaily(lastDailySentAt: string | null, now: Date, daily
 }
 
 export function pickThresholdHit(
-  holdings: Holding[],
+  transactions: Transaction[],
   quotes: QuoteDebugItem[],
   thresholdPct: number
 ) {
-  const positions = groupHoldingsBySymbol(holdings);
+  const openHoldings = deriveOpenHoldings(transactions);
+  const positions = groupHoldingsBySymbol(openHoldings);
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
 
   const hits = positions
@@ -190,14 +181,14 @@ export function pickThresholdHit(
       if (Math.abs(quote.pct) < thresholdPct) return null;
       return { position, quote };
     })
-    .filter(Boolean) as Array<{ position: PositionGroup; quote: QuoteDebugItem }>;
+    .filter(Boolean) as Array<{ position: ReturnType<typeof groupHoldingsBySymbol>[number]; quote: QuoteDebugItem }>;
 
   hits.sort((a, b) => Math.abs(b.quote.pct) - Math.abs(a.quote.pct));
 
   if (!hits[0]) return null;
 
   return {
-    holding: hits[0].position.holdings[0],
+    transaction: hits[0].position.holdings[0],
     quote: hits[0].quote,
   };
     }
