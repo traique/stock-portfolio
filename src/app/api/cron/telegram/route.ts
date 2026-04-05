@@ -6,7 +6,12 @@ import {
   shouldSendDaily,
   TelegramSettingRow,
 } from '@/lib/telegram';
-import type { Transaction, CashTransaction, PriceMap } from '@/lib/calculations';
+import type {
+  CashTransaction,
+  PortfolioSettings,
+  PriceMap,
+  Transaction,
+} from '@/lib/calculations';
 
 type QuoteDebugItem = {
   symbol: string;
@@ -62,7 +67,7 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const [transactionsRes, cashRes] = await Promise.all([
+    const [transactionsRes, cashRes, portfolioSettingsRes] = await Promise.all([
       supabaseServer
         .from('transactions')
         .select('*')
@@ -73,10 +78,16 @@ export async function GET(request: NextRequest) {
         .select('*')
         .eq('user_id', settings.user_id)
         .order('transaction_date', { ascending: true }),
+      supabaseServer
+        .from('portfolio_settings')
+        .select('*')
+        .eq('user_id', settings.user_id)
+        .maybeSingle(),
     ]);
 
     const transactions = (transactionsRes.data || []) as Transaction[];
     const cashTransactions = (cashRes.data || []) as CashTransaction[];
+    const portfolioSettings = (portfolioSettingsRes.data || null) as PortfolioSettings | null;
 
     if (!transactions.length) {
       details.push({ user_id: settings.user_id, status: 'skip:no_transactions' });
@@ -92,7 +103,15 @@ export async function GET(request: NextRequest) {
       const { data: userData } = await supabaseServer.auth.admin.getUserById(settings.user_id);
       const email = userData.user?.email || 'user@lcta.local';
 
-      const text = buildDailyMessage(email, transactions, cashTransactions, prices, debug, vnIndex);
+      const text = buildDailyMessage(
+        email,
+        transactions,
+        cashTransactions,
+        portfolioSettings,
+        prices,
+        debug,
+        vnIndex
+      );
       await sendTelegramMessage(settings.chat_id, text);
 
       await supabaseServer
