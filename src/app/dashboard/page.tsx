@@ -5,24 +5,30 @@ import {
   ArrowUpRight,
   ChevronDown,
   ChevronUp,
+  Landmark,
   PieChart,
+  PlusCircle,
   Send,
+  TrendingDown,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 import {
+  calcCashSummary,
   calcPosition,
   calcRealizedSummary,
   calcSummary,
+  CashTransaction,
+  deriveOpenHoldings,
+  enrichTransactions,
   formatCurrency,
   groupHoldingsBySymbol,
-  Holding,
   PriceMap,
   Transaction,
 } from '@/lib/calculations';
+import { supabase } from '@/lib/supabase';
 
 type QuoteDebugItem = {
   symbol: string;
@@ -44,11 +50,36 @@ type TelegramSettings = {
   daily_hour_vn: number;
 };
 
+type TxTypeFilter = 'ALL' | 'BUY' | 'SELL' | 'DEPOSIT' | 'WITHDRAW';
+
 const DEFAULT_TELEGRAM: TelegramSettings = {
   chat_id: '',
   is_enabled: false,
   notify_daily: true,
   daily_hour_vn: 15,
+};
+
+const DEFAULT_BUY_FORM = {
+  symbol: '',
+  price: '',
+  quantity: '',
+  trade_date: '',
+  note: '',
+};
+
+const DEFAULT_SELL_FORM = {
+  symbol: '',
+  price: '',
+  quantity: '',
+  trade_date: '',
+  note: '',
+};
+
+const DEFAULT_CASH_FORM = {
+  transaction_type: 'DEPOSIT' as 'DEPOSIT' | 'WITHDRAW',
+  amount: '',
+  transaction_date: '',
+  note: '',
 };
 
 function formatCompactPrice(value?: number | null) {
@@ -126,9 +157,28 @@ function formatTradeDate(value?: string | null) {
   return new Intl.DateTimeFormat('vi-VN').format(new Date(value));
 }
 
+function getTransactionLabel(type: TxTypeFilter | Transaction['transaction_type'] | CashTransaction['transaction_type']) {
+  switch (type) {
+    case 'BUY':
+      return 'Mua';
+    case 'SELL':
+      return 'Bán';
+    case 'DEPOSIT':
+      return 'Nạp tiền';
+    case 'WITHDRAW':
+      return 'Rút tiền';
+    default:
+      return 'Tất cả';
+  }
+}
+
+type HistoryRow =
+  | { kind: 'trade'; item: Transaction; sortDate: string }
+  | { kind: 'cash'; item: CashTransaction; sortDate: string };
+
 export default function DashboardPage() {
-  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([]);
   const [prices, setPrices] = useState<PriceMap>({});
   const [quotes, setQuotes] = useState<QuoteDebugItem[]>([]);
   const [vnIndex, setVnIndex] = useState<QuoteDebugItem | null>(null);
@@ -139,31 +189,25 @@ export default function DashboardPage() {
 
   const [buyOpen, setBuyOpen] = useState(false);
   const [sellOpen, setSellOpen] = useState(false);
+  const [cashOpen, setCashOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
   const [telegramOpen, setTelegramOpen] = useState(false);
   const [expandedSymbols, setExpandedSymbols] = useState<Record<string, boolean>>({});
+  const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
+  const [editingCashId, setEditingCashId] = useState<string | null>(null);
 
-  const [buyForm, setBuyForm] = useState({
-    symbol: '',
-    buy_price: '',
-    quantity: '',
-    buy_date: '',
-    note: '',
-  });
-
-  const [sellForm, setSellForm] = useState({
-    symbol: '',
-    sell_price: '',
-    quantity: '',
-    trade_date: '',
-    note: '',
-  });
+  const [buyForm, setBuyForm] = useState(DEFAULT_BUY_FORM);
+  const [sellForm, setSellForm] = useState(DEFAULT_SELL_FORM);
+  const [cashForm, setCashForm] = useState(DEFAULT_CASH_FORM);
 
   const [telegram, setTelegram] = useState<TelegramSettings>(DEFAULT_TELEGRAM);
   const [telegramLoading, setTelegramLoading] = useState(true);
   const [telegramSaving, setTelegramSaving] = useState(false);
   const [telegramTesting, setTelegramTesting] = useState(false);
   const [telegramMessage, setTelegramMessage] = useState('');
+
+  const [historyFilter, setHistoryFilter] = useState<TxTypeFilter>('ALL');
+  const [historySymbol, setHistorySymbol] = useState('');
 
   const loadTelegramSettings = useCallback(async () => {
     setTelegramLoading(true);
@@ -207,34 +251,41 @@ export default function DashboardPage() {
 
     setEmail(authData.user.email || '');
 
-    const [holdingsRes, transactionsRes] = await Promise.all([
-      supabase.from('holdings').select('*').order('symbol', { ascending: true }),
+    const [transactionsRes, cashRes] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
-        .order('trade_date', { ascending: false, nullsFirst: false })
-        .order('created_at', { ascending: false }),
+        .order('trade_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('cash_transactions')
+        .select('*')
+        .order('transaction_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
     ]);
-
-    if (holdingsRes.error) {
-      setHoldings([]);
-      setMessage('Không tải được dữ liệu holdings');
-    } else {
-      setHoldings((holdingsRes.data || []) as Holding[]);
-    }
 
     if (transactionsRes.error) {
       setTransactions([]);
+      setMessage(transactionsRes.error.message);
     } else {
       setTransactions((transactionsRes.data || []) as Transaction[]);
+    }
+
+    if (cashRes.error) {
+      setCashTransactions([]);
+      if (!transactionsRes.error) setMessage(cashRes.error.message);
+    } else {
+      setCashTransactions((cashRes.data || []) as CashTransaction[]);
     }
 
     setLoading(false);
   }, []);
 
-  const loadPrices = useCallback(async (items: Holding[]) => {
-    const symbols = [...new Set(items.map((item) => item.symbol.toUpperCase()))];
+  const openHoldings = useMemo(() => deriveOpenHoldings(transactions), [transactions]);
+  const enrichedTransactions = useMemo(() => enrichTransactions(transactions), [transactions]);
 
+  const loadPrices = useCallback(async (items: typeof openHoldings) => {
+    const symbols = [...new Set(items.map((item) => item.symbol.toUpperCase()))];
     if (!symbols.length) {
       setPrices({});
       setQuotes([]);
@@ -290,19 +341,30 @@ export default function DashboardPage() {
   }, [loadPortfolio, loadTelegramSettings, loadVnIndex]);
 
   useEffect(() => {
-    if (holdings.length > 0) {
-      loadPrices(holdings);
+    if (openHoldings.length > 0) {
+      loadPrices(openHoldings);
     } else {
       setPrices({});
       setQuotes([]);
     }
-  }, [holdings, loadPrices]);
+  }, [openHoldings, loadPrices]);
 
-  const positions = useMemo(() => groupHoldingsBySymbol(holdings), [holdings]);
-  const summary = useMemo(() => calcSummary(holdings, prices), [holdings, prices]);
-  const realizedSummary = useMemo(() => calcRealizedSummary(transactions), [transactions]);
-  const summaryPct = summary.totalBuy > 0 ? (summary.totalPnl / summary.totalBuy) * 100 : 0;
+  const positions = useMemo(() => groupHoldingsBySymbol(openHoldings), [openHoldings]);
+  const summary = useMemo(() => calcSummary(openHoldings, prices), [openHoldings, prices]);
+  const realizedSummary = useMemo(
+    () => calcRealizedSummary(enrichedTransactions),
+    [enrichedTransactions]
+  );
+  const cashSummary = useMemo(
+    () => calcCashSummary(cashTransactions, enrichedTransactions),
+    [cashTransactions, enrichedTransactions]
+  );
   const quoteMap = useMemo(() => getQuoteMap(quotes), [quotes]);
+
+  const nav = cashSummary.cashOnHand + summary.totalNow;
+  const totalPnl = summary.totalPnl + realizedSummary.totalRealizedPnl;
+  const summaryPct =
+    cashSummary.netCapital > 0 ? (totalPnl / cashSummary.netCapital) * 100 : 0;
 
   const dayPnl = useMemo(
     () =>
@@ -325,6 +387,37 @@ export default function DashboardPage() {
       .sort((a, b) => b.totalNow - a.totalNow);
   }, [positions, prices, summary.totalNow]);
 
+  const historyRows = useMemo(() => {
+    const tradeRows: HistoryRow[] = enrichedTransactions.map((item) => ({
+      kind: 'trade',
+      item,
+      sortDate: item.trade_date || item.created_at,
+    }));
+
+    const cashRows: HistoryRow[] = cashTransactions.map((item) => ({
+      kind: 'cash',
+      item,
+      sortDate: item.transaction_date || item.created_at,
+    }));
+
+    return [...tradeRows, ...cashRows]
+      .filter((row) => {
+        if (historyFilter === 'ALL') return true;
+        if (row.kind === 'trade') return row.item.transaction_type === historyFilter;
+        return row.item.transaction_type === historyFilter;
+      })
+      .filter((row) => {
+        if (!historySymbol.trim()) return true;
+        if (row.kind === 'cash') return true;
+        return row.item.symbol.toUpperCase().includes(historySymbol.trim().toUpperCase());
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.sortDate).getTime();
+        const bTime = new Date(b.sortDate).getTime();
+        return bTime - aTime;
+      });
+  }, [cashTransactions, enrichedTransactions, historyFilter, historySymbol]);
+
   async function handleBuySubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage('');
@@ -336,46 +429,52 @@ export default function DashboardPage() {
     }
 
     const symbol = buyForm.symbol.trim().toUpperCase();
-    const buyPrice = Number(buyForm.buy_price);
+    const price = Number(buyForm.price);
     const quantity = Number(buyForm.quantity);
 
-    if (!symbol || !buyPrice || !quantity) {
+    if (!symbol || !price || !quantity) {
       setMessage('Nhập đủ mã, giá mua, số lượng');
       return;
     }
 
-    const [holdingRes, transactionRes] = await Promise.all([
-      supabase.from('holdings').insert({
-        user_id: authData.user.id,
-        symbol,
-        buy_price: buyPrice,
-        quantity,
-        buy_date: buyForm.buy_date || null,
-        note: buyForm.note.trim() || null,
-      }),
-      supabase.from('transactions').insert({
+    if (editingTradeId) {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          symbol,
+          transaction_type: 'BUY',
+          price,
+          quantity,
+          trade_date: buyForm.trade_date || null,
+          note: buyForm.note.trim() || null,
+          avg_cost: null,
+          realized_pnl: null,
+        })
+        .eq('id', editingTradeId);
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('transactions').insert({
         user_id: authData.user.id,
         symbol,
         transaction_type: 'BUY',
-        price: buyPrice,
+        price,
         quantity,
-        trade_date: buyForm.buy_date || null,
+        trade_date: buyForm.trade_date || null,
         note: buyForm.note.trim() || null,
-      }),
-    ]);
+      });
 
-    if (holdingRes.error || transactionRes.error) {
-      setMessage(holdingRes.error?.message || transactionRes.error?.message || 'Không lưu được lệnh mua');
-      return;
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
     }
 
-    setBuyForm({
-      symbol: '',
-      buy_price: '',
-      quantity: '',
-      buy_date: '',
-      note: '',
-    });
+    setBuyForm(DEFAULT_BUY_FORM);
+    setEditingTradeId(null);
     setBuyOpen(false);
     await loadPortfolio();
   }
@@ -391,87 +490,175 @@ export default function DashboardPage() {
     }
 
     const symbol = sellForm.symbol.trim().toUpperCase();
-    const sellPrice = Number(sellForm.sell_price);
-    const sellQuantity = Number(sellForm.quantity);
+    const price = Number(sellForm.price);
+    const quantity = Number(sellForm.quantity);
 
-    if (!symbol || !sellPrice || !sellQuantity) {
+    if (!symbol || !price || !quantity) {
       setMessage('Nhập đủ mã, giá bán, số lượng');
       return;
     }
 
-    const lots = holdings
-      .filter((item) => item.symbol.toUpperCase() === symbol)
-      .sort((a, b) => {
-        const aTime = a.buy_date ? new Date(a.buy_date).getTime() : 0;
-        const bTime = b.buy_date ? new Date(b.buy_date).getTime() : 0;
-        return aTime - bTime;
+    if (editingTradeId) {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          symbol,
+          transaction_type: 'SELL',
+          price,
+          quantity,
+          trade_date: sellForm.trade_date || null,
+          note: sellForm.note.trim() || null,
+          avg_cost: null,
+          realized_pnl: null,
+        })
+        .eq('id', editingTradeId);
+
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('transactions').insert({
+        user_id: authData.user.id,
+        symbol,
+        transaction_type: 'SELL',
+        price,
+        quantity,
+        trade_date: sellForm.trade_date || null,
+        note: sellForm.note.trim() || null,
+        avg_cost: null,
+        realized_pnl: null,
       });
 
-    const availableQty = lots.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0);
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+    }
 
-    if (availableQty < sellQuantity) {
-      setMessage(`Số lượng bán vượt quá đang nắm giữ. Hiện có ${availableQty}`);
+    setSellForm(DEFAULT_SELL_FORM);
+    setEditingTradeId(null);
+    setSellOpen(false);
+    await loadPortfolio();
+  }
+
+  async function handleCashSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage('');
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      window.location.href = '/';
       return;
     }
 
-    let remaining = sellQuantity;
-    let costBasis = 0;
-
-    for (const lot of lots) {
-      if (remaining <= 0) break;
-
-      const lotQty = Number(lot.quantity || 0);
-      const consumeQty = Math.min(lotQty, remaining);
-      costBasis += consumeQty * Number(lot.buy_price || 0);
-
-      if (consumeQty === lotQty) {
-        const { error } = await supabase.from('holdings').delete().eq('id', lot.id);
-        if (error) {
-          setMessage(error.message);
-          return;
-        }
-      } else {
-        const { error } = await supabase
-          .from('holdings')
-          .update({ quantity: lotQty - consumeQty })
-          .eq('id', lot.id);
-        if (error) {
-          setMessage(error.message);
-          return;
-        }
-      }
-
-      remaining -= consumeQty;
+    const amount = Number(cashForm.amount);
+    if (!amount) {
+      setMessage('Nhập số tiền hợp lệ');
+      return;
     }
 
-    const avgCost = sellQuantity > 0 ? costBasis / sellQuantity : 0;
-    const realizedPnl = sellQuantity * sellPrice - costBasis;
+    if (editingCashId) {
+      const { error } = await supabase
+        .from('cash_transactions')
+        .update({
+          transaction_type: cashForm.transaction_type,
+          amount,
+          transaction_date: cashForm.transaction_date || null,
+          note: cashForm.note.trim() || null,
+        })
+        .eq('id', editingCashId);
 
-    const { error: transactionError } = await supabase.from('transactions').insert({
-      user_id: authData.user.id,
-      symbol,
-      transaction_type: 'SELL',
-      price: sellPrice,
-      quantity: sellQuantity,
-      trade_date: sellForm.trade_date || null,
-      note: sellForm.note.trim() || null,
-      avg_cost: avgCost,
-      realized_pnl: realizedPnl,
-    });
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('cash_transactions').insert({
+        user_id: authData.user.id,
+        transaction_type: cashForm.transaction_type,
+        amount,
+        transaction_date: cashForm.transaction_date || null,
+        note: cashForm.note.trim() || null,
+      });
 
-    if (transactionError) {
-      setMessage(transactionError.message);
+      if (error) {
+        setMessage(error.message);
+        return;
+      }
+    }
+
+    setCashForm(DEFAULT_CASH_FORM);
+    setEditingCashId(null);
+    setCashOpen(false);
+    await loadPortfolio();
+  }
+
+  function editTrade(item: Transaction) {
+    if (item.transaction_type === 'BUY') {
+      setBuyForm({
+        symbol: item.symbol,
+        price: String(item.price),
+        quantity: String(item.quantity),
+        trade_date: item.trade_date || '',
+        note: item.note || '',
+      });
+      setEditingTradeId(item.id);
+      setBuyOpen(true);
+      setSellOpen(false);
+      setCashOpen(false);
       return;
     }
 
     setSellForm({
-      symbol: '',
-      sell_price: '',
-      quantity: '',
-      trade_date: '',
-      note: '',
+      symbol: item.symbol,
+      price: String(item.price),
+      quantity: String(item.quantity),
+      trade_date: item.trade_date || '',
+      note: item.note || '',
     });
+    setEditingTradeId(item.id);
+    setSellOpen(true);
+    setBuyOpen(false);
+    setCashOpen(false);
+  }
+
+  function editCash(item: CashTransaction) {
+    setCashForm({
+      transaction_type: item.transaction_type,
+      amount: String(item.amount),
+      transaction_date: item.transaction_date || '',
+      note: item.note || '',
+    });
+    setEditingCashId(item.id);
+    setCashOpen(true);
+    setBuyOpen(false);
     setSellOpen(false);
+  }
+
+  async function deleteTrade(item: Transaction) {
+    if (!window.confirm(`Xóa giao dịch ${getTransactionLabel(item.transaction_type)} ${item.symbol}?`)) {
+      return;
+    }
+
+    const { error } = await supabase.from('transactions').delete().eq('id', item.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    await loadPortfolio();
+  }
+
+  async function deleteCash(item: CashTransaction) {
+    if (!window.confirm(`Xóa giao dịch ${getTransactionLabel(item.transaction_type)}?`)) {
+      return;
+    }
+
+    const { error } = await supabase.from('cash_transactions').delete().eq('id', item.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
     await loadPortfolio();
   }
 
@@ -538,19 +725,6 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleDeleteLot(id: string, symbol: string) {
-    if (!window.confirm('Xóa lệnh mua của ' + symbol + '?')) return;
-
-    const { error } = await supabase.from('holdings').delete().eq('id', id);
-
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    await loadPortfolio();
-  }
-
   function toggleSymbol(symbol: string) {
     setExpandedSymbols((prev) => ({ ...prev, [symbol]: !prev[symbol] }));
   }
@@ -583,42 +757,34 @@ export default function DashboardPage() {
             <>
               <article className="ab-premium-card ab-stat-premium neutral">
                 <div className="ab-stat-head">
-                  <Wallet size={16} />
-                  <span className="ab-soft-label">Tổng vốn</span>
+                  <Landmark size={16} />
+                  <span className="ab-soft-label">Vốn nạp ròng</span>
                 </div>
-                <div className="ab-big-number dark">{formatCurrency(summary.totalBuy)}</div>
+                <div className="ab-big-number dark">{formatCurrency(cashSummary.netCapital)}</div>
+              </article>
+
+              <article className="ab-premium-card ab-stat-premium neutral">
+                <div className="ab-stat-head">
+                  <Wallet size={16} />
+                  <span className="ab-soft-label">Tiền mặt</span>
+                </div>
+                <div className="ab-big-number dark">{formatCurrency(cashSummary.cashOnHand)}</div>
               </article>
 
               <article className="ab-premium-card ab-stat-premium neutral">
                 <div className="ab-stat-head">
                   <PieChart size={16} />
-                  <span className="ab-soft-label">Tổng giá trị</span>
+                  <span className="ab-soft-label">Giá trị thị trường</span>
                 </div>
                 <div className="ab-big-number dark">{formatCurrency(summary.totalNow)}</div>
               </article>
 
-              <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
-                <div className="ab-stat-head">
-                  {dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                  <span className="ab-soft-label">Lãi/lỗ ngày</span>
-                </div>
-                <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>
-                  {formatCurrency(dayPnl)}
-                </div>
-              </article>
-
-              <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
+              <article className="ab-premium-card ab-stat-premium neutral">
                 <div className="ab-stat-head">
                   <TrendingUp size={16} />
-                  <span className="ab-soft-label">Lãi/lỗ tạm tính</span>
+                  <span className="ab-soft-label">NAV</span>
                 </div>
-                <div className="ab-big-number" style={{ color: getChangeColor(summary.totalPnl) }}>
-                  {formatCurrency(summary.totalPnl)}
-                </div>
-                <div className="ab-stat-sub" style={{ color: getChangeColor(summary.totalPnl) }}>
-                  {summaryPct >= 0 ? '+' : ''}
-                  {summaryPct.toFixed(2)}%
-                </div>
+                <div className="ab-big-number dark">{formatCurrency(nav)}</div>
               </article>
             </>
           )}
@@ -626,9 +792,23 @@ export default function DashboardPage() {
 
         {!loading ? (
           <section className="ab-summary-grid premium-summary-grid compact-top-grid">
-            <article className={`ab-premium-card ab-stat-premium ${statTone(realizedSummary.totalRealizedPnl)}`}>
+            <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
               <div className="ab-stat-head">
                 <TrendingUp size={16} />
+                <span className="ab-soft-label">Lãi/lỗ tạm tính</span>
+              </div>
+              <div className="ab-big-number" style={{ color: getChangeColor(summary.totalPnl) }}>
+                {formatCurrency(summary.totalPnl)}
+              </div>
+            </article>
+
+            <article
+              className={`ab-premium-card ab-stat-premium ${statTone(
+                realizedSummary.totalRealizedPnl
+              )}`}
+            >
+              <div className="ab-stat-head">
+                <TrendingDown size={16} />
                 <span className="ab-soft-label">Lãi/lỗ đã chốt</span>
               </div>
               <div
@@ -642,6 +822,30 @@ export default function DashboardPage() {
                 style={{ color: getChangeColor(realizedSummary.totalRealizedPnl) }}
               >
                 {realizedSummary.totalSellOrders} lệnh bán
+              </div>
+            </article>
+
+            <article className={`ab-premium-card ab-stat-premium ${statTone(totalPnl)}`}>
+              <div className="ab-stat-head">
+                <TrendingUp size={16} />
+                <span className="ab-soft-label">Tổng lãi/lỗ</span>
+              </div>
+              <div className="ab-big-number" style={{ color: getChangeColor(totalPnl) }}>
+                {formatCurrency(totalPnl)}
+              </div>
+              <div className="ab-stat-sub" style={{ color: getChangeColor(totalPnl) }}>
+                {summaryPct >= 0 ? '+' : ''}
+                {summaryPct.toFixed(2)}%
+              </div>
+            </article>
+
+            <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
+              <div className="ab-stat-head">
+                {dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+                <span className="ab-soft-label">Lãi/lỗ ngày</span>
+              </div>
+              <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>
+                {formatCurrency(dayPnl)}
               </div>
             </article>
           </section>
@@ -690,7 +894,8 @@ export default function DashboardPage() {
                         width: `${Math.max(item.percent, 2)}%`,
                         height: '100%',
                         borderRadius: 999,
-                        background: 'linear-gradient(90deg, rgba(37,99,235,0.95), rgba(59,130,246,0.75))',
+                        background:
+                          'linear-gradient(90deg, rgba(37,99,235,0.95), rgba(59,130,246,0.75))',
                       }}
                     />
                   </div>
@@ -723,7 +928,7 @@ export default function DashboardPage() {
           </section>
         ) : positions.length === 0 ? (
           <section className="ab-premium-card ab-form-shell compact">
-            <div className="ab-note">Chưa có vị thế nào trong danh mục</div>
+            <div className="ab-note">Chưa có vị thế mở nào trong danh mục</div>
           </section>
         ) : (
           <section className="ab-position-grid">
@@ -739,7 +944,7 @@ export default function DashboardPage() {
                     <div>
                       <div className="ab-symbol premium">{position.symbol}</div>
                       <div className="ab-soft-label mini-top">
-                        {position.holdings.length} lệnh mua · SL {position.quantity}
+                        {position.holdings.length} lệnh mua mở · SL {position.quantity}
                       </div>
                     </div>
 
@@ -821,13 +1026,6 @@ export default function DashboardPage() {
                               Giá mua {formatCurrency(Number(holding.buy_price))}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            className="ab-delete ghost"
-                            onClick={() => handleDeleteLot(holding.id, holding.symbol)}
-                          >
-                            Xóa
-                          </button>
                         </div>
                       ))}
                     </div>
@@ -839,14 +1037,12 @@ export default function DashboardPage() {
         )}
 
         <section className="ab-premium-card ab-form-shell compact">
-          <button
-            type="button"
-            className="ab-section-toggle"
-            onClick={() => setBuyOpen((v) => !v)}
-          >
+          <button type="button" className="ab-section-toggle" onClick={() => setBuyOpen((v) => !v)}>
             <div className="ab-section-toggle-copy">
-              <div className="ab-card-kicker">Danh mục</div>
-              <div className="ab-section-toggle-title">Thêm lệnh mua</div>
+              <div className="ab-card-kicker">Giao dịch</div>
+              <div className="ab-section-toggle-title">
+                {editingTradeId && buyOpen ? 'Sửa lệnh mua' : 'Thêm lệnh mua'}
+              </div>
             </div>
             <div className="ab-section-toggle-icon">
               {buyOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -863,8 +1059,8 @@ export default function DashboardPage() {
                 className="ab-input"
               />
               <input
-                value={buyForm.buy_price}
-                onChange={(e) => setBuyForm({ ...buyForm, buy_price: e.target.value })}
+                value={buyForm.price}
+                onChange={(e) => setBuyForm({ ...buyForm, price: e.target.value })}
                 type="number"
                 placeholder="Giá mua"
                 required
@@ -879,8 +1075,8 @@ export default function DashboardPage() {
                 className="ab-input"
               />
               <input
-                value={buyForm.buy_date}
-                onChange={(e) => setBuyForm({ ...buyForm, buy_date: e.target.value })}
+                value={buyForm.trade_date}
+                onChange={(e) => setBuyForm({ ...buyForm, trade_date: e.target.value })}
                 type="date"
                 className="ab-input"
               />
@@ -890,22 +1086,35 @@ export default function DashboardPage() {
                 placeholder="Ghi chú"
                 className="ab-input ab-full"
               />
-              <button type="submit" className="ab-btn ab-btn-primary">
-                Thêm lệnh mua
-              </button>
+              <div className="ab-row-gap">
+                <button type="submit" className="ab-btn ab-btn-primary">
+                  {editingTradeId ? 'Lưu lệnh mua' : 'Thêm lệnh mua'}
+                </button>
+                {editingTradeId ? (
+                  <button
+                    type="button"
+                    className="ab-btn ab-btn-subtle"
+                    onClick={() => {
+                      setEditingTradeId(null);
+                      setBuyForm(DEFAULT_BUY_FORM);
+                      setBuyOpen(false);
+                    }}
+                  >
+                    Hủy
+                  </button>
+                ) : null}
+              </div>
             </form>
           ) : null}
         </section>
 
         <section className="ab-premium-card ab-form-shell compact">
-          <button
-            type="button"
-            className="ab-section-toggle"
-            onClick={() => setSellOpen((v) => !v)}
-          >
+          <button type="button" className="ab-section-toggle" onClick={() => setSellOpen((v) => !v)}>
             <div className="ab-section-toggle-copy">
-              <div className="ab-card-kicker">Danh mục</div>
-              <div className="ab-section-toggle-title">Thêm lệnh bán</div>
+              <div className="ab-card-kicker">Giao dịch</div>
+              <div className="ab-section-toggle-title">
+                {editingTradeId && sellOpen ? 'Sửa lệnh bán' : 'Thêm lệnh bán'}
+              </div>
             </div>
             <div className="ab-section-toggle-icon">
               {sellOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
@@ -922,8 +1131,8 @@ export default function DashboardPage() {
                 className="ab-input"
               />
               <input
-                value={sellForm.sell_price}
-                onChange={(e) => setSellForm({ ...sellForm, sell_price: e.target.value })}
+                value={sellForm.price}
+                onChange={(e) => setSellForm({ ...sellForm, price: e.target.value })}
                 type="number"
                 placeholder="Giá bán"
                 required
@@ -949,9 +1158,94 @@ export default function DashboardPage() {
                 placeholder="Ghi chú"
                 className="ab-input ab-full"
               />
-              <button type="submit" className="ab-btn ab-btn-primary">
-                Thêm lệnh bán
-              </button>
+              <div className="ab-row-gap">
+                <button type="submit" className="ab-btn ab-btn-primary">
+                  {editingTradeId ? 'Lưu lệnh bán' : 'Thêm lệnh bán'}
+                </button>
+                {editingTradeId ? (
+                  <button
+                    type="button"
+                    className="ab-btn ab-btn-subtle"
+                    onClick={() => {
+                      setEditingTradeId(null);
+                      setSellForm(DEFAULT_SELL_FORM);
+                      setSellOpen(false);
+                    }}
+                  >
+                    Hủy
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          ) : null}
+        </section>
+
+        <section className="ab-premium-card ab-form-shell compact">
+          <button type="button" className="ab-section-toggle" onClick={() => setCashOpen((v) => !v)}>
+            <div className="ab-section-toggle-copy">
+              <div className="ab-card-kicker">Tiền mặt</div>
+              <div className="ab-section-toggle-title">
+                {editingCashId && cashOpen ? 'Sửa nạp/rút tiền' : 'Nạp / Rút tiền'}
+              </div>
+            </div>
+            <div className="ab-section-toggle-icon">
+              {cashOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
+          </button>
+
+          {cashOpen ? (
+            <form onSubmit={handleCashSubmit} className="ab-form-grid compact-form-grid mt-16">
+              <select
+                value={cashForm.transaction_type}
+                onChange={(e) =>
+                  setCashForm({
+                    ...cashForm,
+                    transaction_type: e.target.value as 'DEPOSIT' | 'WITHDRAW',
+                  })
+                }
+                className="ab-input"
+              >
+                <option value="DEPOSIT">Nạp tiền</option>
+                <option value="WITHDRAW">Rút tiền</option>
+              </select>
+              <input
+                value={cashForm.amount}
+                onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })}
+                type="number"
+                placeholder="Số tiền"
+                required
+                className="ab-input"
+              />
+              <input
+                value={cashForm.transaction_date}
+                onChange={(e) => setCashForm({ ...cashForm, transaction_date: e.target.value })}
+                type="date"
+                className="ab-input"
+              />
+              <input
+                value={cashForm.note}
+                onChange={(e) => setCashForm({ ...cashForm, note: e.target.value })}
+                placeholder="Ghi chú"
+                className="ab-input ab-full"
+              />
+              <div className="ab-row-gap">
+                <button type="submit" className="ab-btn ab-btn-primary">
+                  {editingCashId ? 'Lưu giao dịch tiền' : 'Lưu giao dịch tiền'}
+                </button>
+                {editingCashId ? (
+                  <button
+                    type="button"
+                    className="ab-btn ab-btn-subtle"
+                    onClick={() => {
+                      setEditingCashId(null);
+                      setCashForm(DEFAULT_CASH_FORM);
+                      setCashOpen(false);
+                    }}
+                  >
+                    Hủy
+                  </button>
+                ) : null}
+              </div>
             </form>
           ) : null}
         </section>
@@ -963,7 +1257,7 @@ export default function DashboardPage() {
             onClick={() => setHistoryOpen((v) => !v)}
           >
             <div className="ab-section-toggle-copy">
-              <div className="ab-card-kicker">Danh mục</div>
+              <div className="ab-card-kicker">Giao dịch</div>
               <div className="ab-section-toggle-title">Nhật ký giao dịch</div>
             </div>
             <div className="ab-section-toggle-icon">
@@ -972,27 +1266,102 @@ export default function DashboardPage() {
           </button>
 
           {historyOpen ? (
-            <div className="ab-mini-list mt-16">
-              {transactions.length ? (
-                transactions.map((tx) => (
-                  <div key={tx.id} className="ab-mini-row">
-                    <div>
-                      <div className="ab-mini-symbol">
-                        {tx.transaction_type === 'BUY' ? 'Mua' : 'Bán'} · {tx.symbol} · SL {tx.quantity}
+            <>
+              <div className="ab-row-gap mt-16">
+                <select
+                  value={historyFilter}
+                  onChange={(e) => setHistoryFilter(e.target.value as TxTypeFilter)}
+                  className="ab-input"
+                >
+                  <option value="ALL">Tất cả</option>
+                  <option value="BUY">Mua</option>
+                  <option value="SELL">Bán</option>
+                  <option value="DEPOSIT">Nạp tiền</option>
+                  <option value="WITHDRAW">Rút tiền</option>
+                </select>
+                <input
+                  value={historySymbol}
+                  onChange={(e) => setHistorySymbol(e.target.value)}
+                  placeholder="Lọc theo mã"
+                  className="ab-input"
+                />
+              </div>
+
+              <div className="ab-mini-list mt-16">
+                {historyRows.length ? (
+                  historyRows.map((row) => {
+                    if (row.kind === 'trade') {
+                      const item = row.item;
+                      const realizedText =
+                        item.transaction_type === 'SELL'
+                          ? ` · Đã chốt ${formatCurrency(Number(item.realized_pnl || 0))}`
+                          : '';
+
+                      return (
+                        <div key={item.id} className="ab-mini-row">
+                          <div>
+                            <div className="ab-mini-symbol">
+                              {getTransactionLabel(item.transaction_type)} · {item.symbol} · SL{' '}
+                              {item.quantity}
+                            </div>
+                            <div className="ab-mini-price">
+                              {formatTradeDate(item.trade_date)} · Giá {formatCurrency(Number(item.price))}
+                              {realizedText}
+                            </div>
+                          </div>
+                          <div className="ab-row-gap">
+                            <button
+                              type="button"
+                              className="ab-btn ab-btn-subtle"
+                              onClick={() => editTrade(item)}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              className="ab-delete ghost"
+                              onClick={() => deleteTrade(item)}
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const item = row.item;
+                    return (
+                      <div key={item.id} className="ab-mini-row">
+                        <div>
+                          <div className="ab-mini-symbol">{getTransactionLabel(item.transaction_type)}</div>
+                          <div className="ab-mini-price">
+                            {formatTradeDate(item.transaction_date)} · {formatCurrency(Number(item.amount))}
+                          </div>
+                        </div>
+                        <div className="ab-row-gap">
+                          <button
+                            type="button"
+                            className="ab-btn ab-btn-subtle"
+                            onClick={() => editCash(item)}
+                          >
+                            Sửa
+                          </button>
+                          <button
+                            type="button"
+                            className="ab-delete ghost"
+                            onClick={() => deleteCash(item)}
+                          >
+                            Xóa
+                          </button>
+                        </div>
                       </div>
-                      <div className="ab-mini-price">
-                        {formatTradeDate(tx.trade_date)} · Giá {formatCurrency(Number(tx.price))}
-                        {tx.transaction_type === 'SELL' && tx.realized_pnl !== null
-                          ? ` · Đã chốt ${formatCurrency(Number(tx.realized_pnl || 0))}`
-                          : ''}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="ab-note">Chưa có lịch sử giao dịch</div>
-              )}
-            </div>
+                    );
+                  })
+                ) : (
+                  <div className="ab-note">Chưa có lịch sử giao dịch</div>
+                )}
+              </div>
+            </>
           ) : null}
         </section>
 
@@ -1081,13 +1450,7 @@ export default function DashboardPage() {
               </form>
 
               <div className="ab-note mt-12">
-                Báo cáo tập trung theo <strong>vị thế gộp theo mã</strong>, dù một mã có nhiều
-                lệnh mua riêng.
-              </div>
-
-              <div className="ab-note mt-12">
-                Cách lấy chat_id: mở bot Telegram, bấm <strong>/start</strong>, rồi lấy
-                chat_id từ <strong>getUpdates</strong>.
+                Báo cáo gồm tiền mặt, giá trị thị trường, NAV, lãi/lỗ tạm tính, lãi/lỗ đã chốt và chi tiết vị thế.
               </div>
 
               {telegramMessage ? <div className="ab-error mt-12">{telegramMessage}</div> : null}
@@ -1097,4 +1460,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-            }
+    }
