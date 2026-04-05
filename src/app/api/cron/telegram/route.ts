@@ -6,7 +6,7 @@ import {
   shouldSendDaily,
   TelegramSettingRow,
 } from '@/lib/telegram';
-import type { Holding } from '@/lib/calculations';
+import type { Transaction, CashTransaction, PriceMap } from '@/lib/calculations';
 
 type QuoteDebugItem = {
   symbol: string;
@@ -27,7 +27,7 @@ async function loadPrices(symbols: string[]) {
 
   const payload = await response.json();
   return {
-    prices: payload?.prices || {},
+    prices: (payload?.prices || {}) as PriceMap,
     debug: (payload?.debug || []) as QuoteDebugItem[],
   };
 }
@@ -62,20 +62,29 @@ export async function GET(request: NextRequest) {
       continue;
     }
 
-    const { data: holdingsRows } = await supabaseServer
-      .from('holdings')
-      .select('*')
-      .eq('user_id', settings.user_id)
-      .order('symbol', { ascending: true });
+    const [transactionsRes, cashRes] = await Promise.all([
+      supabaseServer
+        .from('transactions')
+        .select('*')
+        .eq('user_id', settings.user_id)
+        .order('trade_date', { ascending: true }),
+      supabaseServer
+        .from('cash_transactions')
+        .select('*')
+        .eq('user_id', settings.user_id)
+        .order('transaction_date', { ascending: true }),
+    ]);
 
-    const holdings = (holdingsRows || []) as Holding[];
-    if (!holdings.length) {
-      details.push({ user_id: settings.user_id, status: 'skip:no_holdings' });
+    const transactions = (transactionsRes.data || []) as Transaction[];
+    const cashTransactions = (cashRes.data || []) as CashTransaction[];
+
+    if (!transactions.length) {
+      details.push({ user_id: settings.user_id, status: 'skip:no_transactions' });
       continue;
     }
 
     try {
-      const symbols = [...new Set(holdings.map((h) => h.symbol.toUpperCase()))];
+      const symbols = [...new Set(transactions.map((h) => h.symbol.toUpperCase()))];
       const { prices, debug } = await loadPrices(symbols);
       const { debug: vnDebug } = await loadPrices(['VNINDEX']);
       const vnIndex = vnDebug?.[0] || null;
@@ -83,7 +92,7 @@ export async function GET(request: NextRequest) {
       const { data: userData } = await supabaseServer.auth.admin.getUserById(settings.user_id);
       const email = userData.user?.email || 'user@lcta.local';
 
-      const text = buildDailyMessage(email, holdings, prices, debug, vnIndex);
+      const text = buildDailyMessage(email, transactions, cashTransactions, prices, debug, vnIndex);
       await sendTelegramMessage(settings.chat_id, text);
 
       await supabaseServer
