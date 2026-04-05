@@ -286,7 +286,9 @@ export default function DashboardPage() {
 
     if (settingsRes.error) {
       setPortfolioSettings(null);
-      if (!transactionsRes.error && !cashRes.error) setMessage(settingsRes.error.message);
+      if (!transactionsRes.error && !cashRes.error) {
+        setMessage(settingsRes.error.message);
+      }
     } else {
       const settings = (settingsRes.data || null) as PortfolioSettings | null;
       setPortfolioSettings(settings);
@@ -691,6 +693,7 @@ export default function DashboardPage() {
       setMessage(error.message);
       return;
     }
+
     await loadPortfolio();
   }
 
@@ -704,6 +707,7 @@ export default function DashboardPage() {
       setMessage(error.message);
       return;
     }
+
     await loadPortfolio();
   }
 
@@ -1532,4 +1536,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-      }
+    }
