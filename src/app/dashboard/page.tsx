@@ -7,7 +7,6 @@ import {
   ChevronUp,
   Landmark,
   PieChart,
-  PlusCircle,
   Send,
   TrendingDown,
   TrendingUp,
@@ -25,6 +24,7 @@ import {
   enrichTransactions,
   formatCurrency,
   groupHoldingsBySymbol,
+  PortfolioSettings,
   PriceMap,
   Transaction,
 } from '@/lib/calculations';
@@ -157,7 +157,9 @@ function formatTradeDate(value?: string | null) {
   return new Intl.DateTimeFormat('vi-VN').format(new Date(value));
 }
 
-function getTransactionLabel(type: TxTypeFilter | Transaction['transaction_type'] | CashTransaction['transaction_type']) {
+function getTransactionLabel(
+  type: TxTypeFilter | Transaction['transaction_type'] | CashTransaction['transaction_type']
+) {
   switch (type) {
     case 'BUY':
       return 'Mua';
@@ -179,6 +181,7 @@ type HistoryRow =
 export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([]);
+  const [portfolioSettings, setPortfolioSettings] = useState<PortfolioSettings | null>(null);
   const [prices, setPrices] = useState<PriceMap>({});
   const [quotes, setQuotes] = useState<QuoteDebugItem[]>([]);
   const [vnIndex, setVnIndex] = useState<QuoteDebugItem | null>(null);
@@ -199,6 +202,8 @@ export default function DashboardPage() {
   const [buyForm, setBuyForm] = useState(DEFAULT_BUY_FORM);
   const [sellForm, setSellForm] = useState(DEFAULT_SELL_FORM);
   const [cashForm, setCashForm] = useState(DEFAULT_CASH_FORM);
+  const [cashAdjustmentInput, setCashAdjustmentInput] = useState('0');
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
 
   const [telegram, setTelegram] = useState<TelegramSettings>(DEFAULT_TELEGRAM);
   const [telegramLoading, setTelegramLoading] = useState(true);
@@ -251,7 +256,7 @@ export default function DashboardPage() {
 
     setEmail(authData.user.email || '');
 
-    const [transactionsRes, cashRes] = await Promise.all([
+    const [transactionsRes, cashRes, settingsRes] = await Promise.all([
       supabase
         .from('transactions')
         .select('*')
@@ -262,6 +267,7 @@ export default function DashboardPage() {
         .select('*')
         .order('transaction_date', { ascending: true, nullsFirst: false })
         .order('created_at', { ascending: true }),
+      supabase.from('portfolio_settings').select('*').maybeSingle(),
     ]);
 
     if (transactionsRes.error) {
@@ -276,6 +282,15 @@ export default function DashboardPage() {
       if (!transactionsRes.error) setMessage(cashRes.error.message);
     } else {
       setCashTransactions((cashRes.data || []) as CashTransaction[]);
+    }
+
+    if (settingsRes.error) {
+      setPortfolioSettings(null);
+      if (!transactionsRes.error && !cashRes.error) setMessage(settingsRes.error.message);
+    } else {
+      const settings = (settingsRes.data || null) as PortfolioSettings | null;
+      setPortfolioSettings(settings);
+      setCashAdjustmentInput(String(Number(settings?.cash_adjustment || 0)));
     }
 
     setLoading(false);
@@ -356,15 +371,14 @@ export default function DashboardPage() {
     [enrichedTransactions]
   );
   const cashSummary = useMemo(
-    () => calcCashSummary(cashTransactions, enrichedTransactions),
-    [cashTransactions, enrichedTransactions]
+    () => calcCashSummary(cashTransactions, enrichedTransactions, portfolioSettings),
+    [cashTransactions, enrichedTransactions, portfolioSettings]
   );
   const quoteMap = useMemo(() => getQuoteMap(quotes), [quotes]);
 
-  const nav = cashSummary.cashOnHand + summary.totalNow;
+  const nav = cashSummary.actualCash + summary.totalNow;
   const totalPnl = summary.totalPnl + realizedSummary.totalRealizedPnl;
-  const summaryPct =
-    cashSummary.netCapital > 0 ? (totalPnl / cashSummary.netCapital) * 100 : 0;
+  const summaryPct = cashSummary.netCapital > 0 ? (totalPnl / cashSummary.netCapital) * 100 : 0;
 
   const dayPnl = useMemo(
     () =>
@@ -594,6 +608,37 @@ export default function DashboardPage() {
     await loadPortfolio();
   }
 
+  async function handleSaveCashAdjustment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage('');
+    setSavingAdjustment(true);
+
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      window.location.href = '/';
+      return;
+    }
+
+    const cashAdjustment = Number(cashAdjustmentInput || 0);
+    const payload = {
+      user_id: authData.user.id,
+      cash_adjustment: Number.isFinite(cashAdjustment) ? cashAdjustment : 0,
+    };
+
+    const { error } = await supabase.from('portfolio_settings').upsert(payload, {
+      onConflict: 'user_id',
+    });
+
+    setSavingAdjustment(false);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    await loadPortfolio();
+  }
+
   function editTrade(item: Transaction) {
     if (item.transaction_type === 'BUY') {
       setBuyForm({
@@ -757,18 +802,10 @@ export default function DashboardPage() {
             <>
               <article className="ab-premium-card ab-stat-premium neutral">
                 <div className="ab-stat-head">
-                  <Landmark size={16} />
-                  <span className="ab-soft-label">Vốn nạp ròng</span>
-                </div>
-                <div className="ab-big-number dark">{formatCurrency(cashSummary.netCapital)}</div>
-              </article>
-
-              <article className="ab-premium-card ab-stat-premium neutral">
-                <div className="ab-stat-head">
                   <Wallet size={16} />
-                  <span className="ab-soft-label">Tiền mặt</span>
+                  <span className="ab-soft-label">Tiền mặt thực tế</span>
                 </div>
-                <div className="ab-big-number dark">{formatCurrency(cashSummary.cashOnHand)}</div>
+                <div className="ab-big-number dark">{formatCurrency(cashSummary.actualCash)}</div>
               </article>
 
               <article className="ab-premium-card ab-stat-premium neutral">
@@ -782,9 +819,23 @@ export default function DashboardPage() {
               <article className="ab-premium-card ab-stat-premium neutral">
                 <div className="ab-stat-head">
                   <TrendingUp size={16} />
-                  <span className="ab-soft-label">NAV</span>
+                  <span className="ab-soft-label">NAV thật</span>
                 </div>
                 <div className="ab-big-number dark">{formatCurrency(nav)}</div>
+              </article>
+
+              <article className={`ab-premium-card ab-stat-premium ${statTone(totalPnl)}`}>
+                <div className="ab-stat-head">
+                  <TrendingUp size={16} />
+                  <span className="ab-soft-label">Tổng lãi/lỗ</span>
+                </div>
+                <div className="ab-big-number" style={{ color: getChangeColor(totalPnl) }}>
+                  {formatCurrency(totalPnl)}
+                </div>
+                <div className="ab-stat-sub" style={{ color: getChangeColor(totalPnl) }}>
+                  {summaryPct >= 0 ? '+' : ''}
+                  {summaryPct.toFixed(2)}%
+                </div>
               </article>
             </>
           )}
@@ -792,6 +843,30 @@ export default function DashboardPage() {
 
         {!loading ? (
           <section className="ab-summary-grid premium-summary-grid compact-top-grid">
+            <article className="ab-premium-card ab-stat-premium neutral">
+              <div className="ab-stat-head">
+                <Landmark size={16} />
+                <span className="ab-soft-label">Tiền mặt tính toán</span>
+              </div>
+              <div className="ab-big-number dark">
+                {formatCurrency(cashSummary.calculatedCash)}
+              </div>
+            </article>
+
+            <article className={`ab-premium-card ab-stat-premium ${statTone(cashSummary.cashAdjustment)}`}>
+              <div className="ab-stat-head">
+                <TrendingUp size={16} />
+                <span className="ab-soft-label">Điều chỉnh tiền mặt</span>
+              </div>
+              <div
+                className="ab-big-number"
+                style={{ color: getChangeColor(cashSummary.cashAdjustment) }}
+              >
+                {cashSummary.cashAdjustment >= 0 ? '+' : ''}
+                {formatCurrency(cashSummary.cashAdjustment)}
+              </div>
+            </article>
+
             <article className={`ab-premium-card ab-stat-premium ${statTone(summary.totalPnl)}`}>
               <div className="ab-stat-head">
                 <TrendingUp size={16} />
@@ -824,30 +899,27 @@ export default function DashboardPage() {
                 {realizedSummary.totalSellOrders} lệnh bán
               </div>
             </article>
+          </section>
+        ) : null}
 
-            <article className={`ab-premium-card ab-stat-premium ${statTone(totalPnl)}`}>
-              <div className="ab-stat-head">
-                <TrendingUp size={16} />
-                <span className="ab-soft-label">Tổng lãi/lỗ</span>
+        {!loading ? (
+          <section className="ab-premium-card ab-form-shell compact">
+            <form onSubmit={handleSaveCashAdjustment} className="ab-form-grid compact-form-grid">
+              <div className="ab-card-kicker">Điều chỉnh tiền mặt</div>
+              <input
+                value={cashAdjustmentInput}
+                onChange={(e) => setCashAdjustmentInput(e.target.value)}
+                type="number"
+                className="ab-input"
+                placeholder="Nhập số điều chỉnh, có thể âm hoặc dương"
+              />
+              <div className="ab-note">
+                Tiền mặt thực tế = Tiền mặt tính toán + Điều chỉnh tiền mặt
               </div>
-              <div className="ab-big-number" style={{ color: getChangeColor(totalPnl) }}>
-                {formatCurrency(totalPnl)}
-              </div>
-              <div className="ab-stat-sub" style={{ color: getChangeColor(totalPnl) }}>
-                {summaryPct >= 0 ? '+' : ''}
-                {summaryPct.toFixed(2)}%
-              </div>
-            </article>
-
-            <article className={`ab-premium-card ab-stat-premium ${statTone(dayPnl)}`}>
-              <div className="ab-stat-head">
-                {dayPnl >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
-                <span className="ab-soft-label">Lãi/lỗ ngày</span>
-              </div>
-              <div className="ab-big-number" style={{ color: getChangeColor(dayPnl) }}>
-                {formatCurrency(dayPnl)}
-              </div>
-            </article>
+              <button type="submit" className="ab-btn ab-btn-primary">
+                {savingAdjustment ? 'Đang lưu...' : 'Lưu điều chỉnh'}
+              </button>
+            </form>
           </section>
         ) : null}
 
@@ -1450,7 +1522,7 @@ export default function DashboardPage() {
               </form>
 
               <div className="ab-note mt-12">
-                Báo cáo gồm tiền mặt, giá trị thị trường, NAV, lãi/lỗ tạm tính, lãi/lỗ đã chốt và chi tiết vị thế.
+                Báo cáo gồm tiền mặt thực tế, tiền mặt tính toán, điều chỉnh tiền mặt, giá trị thị trường, NAV thật và chi tiết vị thế.
               </div>
 
               {telegramMessage ? <div className="ab-error mt-12">{telegramMessage}</div> : null}
@@ -1460,4 +1532,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-    }
+      }
