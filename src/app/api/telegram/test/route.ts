@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { buildDailyMessage, QuoteDebugItem, sendTelegramMessage } from '@/lib/telegram';
-import type { Transaction, CashTransaction, PriceMap } from '@/lib/calculations';
+import type {
+  CashTransaction,
+  PortfolioSettings,
+  PriceMap,
+  Transaction,
+} from '@/lib/calculations';
 
 function getUserClient(accessToken: string) {
   return createClient(
@@ -52,20 +57,16 @@ export async function POST(request: NextRequest) {
   const user = userRes.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data: settings, error: settingsError } = await supabase
-    .from('telegram_settings')
-    .select('*')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (settingsError || !settings?.chat_id) {
-    return NextResponse.json({ error: 'Chưa cấu hình Telegram' }, { status: 400 });
-  }
-
-  const [transactionsRes, cashRes] = await Promise.all([
+  const [{ data: settings }, transactionsRes, cashRes, portfolioSettingsRes] = await Promise.all([
+    supabase.from('telegram_settings').select('*').eq('user_id', user.id).maybeSingle(),
     supabase.from('transactions').select('*').order('trade_date', { ascending: true }),
     supabase.from('cash_transactions').select('*').order('transaction_date', { ascending: true }),
+    supabase.from('portfolio_settings').select('*').eq('user_id', user.id).maybeSingle(),
   ]);
+
+  if (!settings?.chat_id) {
+    return NextResponse.json({ error: 'Chưa cấu hình Telegram' }, { status: 400 });
+  }
 
   if (transactionsRes.error) {
     return NextResponse.json({ error: transactionsRes.error.message }, { status: 500 });
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
 
   const transactions = (transactionsRes.data || []) as Transaction[];
   const cashTransactions = (cashRes.data || []) as CashTransaction[];
+  const portfolioSettings = (portfolioSettingsRes.data || null) as PortfolioSettings | null;
 
   if (!transactions.length) {
     return NextResponse.json({ error: 'Chưa có giao dịch trong danh mục' }, { status: 400 });
@@ -87,6 +89,7 @@ export async function POST(request: NextRequest) {
     user.email || 'user@lcta.local',
     transactions,
     cashTransactions,
+    portfolioSettings,
     prices,
     debug,
     vnIndex
