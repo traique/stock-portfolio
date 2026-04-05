@@ -1,15 +1,3 @@
-export type Holding = {
-  id: string;
-  user_id: string;
-  symbol: string;
-  buy_price: number;
-  quantity: number;
-  buy_date: string | null;
-  note: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
 export type Transaction = {
   id: string;
   user_id: string;
@@ -34,6 +22,13 @@ export type CashTransaction = {
   note: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type PortfolioSettings = {
+  user_id: string;
+  cash_adjustment: number;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type PriceMap = Record<string, number>;
@@ -291,7 +286,11 @@ export function calcRealizedSummary(transactions: Transaction[]) {
     );
 }
 
-export function calcCashSummary(cashTransactions: CashTransaction[], transactions: Transaction[]) {
+export function calcCashSummary(
+  cashTransactions: CashTransaction[],
+  transactions: Transaction[],
+  portfolioSettings?: PortfolioSettings | null
+) {
   const deposits = cashTransactions
     .filter((tx) => tx.transaction_type === 'DEPOSIT')
     .reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
@@ -309,9 +308,20 @@ export function calcCashSummary(cashTransactions: CashTransaction[], transaction
     .reduce((sum, tx) => sum + Number(tx.price || 0) * Number(tx.quantity || 0), 0);
 
   const netCapital = deposits - withdraws;
-  const cashOnHand = deposits - withdraws - buyOutflow + sellInflow;
+  const calculatedCash = deposits - withdraws - buyOutflow + sellInflow;
+  const cashAdjustment = Number(portfolioSettings?.cash_adjustment || 0);
+  const actualCash = calculatedCash + cashAdjustment;
 
-  return { deposits, withdraws, buyOutflow, sellInflow, netCapital, cashOnHand };
+  return {
+    deposits,
+    withdraws,
+    buyOutflow,
+    sellInflow,
+    netCapital,
+    calculatedCash,
+    cashAdjustment,
+    actualCash,
+  };
 }
 
 export function formatCurrency(value: number) {
@@ -320,4 +330,4 @@ export function formatCurrency(value: number) {
     currency: 'VND',
     maximumFractionDigits: 0,
   }).format(Number.isFinite(value) ? value : 0);
-                                      }
+}
