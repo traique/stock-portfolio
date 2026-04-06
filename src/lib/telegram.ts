@@ -100,9 +100,21 @@ export function buildDailyMessage(
   const summary = calcSummary(openHoldings, prices);
   const realized = calcRealizedSummary(transactions);
   const cash = calcCashSummary(cashTransactions, transactions, portfolioSettings);
-  const totalPnl = summary.totalPnl + realized.totalRealizedPnl;
-  const nav = cash.actualCash + summary.totalNow;
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
+
+  const totalCapital = cash.netCapital;
+  const actualNav = cash.actualCash;
+  const marketValue = summary.totalNow;
+  const totalAssets = actualNav + marketValue;
+  const totalPnl = totalAssets - totalCapital;
+
+  const dayPnl = positions.reduce((sum, position) => {
+    const quote = quoteMap.get(position.symbol.toUpperCase());
+    const change = Number(quote?.change || 0);
+    return sum + change * Number(position.quantity || 0);
+  }, 0);
+
+  const totalPnlPct = totalCapital > 0 ? (totalPnl / totalCapital) * 100 : 0;
 
   const rows = positions
     .map((position) => {
@@ -124,15 +136,14 @@ export function buildDailyMessage(
     `📊 <b>Tổng kết</b>`,
     ``,
     `👤 ${email.split('@')[0]}`,
-    `Tổng số mã: <b>${rows.length}</b>`,
-    `Tiền mặt thực tế: <b>${formatVnd(cash.actualCash)}</b>`,
-    `Tiền mặt tính toán: <b>${formatVnd(cash.calculatedCash)}</b>`,
-    `Điều chỉnh tiền mặt: <b>${cash.cashAdjustment >= 0 ? '+' : ''}${formatVnd(cash.cashAdjustment)}</b>`,
-    `Tổng giá trị thị trường: <b>${formatVnd(summary.totalNow)}</b>`,
-    `NAV thật: <b>${formatVnd(nav)}</b>`,
-    `Lãi/Lỗ tạm tính: <b>${summary.totalPnl >= 0 ? '+' : ''}${formatVnd(summary.totalPnl)}</b>`,
-    `Lãi/Lỗ đã chốt: <b>${realized.totalRealizedPnl >= 0 ? '+' : ''}${formatVnd(realized.totalRealizedPnl)}</b>`,
-    `Tổng lãi/Lỗ: <b>${totalPnl >= 0 ? '+' : ''}${formatVnd(totalPnl)}</b>`,
+    `Tổng vốn: <b>${formatVnd(totalCapital)}</b>`,
+    `NAV thực tế: <b>${formatVnd(actualNav)}</b>`,
+    `Giá trị thị trường: <b>${formatVnd(marketValue)}</b>`,
+    `Tổng tài sản: <b>${formatVnd(totalAssets)}</b>`,
+    `Tổng lãi/lỗ: <b>${totalPnl >= 0 ? '+' : ''}${formatVnd(totalPnl)}</b> (${formatPct(totalPnlPct)})`,
+    `Lãi/lỗ trong ngày: <b>${dayPnl >= 0 ? '+' : ''}${formatVnd(dayPnl)}</b>`,
+    `Lãi/lỗ cổ phiếu đang giữ: <b>${summary.totalPnl >= 0 ? '+' : ''}${formatVnd(summary.totalPnl)}</b>`,
+    `Lãi/lỗ đã chốt: <b>${realized.totalRealizedPnl >= 0 ? '+' : ''}${formatVnd(realized.totalRealizedPnl)}</b>`,
   ];
 
   if (vnIndex && Number.isFinite(vnIndex.price)) {
