@@ -290,9 +290,7 @@ export default function DashboardPage() {
 
     if (settingsRes.error) {
       setPortfolioSettings(null);
-      if (!transactionsRes.error && !cashRes.error) {
-        setMessage(settingsRes.error.message);
-      }
+      if (!transactionsRes.error && !cashRes.error) setMessage(settingsRes.error.message);
     } else {
       const settings = (settingsRes.data || null) as PortfolioSettings | null;
       const adjustment = Number(settings?.cash_adjustment || 0);
@@ -922,131 +920,6 @@ export default function DashboardPage() {
           </section>
         ) : null}
 
-        {!loading ? (
-          <section className="ab-premium-card ab-form-shell compact">
-            <div className="ab-card-kicker">Tiền mặt</div>
-
-            <div className="ab-row-gap mt-16">
-              <button
-                type="button"
-                className={`ab-btn ${cashMode === 'CASH' ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
-                onClick={() => setCashMode('CASH')}
-              >
-                Nạp / Rút tiền
-              </button>
-              <button
-                type="button"
-                className={`ab-btn ${cashMode === 'ADJUSTMENT' ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
-                onClick={() => setCashMode('ADJUSTMENT')}
-              >
-                Điều chỉnh tiền mặt
-              </button>
-            </div>
-
-            {cashMode === 'CASH' ? (
-              <form onSubmit={handleCashSubmit} className="ab-form-grid compact-form-grid mt-16">
-                <select
-                  value={cashForm.transaction_type}
-                  onChange={(e) =>
-                    setCashForm({
-                      ...cashForm,
-                      transaction_type: e.target.value as 'DEPOSIT' | 'WITHDRAW',
-                    })
-                  }
-                  className="ab-input"
-                >
-                  <option value="DEPOSIT">Nạp tiền</option>
-                  <option value="WITHDRAW">Rút tiền</option>
-                </select>
-                <input
-                  value={cashForm.amount}
-                  onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })}
-                  type="number"
-                  placeholder="Số tiền"
-                  required
-                  className="ab-input"
-                />
-                <input
-                  value={cashForm.transaction_date}
-                  onChange={(e) => setCashForm({ ...cashForm, transaction_date: e.target.value })}
-                  type="date"
-                  className="ab-input"
-                />
-                <input
-                  value={cashForm.note}
-                  onChange={(e) => setCashForm({ ...cashForm, note: e.target.value })}
-                  placeholder="Ghi chú"
-                  className="ab-input ab-full"
-                />
-                <div className="ab-row-gap">
-                  <button type="submit" className="ab-btn ab-btn-primary">
-                    {editingCashId ? 'Lưu giao dịch tiền' : 'Lưu giao dịch tiền'}
-                  </button>
-                  {editingCashId ? (
-                    <button
-                      type="button"
-                      className="ab-btn ab-btn-subtle"
-                      onClick={() => {
-                        setEditingCashId(null);
-                        setCashForm(DEFAULT_CASH_FORM);
-                        setCashOpen(false);
-                      }}
-                    >
-                      Hủy
-                    </button>
-                  ) : null}
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleSaveCashAdjustment} className="ab-form-grid compact-form-grid mt-16">
-                <div className="ab-row-gap">
-                  <button
-                    type="button"
-                    className={`ab-btn ${adjustmentSign === 1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
-                    onClick={() => setAdjustmentSign(1)}
-                  >
-                    Dương (+)
-                  </button>
-                  <button
-                    type="button"
-                    className={`ab-btn ${adjustmentSign === -1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
-                    onClick={() => setAdjustmentSign(-1)}
-                  >
-                    Âm (-)
-                  </button>
-                </div>
-
-                <input
-                  value={adjustmentAmountInput}
-                  onChange={(e) => setAdjustmentAmountInput(e.target.value)}
-                  type="number"
-                  inputMode="decimal"
-                  className="ab-input"
-                  placeholder="Nhập số điều chỉnh"
-                />
-
-                <div className="ab-note">
-                  Tiền mặt tính toán: <strong>{formatCurrency(cashSummary.calculatedCash)}</strong>
-                </div>
-                <div className="ab-note">
-                  Điều chỉnh hiện tại:{' '}
-                  <strong>
-                    {cashSummary.cashAdjustment >= 0 ? '+' : ''}
-                    {formatCurrency(cashSummary.cashAdjustment)}
-                  </strong>
-                </div>
-                <div className="ab-note">
-                  NAV thực tế = Tiền mặt tính toán + Điều chỉnh tiền mặt
-                </div>
-
-                <button type="submit" className="ab-btn ab-btn-primary">
-                  {savingAdjustment ? 'Đang lưu...' : 'Lưu điều chỉnh'}
-                </button>
-              </form>
-            )}
-          </section>
-        ) : null}
-
         {vnIndex ? (
           <section className="ab-premium-card ab-form-shell compact">
             <div className="ab-row-between align-center">
@@ -1380,6 +1253,144 @@ export default function DashboardPage() {
           <button
             type="button"
             className="ab-section-toggle"
+            onClick={() => setCashOpen((v) => !v)}
+          >
+            <div className="ab-section-toggle-copy">
+              <div className="ab-card-kicker">Tiền mặt</div>
+              <div className="ab-section-toggle-title">Nạp / Rút / Điều chỉnh tiền mặt</div>
+            </div>
+            <div className="ab-section-toggle-icon">
+              {cashOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
+          </button>
+
+          {cashOpen ? (
+            <>
+              <div className="ab-row-gap mt-16">
+                <button
+                  type="button"
+                  className={`ab-btn ${cashMode === 'CASH' ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
+                  onClick={() => setCashMode('CASH')}
+                >
+                  Nạp / Rút tiền
+                </button>
+                <button
+                  type="button"
+                  className={`ab-btn ${cashMode === 'ADJUSTMENT' ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
+                  onClick={() => setCashMode('ADJUSTMENT')}
+                >
+                  Điều chỉnh tiền mặt
+                </button>
+              </div>
+
+              {cashMode === 'CASH' ? (
+                <form onSubmit={handleCashSubmit} className="ab-form-grid compact-form-grid mt-16">
+                  <select
+                    value={cashForm.transaction_type}
+                    onChange={(e) =>
+                      setCashForm({
+                        ...cashForm,
+                        transaction_type: e.target.value as 'DEPOSIT' | 'WITHDRAW',
+                      })
+                    }
+                    className="ab-input"
+                  >
+                    <option value="DEPOSIT">Nạp tiền</option>
+                    <option value="WITHDRAW">Rút tiền</option>
+                  </select>
+                  <input
+                    value={cashForm.amount}
+                    onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })}
+                    type="number"
+                    placeholder="Số tiền"
+                    required
+                    className="ab-input"
+                  />
+                  <input
+                    value={cashForm.transaction_date}
+                    onChange={(e) => setCashForm({ ...cashForm, transaction_date: e.target.value })}
+                    type="date"
+                    className="ab-input"
+                  />
+                  <input
+                    value={cashForm.note}
+                    onChange={(e) => setCashForm({ ...cashForm, note: e.target.value })}
+                    placeholder="Ghi chú"
+                    className="ab-input ab-full"
+                  />
+                  <div className="ab-row-gap">
+                    <button type="submit" className="ab-btn ab-btn-primary">
+                      {editingCashId ? 'Lưu giao dịch tiền' : 'Lưu giao dịch tiền'}
+                    </button>
+                    {editingCashId ? (
+                      <button
+                        type="button"
+                        className="ab-btn ab-btn-subtle"
+                        onClick={() => {
+                          setEditingCashId(null);
+                          setCashForm(DEFAULT_CASH_FORM);
+                        }}
+                      >
+                        Hủy
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleSaveCashAdjustment} className="ab-form-grid compact-form-grid mt-16">
+                  <div className="ab-row-gap">
+                    <button
+                      type="button"
+                      className={`ab-btn ${adjustmentSign === 1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
+                      onClick={() => setAdjustmentSign(1)}
+                    >
+                      Dương (+)
+                    </button>
+                    <button
+                      type="button"
+                      className={`ab-btn ${adjustmentSign === -1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
+                      onClick={() => setAdjustmentSign(-1)}
+                    >
+                      Âm (-)
+                    </button>
+                  </div>
+
+                  <input
+                    value={adjustmentAmountInput}
+                    onChange={(e) => setAdjustmentAmountInput(e.target.value)}
+                    type="number"
+                    inputMode="decimal"
+                    className="ab-input"
+                    placeholder="Nhập số điều chỉnh"
+                  />
+
+                  <div className="ab-note">
+                    Tiền mặt tính toán: <strong>{formatCurrency(cashSummary.calculatedCash)}</strong>
+                  </div>
+                  <div className="ab-note">
+                    Điều chỉnh hiện tại:{' '}
+                    <strong>
+                      {cashSummary.cashAdjustment >= 0 ? '+' : ''}
+                      {formatCurrency(cashSummary.cashAdjustment)}
+                    </strong>
+                  </div>
+                  <div className="ab-note">
+                    NAV thực tế = Tiền mặt tính toán + Điều chỉnh tiền mặt
+                  </div>
+
+                  <button type="submit" className="ab-btn ab-btn-primary">
+                    {savingAdjustment ? 'Đang lưu...' : 'Lưu điều chỉnh'}
+                  </button>
+                </form>
+              )}
+            </>
+          ) : null}
+        </section>
+
+        <section className="ab-premium-card ab-form-shell compact">
+          <button
+            type="button"
+            className="ab-section-toggle"
             onClick={() => setHistoryOpen((v) => !v)}
           >
             <div className="ab-section-toggle-copy">
@@ -1554,8 +1565,7 @@ export default function DashboardPage() {
                 />
 
                 <div className="ab-note">
-                  Nhập theo giờ Việt Nam. Hệ thống tự đổi sang UTC khi lưu. Mặc định{' '}
-                  <strong>15</strong> = sau 15:00 Việt Nam.
+                  Báo cáo sẽ gửi theo tổng vốn, NAV thực tế, giá trị thị trường, tổng tài sản, tổng lãi/lỗ, lãi/lỗ trong ngày và chi tiết vị thế.
                 </div>
 
                 <div className="ab-row-gap">
@@ -1574,10 +1584,6 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </form>
-
-              <div className="ab-note mt-12">
-                Báo cáo gồm tổng vốn, NAV thực tế, giá trị thị trường, tổng tài sản, tổng lãi/lỗ và chi tiết vị thế.
-              </div>
 
               {telegramMessage ? <div className="ab-error mt-12">{telegramMessage}</div> : null}
             </>
