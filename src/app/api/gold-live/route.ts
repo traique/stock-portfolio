@@ -48,6 +48,16 @@ function toIsoFromUnix(value: unknown): string | null {
   return new Date(n * 1000).toISOString();
 }
 
+function toIsoFromDateAndTime(dateRaw: unknown, timeRaw: unknown): string | null {
+  const date = typeof dateRaw === 'string' ? dateRaw.trim() : '';
+  const time = typeof timeRaw === 'string' ? timeRaw.trim() : '';
+  if (!date || !time) return null;
+  const normalizedTime = /^\d{2}:\d{2}$/.test(time) ? `${time}:00` : time;
+  const parsed = new Date(`${date}T${normalizedTime}+07:00`);
+  if (!Number.isFinite(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
+
 function pickFirstNumber(...values: unknown[]): number | null {
   for (const value of values) {
     const n = toNumber(value);
@@ -145,6 +155,9 @@ async function scrapeWorldGoldFromHomePage() {
 
 async function fetchGoldType(code: GoldCode) {
   const { row, payload } = await fetchGoldApiType(code);
+  const sourceTime = typeof payload?.time === 'string' ? payload.time : null;
+  const sourceDate = typeof payload?.date === 'string' ? payload.date : null;
+  const sourceIso = toIsoFromDateAndTime(sourceDate, sourceTime);
 
   if (code === 'XAUUSD') {
     let worldPrice = pickFirstNumber(
@@ -192,10 +205,9 @@ async function fetchGoldType(code: GoldCode) {
       sell: worldPrice,
       changeBuy: worldChange,
       changeSell: worldChange,
-      updatedAt:
-        toIsoFromUnix(row?.update_time) ||
-        toIsoFromUnix(payload?.current_time) ||
-        new Date().toISOString(),
+      updatedAt: sourceIso || toIsoFromUnix(row?.update_time) || toIsoFromUnix(payload?.current_time) || new Date().toISOString(),
+      sourceTime,
+      sourceDate,
     };
   }
 
@@ -219,10 +231,9 @@ async function fetchGoldType(code: GoldCode) {
     sell,
     changeBuy,
     changeSell,
-    updatedAt:
-      toIsoFromUnix(row?.update_time) ||
-      toIsoFromUnix(payload?.current_time) ||
-      null,
+    updatedAt: sourceIso || toIsoFromUnix(row?.update_time) || toIsoFromUnix(payload?.current_time) || null,
+    sourceTime,
+    sourceDate,
   };
 }
 
@@ -252,9 +263,15 @@ export async function GET() {
       };
     });
 
+    const firstMeta = settled.find((result) => result.status === 'fulfilled' && (result.value.row.sourceTime || result.value.row.sourceDate));
+    const sourceTime = firstMeta && firstMeta.status === 'fulfilled' ? firstMeta.value.row.sourceTime : null;
+    const sourceDate = firstMeta && firstMeta.status === 'fulfilled' ? firstMeta.value.row.sourceDate : null;
+
     return NextResponse.json({
       provider: 'vang.today',
       updatedAt: new Date().toISOString(),
+      sourceTime,
+      sourceDate,
       cards,
     });
   } catch (error) {
