@@ -35,6 +35,18 @@ function tone(value?: number | null) {
   return (value as number) > 0 ? 'var(--green)' : 'var(--red)';
 }
 
+function fmtUpdated(value?: string | null) {
+  if (!value) return 'Đang cập nhật';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Đang cập nhật';
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date);
+}
+
 export default function GoldLivePage() {
   const [email, setEmail] = useState('');
   const [cards, setCards] = useState<GoldCard[]>([]);
@@ -93,6 +105,7 @@ export default function GoldLivePage() {
                     <div className="ab-soft-label">Giá hiện tại</div>
                     <div className="ab-price premium" style={{ fontSize: 32, marginTop: 10 }}>{fmt(item.sell, 2)}</div>
                     <div className="ab-soft-change under-price" style={{ color: tone(item.changeSell) }}>{fmtChange(item.changeSell, 2)}</div>
+                    <div className="ab-soft-label" style={{ marginTop: 10 }}>Cập nhật: {fmtUpdated(item.updatedAt)}</div>
                   </div>
                 ) : (
                   <div className="ab-mini-grid premium" style={{ marginTop: 16 }}>
@@ -108,6 +121,7 @@ export default function GoldLivePage() {
                     </div>
                   </div>
                 )}
+                {!isWorld ? <div className="ab-soft-label" style={{ marginTop: 12 }}>Cập nhật: {fmtUpdated(item.updatedAt)}</div> : null}
               </article>
             );
           })}
@@ -115,4 +129,4 @@ export default function GoldLivePage() {
       </div>
     </main>
   );
-}
+    }
