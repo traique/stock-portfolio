@@ -72,31 +72,35 @@ export default function BacktestPage() {
     setMessage('');
 
     try {
-      const response = await fetch(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712676508`, {
-        cache: 'no-store',
-      });
-      const raw = await response.text();
-      let data: ScanResponse = {};
-      try {
-        data = raw ? (JSON.parse(raw) as ScanResponse) : {};
-      } catch {
-        data = {};
-      }
+      const endpoints = [
+        `/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712676508`,
+        `/api/sieutinhieu/performance?symbol=${normalized}`,
+      ];
 
-      if (!response.ok || !data.success || !data.data) {
-        setScanData(null);
-        if (data.error) {
-          setMessage(data.error);
-        } else if (!response.ok) {
-          setMessage(`API backtest lỗi (${response.status}).`);
-        } else {
-          setMessage('Không tìm thấy dữ liệu backtest cho mã này.');
+      let finalError = 'Không tìm thấy dữ liệu backtest cho mã này.';
+
+      for (const endpoint of endpoints) {
+        const response = await fetch(endpoint, { cache: 'no-store' });
+        const raw = await response.text();
+        let data: ScanResponse = {};
+        try {
+          data = raw ? (JSON.parse(raw) as ScanResponse) : {};
+        } catch {
+          data = {};
         }
-        return;
+
+        if (response.ok && data.success && data.data) {
+          setScanData(data.data);
+          setSymbolInput(normalized);
+          return;
+        }
+
+        if (data.error) finalError = data.error;
+        else if (!response.ok) finalError = `API backtest lỗi (${response.status}).`;
       }
 
-      setScanData(data.data);
-      setSymbolInput(normalized);
+      setScanData(null);
+      setMessage(finalError);
     } catch {
       setScanData(null);
       setMessage('Kết nối API thất bại (network/CORS/server). Vui lòng thử lại sau.');
@@ -219,4 +223,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-                               }
+                }
