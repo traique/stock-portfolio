@@ -33,6 +33,18 @@ function tone(value?: number | null) {
   return (value as number) > 0 ? 'var(--green)' : 'var(--red)';
 }
 
+function fmtUpdated(value?: string | null) {
+  if (!value) return 'Đang cập nhật';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Đang cập nhật';
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date);
+}
+
 export default function OilLivePage() {
   const [email, setEmail] = useState('');
   const [cards, setCards] = useState<OilCard[]>([]);
@@ -88,6 +100,7 @@ export default function OilLivePage() {
                 <div className="ab-price premium" style={{ fontSize: 34 }}>{fmt(item.price)}</div>
                 <div className="ab-soft-label" style={{ marginTop: 10 }}>{item.unit}</div>
                 <div className="ab-soft-change under-price" style={{ color: tone(item.change) }}>{fmtChange(item.change)}</div>
+                <div className="ab-soft-label" style={{ marginTop: 10 }}>Cập nhật: {fmtUpdated(item.updatedAt)}</div>
               </article>
             );
           })}
