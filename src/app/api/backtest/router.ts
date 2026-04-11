@@ -28,6 +28,7 @@ export async function GET(request: Request) {
     }
 
     const payload = await res.json();
+
     return NextResponse.json({
       success: true,
       data: payload?.data ?? payload,
