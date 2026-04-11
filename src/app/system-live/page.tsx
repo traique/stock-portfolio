@@ -25,6 +25,11 @@ type LiveResponse = {
   count?: number;
 };
 
+function fmtPrice(value?: number | null) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 20 }).format(value);
+}
+
 function fmtMoney(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value);
@@ -190,7 +195,7 @@ export default function SystemLivePage() {
                     <tr key={`${signal.symbol || 'N/A'}-${index}`} style={{ borderTop: '1px solid var(--soft-2)' }}>
                       <td style={{ padding: '12px 10px', fontWeight: 700 }}>{signal.symbol || '—'}</td>
                       <td style={{ padding: '12px 10px', color: sideColor, fontWeight: 700 }}>{side}</td>
-                      <td style={{ padding: '12px 10px', textAlign: 'right' }}>{fmtMoney(signal.price)}</td>
+                      <td style={{ padding: '12px 10px', textAlign: 'right' }}>{fmtPrice(signal.price)}</td>
                       <td style={{ padding: '12px 10px', textAlign: 'right' }}>{fmtMoney(signal.trading_value)}</td>
                       <td style={{ padding: '12px 10px', textAlign: 'right' }}>{fmtDate(signal)}</td>
                     </tr>
