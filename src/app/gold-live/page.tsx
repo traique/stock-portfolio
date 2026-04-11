@@ -17,7 +17,7 @@ type GoldCard = {
   unit: string;
 };
 
-type GoldResponse = { cards?: GoldCard[]; error?: string };
+type GoldResponse = { cards?: GoldCard[]; sourceTime?: string | null; sourceDate?: string | null; error?: string };
 
 function fmt(value?: number | null, decimal = 0) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
@@ -35,7 +35,15 @@ function tone(value?: number | null) {
   return (value as number) > 0 ? 'var(--green)' : 'var(--red)';
 }
 
-function fmtUpdated(value?: string | null) {
+function fmtSourceDate(value?: string | null) {
+  if (!value) return '';
+  const [year, month, day] = value.split('-');
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
+function fmtUpdated(value?: string | null, sourceDate?: string | null, sourceTime?: string | null) {
+  if (sourceDate && sourceTime) return `${sourceTime} · ${fmtSourceDate(sourceDate)}`;
   if (!value) return 'Đang cập nhật';
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return 'Đang cập nhật';
@@ -50,6 +58,8 @@ function fmtUpdated(value?: string | null) {
 export default function GoldLivePage() {
   const [email, setEmail] = useState('');
   const [cards, setCards] = useState<GoldCard[]>([]);
+  const [sourceTime, setSourceTime] = useState<string | null>(null);
+  const [sourceDate, setSourceDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
@@ -65,7 +75,11 @@ export default function GoldLivePage() {
         const response = await fetch('/api/gold-live', { cache: 'no-store' });
         const data: GoldResponse = await response.json();
         if (!response.ok) setMessage(data?.error || 'Không lấy được dữ liệu giá vàng');
-        else setCards(data.cards || []);
+        else {
+          setCards(data.cards || []);
+          setSourceTime(data.sourceTime || null);
+          setSourceDate(data.sourceDate || null);
+        }
       } catch {
         setMessage('Lỗi kết nối dữ liệu giá vàng');
       } finally {
@@ -105,7 +119,7 @@ export default function GoldLivePage() {
                     <div className="ab-soft-label">Giá hiện tại</div>
                     <div className="ab-price premium" style={{ fontSize: 32, marginTop: 10 }}>{fmt(item.sell, 2)}</div>
                     <div className="ab-soft-change under-price" style={{ color: tone(item.changeSell) }}>{fmtChange(item.changeSell, 2)}</div>
-                    <div className="ab-soft-label" style={{ marginTop: 10 }}>Cập nhật: {fmtUpdated(item.updatedAt)}</div>
+                    <div className="ab-soft-label" style={{ marginTop: 10 }}>Cập nhật: {fmtUpdated(item.updatedAt, sourceDate, sourceTime)}</div>
                   </div>
                 ) : (
                   <div className="ab-mini-grid premium" style={{ marginTop: 16 }}>
@@ -121,7 +135,7 @@ export default function GoldLivePage() {
                     </div>
                   </div>
                 )}
-                {!isWorld ? <div className="ab-soft-label" style={{ marginTop: 12 }}>Cập nhật: {fmtUpdated(item.updatedAt)}</div> : null}
+                {!isWorld ? <div className="ab-soft-label" style={{ marginTop: 12 }}>Cập nhật: {fmtUpdated(item.updatedAt, sourceDate, sourceTime)}</div> : null}
               </article>
             );
           })}
@@ -129,4 +143,4 @@ export default function GoldLivePage() {
       </div>
     </main>
   );
-    }
+}
