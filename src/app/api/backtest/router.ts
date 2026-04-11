@@ -29,16 +29,14 @@ export async function GET(request: Request) {
 
     const payload = await res.json();
     return NextResponse.json({
-      provider: 'sieutinhieu',
-      symbol,
-      timeframe,
-      updatedAt: new Date().toISOString(),
+      success: true,
       data: payload?.data ?? payload,
     });
   } catch (error) {
     console.error('Performance fetch error:', error);
     return NextResponse.json(
       {
+        success: false,
         error: 'Failed to fetch performance data',
       },
       { status: 500 }
