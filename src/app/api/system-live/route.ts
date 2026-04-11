@@ -1,39 +1,55 @@
 import { NextResponse } from 'next/server';
 
+type SystemSignal = {
+  symbol: string;
+  signal_type: string;
+  price?: number | null;
+  trading_value?: number | null;
+  timestamp?: string | null;
+  created_at?: string | null;
+  ts?: number | null;
+};
+
 const headers = {
   Origin: 'https://sieutinhieu.vn',
   Referer: 'https://sieutinhieu.vn/',
   'User-Agent':
-    'Mozilla/5.0 (Linux; Android 11; SM-A705F Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36',
-  Accept: '*/*',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
 };
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const symbol = (searchParams.get('symbol') || '').trim().toUpperCase();
+    const limit = Math.min(Math.max(Number(searchParams.get('limit') || 30), 1), 100);
+    const signalType = (searchParams.get('type') || 'BUY').toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
+
     const timeframe = (searchParams.get('timeframe') || '1D').toUpperCase();
+    const upstream = `https://sieutinhieu.vn/api/v1/realtime-signals/live-signals/today-trend-changes?limit=${limit}&timeframe=${timeframe}&signal_type=${signalType}&include_all_today=false&sort_by=trading_value`;
 
-    if (!symbol) {
-      return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
-    }
-
-    const upstream = `https://sieutinhieu.vn/api/v1/signals/performance?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}&limit=5000&start=1712676508`;
-    const response = await fetch(upstream, { headers, cache: 'no-store' });
+    const response = await fetch(upstream, {
+      headers,
+      cache: 'no-store',
+    });
 
     if (!response.ok) {
       return NextResponse.json({ error: `Upstream failed: ${response.status}` }, { status: 502 });
     }
 
     const payload = await response.json();
-    const data = payload?.data ?? payload;
+    const signals = Array.isArray(payload?.signals)
+      ? (payload.signals as SystemSignal[])
+      : Array.isArray(payload?.data?.signals)
+      ? (payload.data.signals as SystemSignal[])
+      : Array.isArray(payload?.data)
+      ? (payload.data as SystemSignal[])
+      : [];
 
     return NextResponse.json({
       provider: 'sieutinhieu',
-      symbol,
-      timeframe,
+      type: signalType,
       updatedAt: new Date().toISOString(),
-      data,
+      count: signals.length,
+      signals,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
