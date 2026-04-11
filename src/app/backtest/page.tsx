@@ -71,13 +71,16 @@ export default function BacktestPage() {
     setMessage('');
 
     try {
-      const response = await fetch(`/api/system-live/scan?symbol=${normalized}&timeframe=1D`, { cache: 'no-store' });
-      const data: ScanResponse = await response.json();
+      const response = await fetch(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712824910`, { cache: 'no-store' });
+      const rawText = await response.text();
+      const data: ScanResponse = rawText ? (JSON.parse(rawText) as ScanResponse) : {};
+
       if (!response.ok) {
         setScanData(null);
         setMessage(data.error || 'Không tải được dữ liệu backtest');
         return;
       }
+
       setScanData(data.data || null);
       setSymbolInput(normalized);
     } catch {
@@ -202,4 +205,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-            }
+}
