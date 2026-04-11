@@ -121,6 +121,16 @@ function getTransactionLabel(type: TxTypeFilter | Transaction['transaction_type'
     default: return 'Tất cả';
   }
 }
+function formatIntegerInput(value: string) {
+  const digits = value.replace(/[^\d]/g, '');
+  if (!digits) return '';
+  return Number(digits).toLocaleString('en-US');
+}
+function parseIntegerInput(value: string) {
+  const digits = value.replace(/[^\d]/g, '');
+  if (!digits) return 0;
+  return Number(digits);
+}
 
 export default function DashboardPage() {
   const [userId, setUserId] = useState('');
@@ -316,8 +326,8 @@ export default function DashboardPage() {
     setMessage('');
     if (!userId) { setMessage('Phiên đăng nhập không hợp lệ'); return; }
     const symbol = tradeForm.symbol.trim().toUpperCase();
-    const price = Number(tradeForm.price);
-    const quantity = Number(tradeForm.quantity);
+    const price = parseIntegerInput(tradeForm.price);
+    const quantity = parseIntegerInput(tradeForm.quantity);
     if (!symbol || !price || !quantity) { setMessage(`Nhập đủ mã, giá ${tradeMode === 'BUY' ? 'mua' : 'bán'}, số lượng`); return; }
 
     if (editingTradeId) {
@@ -357,7 +367,7 @@ export default function DashboardPage() {
     event.preventDefault();
     setMessage('');
     if (!userId) { setMessage('Phiên đăng nhập không hợp lệ'); return; }
-    const amount = Number(cashForm.amount);
+    const amount = parseIntegerInput(cashForm.amount);
     if (!amount) { setMessage('Nhập số tiền hợp lệ'); return; }
 
     if (editingCashId) {
@@ -389,8 +399,7 @@ export default function DashboardPage() {
     setMessage('');
     setSavingAdjustment(true);
     if (!userId) { setSavingAdjustment(false); setMessage('Phiên đăng nhập không hợp lệ'); return; }
-    const normalized = adjustmentAmountInput.replace(/\s/g, '').replace(/,/g, '');
-    const baseAmount = Number(normalized || 0);
+    const baseAmount = parseIntegerInput(adjustmentAmountInput);
     if (!Number.isFinite(baseAmount)) { setSavingAdjustment(false); setMessage('Điều chỉnh tiền mặt không hợp lệ'); return; }
     const cashAdjustment = adjustmentSign * Math.abs(baseAmount);
     const { error } = await supabase.from('portfolio_settings').upsert({ user_id: userId, cash_adjustment: cashAdjustment }, { onConflict: 'user_id' });
@@ -403,8 +412,8 @@ export default function DashboardPage() {
     setTradeMode(item.transaction_type === 'SELL' ? 'SELL' : 'BUY');
     setTradeForm({
       symbol: item.symbol,
-      price: String(item.price),
-      quantity: String(item.quantity),
+      price: formatIntegerInput(String(item.price)),
+      quantity: formatIntegerInput(String(item.quantity)),
       trade_date: item.trade_date || '',
       note: item.note || '',
     });
@@ -417,7 +426,7 @@ export default function DashboardPage() {
     setCashMode('CASH');
     setCashForm({
       transaction_type: item.transaction_type,
-      amount: String(item.amount),
+      amount: formatIntegerInput(String(item.amount)),
       transaction_date: item.transaction_date || '',
       note: item.note || '',
     });
@@ -550,18 +559,6 @@ export default function DashboardPage() {
     <main className="ab-page">
       <div className="ab-shell premium-gap" style={{ gap: 12 }}>
         <AppShellHeader title="Danh mục cá nhân" isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
-        <section style={{ ...cardStyle, padding: 12 }}>
-          <div className="ab-row-between align-center" style={{ gap: 10, flexWrap: 'wrap' }}>
-            <div>
-              <div className="ab-card-kicker" style={{ color: muted() }}>Quản lý danh mục</div>
-              <div style={{ fontSize: 13, color: muted(), marginTop: 4 }}>Xóa sạch dữ liệu để bắt đầu danh mục mới.</div>
-            </div>
-            <button type="button" className="ab-delete ghost" onClick={resetPortfolio} disabled={resettingPortfolio}>
-              <Trash2 size={14} />
-              {resettingPortfolio ? 'Đang xóa...' : 'Xóa toàn bộ danh mục'}
-            </button>
-          </div>
-        </section>
 
         <section className="ab-summary-grid premium-summary-grid compact-top-grid" style={{ gap: 10 }}>
           <StatCard label="Tổng vốn" value={loading ? '...' : formatCurrency(totalCapital)} icon={<Landmark size={16} />} strong />
@@ -600,7 +597,17 @@ export default function DashboardPage() {
 
         <Section kicker="Giao dịch" title={editingTradeId ? `Sửa lệnh ${tradeMode === 'BUY' ? 'mua' : 'bán'}` : 'Thêm giao dịch'} open={tradeOpen} onToggle={() => setTradeOpen((v) => !v)}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><button type="button" className={`ab-btn ${tradeMode === 'BUY' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setTradeMode('BUY')} style={{ ...btnStyle, flex: 1 }}>Lệnh mua</button><button type="button" className={`ab-btn ${tradeMode === 'SELL' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setTradeMode('SELL')} style={{ ...btnStyle, flex: 1 }}>Lệnh bán</button></div>
-          <form onSubmit={handleTradeSubmit} className="ab-form-grid compact-form-grid"><input value={tradeForm.symbol} onChange={(e) => setTradeForm({ ...tradeForm, symbol: e.target.value })} placeholder="Mã" className="ab-input" style={inputStyle} /><input value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: e.target.value })} type="number" placeholder={tradeMode === 'BUY' ? 'Giá mua' : 'Giá bán'} className="ab-input" style={inputStyle} /><input value={tradeForm.quantity} onChange={(e) => setTradeForm({ ...tradeForm, quantity: e.target.value })} type="number" placeholder="Số lượng" className="ab-input" style={inputStyle} /><input value={tradeForm.trade_date} onChange={(e) => setTradeForm({ ...tradeForm, trade_date: e.target.value })} type="date" className="ab-input" style={inputStyle} /><input value={tradeForm.note} onChange={(e) => setTradeForm({ ...tradeForm, note: e.target.value })} placeholder="Ghi chú" className="ab-input ab-full" style={inputStyle} /><div className="ab-row-gap"><button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{editingTradeId ? 'Lưu giao dịch' : 'Lưu giao dịch'}</button>{editingTradeId ? <button type="button" className="ab-btn ab-btn-subtle" onClick={() => { setEditingTradeId(null); setTradeForm(DEFAULT_TRADE_FORM); setTradeOpen(false); }} style={btnStyle}>Hủy</button> : null}</div></form>
+          <form onSubmit={handleTradeSubmit} className="ab-form-grid compact-form-grid">
+            <input value={tradeForm.symbol} onChange={(e) => setTradeForm({ ...tradeForm, symbol: e.target.value.toUpperCase() })} placeholder="Mã" className="ab-input" style={inputStyle} />
+            <input value={tradeForm.price} onChange={(e) => setTradeForm({ ...tradeForm, price: formatIntegerInput(e.target.value) })} type="text" inputMode="numeric" placeholder={tradeMode === 'BUY' ? 'Giá mua' : 'Giá bán'} className="ab-input" style={inputStyle} />
+            <input value={tradeForm.quantity} onChange={(e) => setTradeForm({ ...tradeForm, quantity: formatIntegerInput(e.target.value) })} type="text" inputMode="numeric" placeholder="Số lượng" className="ab-input" style={inputStyle} />
+            <input value={tradeForm.trade_date} onChange={(e) => setTradeForm({ ...tradeForm, trade_date: e.target.value })} type="date" className="ab-input" style={inputStyle} />
+            <input value={tradeForm.note} onChange={(e) => setTradeForm({ ...tradeForm, note: e.target.value })} placeholder="Ghi chú" className="ab-input ab-full" style={inputStyle} />
+            <div className="ab-row-gap">
+              <button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{editingTradeId ? 'Lưu giao dịch' : 'Lưu giao dịch'}</button>
+              {editingTradeId ? <button type="button" className="ab-btn ab-btn-subtle" onClick={() => { setEditingTradeId(null); setTradeForm(DEFAULT_TRADE_FORM); setTradeOpen(false); }} style={btnStyle}>Hủy</button> : null}
+            </div>
+          </form>
         </Section>
 
         <Section kicker="Giao dịch" title="Nhật ký giao dịch" open={historyOpen} onToggle={() => setHistoryOpen((v) => !v)}>
@@ -610,13 +617,25 @@ export default function DashboardPage() {
 
         <Section kicker="Tiền mặt" title="Nạp / Rút / Điều chỉnh tiền mặt" open={cashOpen} onToggle={() => setCashOpen((v) => !v)}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}><button type="button" className={`ab-btn ${cashMode === 'CASH' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setCashMode('CASH')} style={{ ...btnStyle, flex: 1 }}>Nạp / Rút</button><button type="button" className={`ab-btn ${cashMode === 'ADJUSTMENT' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setCashMode('ADJUSTMENT')} style={{ ...btnStyle, flex: 1 }}>Điều chỉnh</button></div>
-          {cashMode === 'CASH' ? <form onSubmit={handleCashSubmit} className="ab-form-grid compact-form-grid"><select value={cashForm.transaction_type} onChange={(e) => setCashForm({ ...cashForm, transaction_type: e.target.value as 'DEPOSIT' | 'WITHDRAW' })} className="ab-input" style={inputStyle}><option value="DEPOSIT">Nạp tiền</option><option value="WITHDRAW">Rút tiền</option></select><input value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: e.target.value })} type="number" placeholder="Số tiền" className="ab-input" style={inputStyle} /><input value={cashForm.transaction_date} onChange={(e) => setCashForm({ ...cashForm, transaction_date: e.target.value })} type="date" className="ab-input" style={inputStyle} /><input value={cashForm.note} onChange={(e) => setCashForm({ ...cashForm, note: e.target.value })} placeholder="Ghi chú" className="ab-input ab-full" style={inputStyle} /><div className="ab-row-gap"><button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>Lưu giao dịch tiền</button>{editingCashId ? <button type="button" className="ab-btn ab-btn-subtle" onClick={() => { setEditingCashId(null); setCashForm(DEFAULT_CASH_FORM); }} style={btnStyle}>Hủy</button> : null}</div></form> : <form onSubmit={handleSaveCashAdjustment} className="ab-form-grid compact-form-grid"><div style={{ display: 'flex', gap: 8 }}><button type="button" className={`ab-btn ${adjustmentSign === 1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setAdjustmentSign(1)} style={{ ...btnStyle, flex: 1 }}>Dương (+)</button><button type="button" className={`ab-btn ${adjustmentSign === -1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setAdjustmentSign(-1)} style={{ ...btnStyle, flex: 1 }}>Âm (-)</button></div><input value={adjustmentAmountInput} onChange={(e) => setAdjustmentAmountInput(e.target.value)} type="number" inputMode="decimal" className="ab-input" placeholder="Nhập số điều chỉnh" style={inputStyle} /><div className="ab-note" style={{ color: muted() }}>Tiền mặt tính toán: <strong style={{ color: fg() }}>{formatCurrency(cashSummary.calculatedCash)}</strong></div><div className="ab-note" style={{ color: muted() }}>Điều chỉnh hiện tại: <strong style={{ color: fg() }}>{cashSummary.cashAdjustment >= 0 ? '+' : ''}{formatCurrency(cashSummary.cashAdjustment)}</strong></div><button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{savingAdjustment ? 'Đang lưu...' : 'Lưu điều chỉnh'}</button></form>}
+          {cashMode === 'CASH' ? <form onSubmit={handleCashSubmit} className="ab-form-grid compact-form-grid"><select value={cashForm.transaction_type} onChange={(e) => setCashForm({ ...cashForm, transaction_type: e.target.value as 'DEPOSIT' | 'WITHDRAW' })} className="ab-input" style={inputStyle}><option value="DEPOSIT">Nạp tiền</option><option value="WITHDRAW">Rút tiền</option></select><input value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: formatIntegerInput(e.target.value) })} type="text" inputMode="numeric" placeholder="Số tiền" className="ab-input" style={inputStyle} /><input value={cashForm.transaction_date} onChange={(e) => setCashForm({ ...cashForm, transaction_date: e.target.value })} type="date" className="ab-input" style={inputStyle} /><input value={cashForm.note} onChange={(e) => setCashForm({ ...cashForm, note: e.target.value })} placeholder="Ghi chú" className="ab-input ab-full" style={inputStyle} /><div className="ab-row-gap"><button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>Lưu giao dịch tiền</button>{editingCashId ? <button type="button" className="ab-btn ab-btn-subtle" onClick={() => { setEditingCashId(null); setCashForm(DEFAULT_CASH_FORM); }} style={btnStyle}>Hủy</button> : null}</div></form> : <form onSubmit={handleSaveCashAdjustment} className="ab-form-grid compact-form-grid"><div style={{ display: 'flex', gap: 8 }}><button type="button" className={`ab-btn ${adjustmentSign === 1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setAdjustmentSign(1)} style={{ ...btnStyle, flex: 1 }}>Dương (+)</button><button type="button" className={`ab-btn ${adjustmentSign === -1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setAdjustmentSign(-1)} style={{ ...btnStyle, flex: 1 }}>Âm (-)</button></div><input value={adjustmentAmountInput} onChange={(e) => setAdjustmentAmountInput(formatIntegerInput(e.target.value))} type="text" inputMode="numeric" className="ab-input" placeholder="Nhập số điều chỉnh" style={inputStyle} /><div className="ab-note" style={{ color: muted() }}>Tiền mặt tính toán: <strong style={{ color: fg() }}>{formatCurrency(cashSummary.calculatedCash)}</strong></div><div className="ab-note" style={{ color: muted() }}>Điều chỉnh hiện tại: <strong style={{ color: fg() }}>{cashSummary.cashAdjustment >= 0 ? '+' : ''}{formatCurrency(cashSummary.cashAdjustment)}</strong></div><button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{savingAdjustment ? 'Đang lưu...' : 'Lưu điều chỉnh'}</button></form>}
         </Section>
 
         <Section kicker="Telegram" title="Báo cáo cuối ngày" open={telegramOpen} onToggle={() => setTelegramOpen((v) => !v)}>
           <form className="ab-form-grid compact-form-grid" onSubmit={handleSaveTelegram}><input value={telegram.chat_id} onChange={(e) => setTelegram({ ...telegram, chat_id: e.target.value })} placeholder="Nhập chat_id Telegram" className="ab-input ab-full" style={inputStyle} /><label className="ab-toggle-row" style={{ color: muted() }}><input type="checkbox" checked={telegram.is_enabled} onChange={(e) => setTelegram({ ...telegram, is_enabled: e.target.checked })} /><span>Bật báo cáo Telegram</span></label><label className="ab-toggle-row" style={{ color: muted() }}><input type="checkbox" checked={telegram.notify_daily} onChange={(e) => setTelegram({ ...telegram, notify_daily: e.target.checked })} /><span>Nhận báo cáo cuối ngày</span></label><input value={telegram.daily_hour_vn} onChange={(e) => setTelegram({ ...telegram, daily_hour_vn: clampHour(Number(e.target.value || 15)) })} type="number" min={0} max={23} className="ab-input" style={inputStyle} placeholder="Giờ Việt Nam" /><div className="ab-row-gap"><button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{telegramSaving ? 'Đang lưu...' : 'Lưu cấu hình'}</button><button type="button" className="ab-btn ab-btn-subtle" onClick={handleTelegramTest} disabled={telegramTesting || telegramLoading} style={btnStyle}><Send size={14} />{telegramTesting ? 'Đang gửi...' : 'Gửi báo cáo'}</button></div></form>{telegramMessage ? <div className="ab-error" style={{ marginTop: 10 }}>{telegramMessage}</div> : null}
         </Section>
+        <section style={{ ...cardStyle, padding: 12 }}>
+          <div className="ab-row-between align-center" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <div>
+              <div className="ab-card-kicker" style={{ color: muted() }}>Reset danh mục</div>
+              <div style={{ fontSize: 13, color: muted(), marginTop: 4 }}>Xóa toàn bộ để khởi tạo danh mục mới từ đầu.</div>
+            </div>
+            <button type="button" className="ab-delete ghost" onClick={resetPortfolio} disabled={resettingPortfolio}>
+              <Trash2 size={14} />
+              {resettingPortfolio ? 'Đang xóa...' : 'Xóa toàn bộ danh mục'}
+            </button>
+          </div>
+        </section>
       </div>
     </main>
   );
-  }
+      }
