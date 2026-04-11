@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import AppShellHeader from '@/components/app-shell-header';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -37,6 +38,9 @@ export default function LoginPage() {
         <p className="muted" style={{ marginTop: 8 }}>
           Dùng Supabase Auth với email và mật khẩu.
         </p>
+    <main className="ab-page">
+      <div className="ab-shell premium-gap">
+        <AppShellHeader title="Tài khoản" isLoggedIn={false} currentTab="home" />
 
         <form onSubmit={handleSubmit} className="stack" style={{ marginTop: 20 }}>
           <input
@@ -59,8 +63,36 @@ export default function LoginPage() {
             {loading ? 'Đang xử lý...' : signupMode ? 'Đăng ký' : 'Đăng nhập'}
           </button>
         </form>
+        <section className="ab-premium-card" style={{ padding: 24, maxWidth: 560, width: '100%', margin: '0 auto' }}>
+          <h1 style={{ margin: 0, fontSize: 30 }}>{signupMode ? 'Tạo tài khoản' : 'Đăng nhập'}</h1>
+          <p className="ab-soft-label" style={{ marginTop: 8 }}>
+            Dùng Supabase Auth với email và mật khẩu.
+          </p>
+
+          <form onSubmit={handleSubmit} className="ab-form-grid" style={{ marginTop: 20 }}>
+            <input
+              className="ab-input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <input
+              className="ab-input"
+              type="password"
+              placeholder="Mật khẩu"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            <button className="ab-btn ab-btn-primary" type="submit" disabled={loading}>
+              {loading ? 'Đang xử lý...' : signupMode ? 'Đăng ký' : 'Đăng nhập'}
+            </button>
+          </form>
 
         {message ? <p style={{ marginTop: 14, color: '#475569' }}>{message}</p> : null}
+          {message ? <p style={{ marginTop: 14, color: 'var(--muted)' }}>{message}</p> : null}
 
         <button
           className="btn"
@@ -71,6 +103,16 @@ export default function LoginPage() {
           {signupMode ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}
         </button>
       </section>
+          <button
+            className="ab-btn ab-btn-subtle"
+            type="button"
+            onClick={() => setSignupMode((current) => !current)}
+            style={{ marginTop: 12 }}
+          >
+            {signupMode ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}
+          </button>
+        </section>
+      </div>
     </main>
   );
 }
