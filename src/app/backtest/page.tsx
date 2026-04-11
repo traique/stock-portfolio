@@ -75,11 +75,23 @@ export default function BacktestPage() {
       const response = await fetch(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712676508`, {
         cache: 'no-store',
       });
-      const data: ScanResponse = await response.json();
+      const raw = await response.text();
+      let data: ScanResponse = {};
+      try {
+        data = raw ? (JSON.parse(raw) as ScanResponse) : {};
+      } catch {
+        data = {};
+      }
 
       if (!response.ok || !data.success || !data.data) {
         setScanData(null);
-        setMessage(data.error || 'Không lấy được dữ liệu backtest cho mã này');
+        if (data.error) {
+          setMessage(data.error);
+        } else if (!response.ok) {
+          setMessage(`API backtest lỗi (${response.status}).`);
+        } else {
+          setMessage('Không tìm thấy dữ liệu backtest cho mã này.');
+        }
         return;
       }
 
@@ -87,7 +99,7 @@ export default function BacktestPage() {
       setSymbolInput(normalized);
     } catch {
       setScanData(null);
-      setMessage('Không thể kết nối API backtest. Vui lòng thử lại sau.');
+      setMessage('Kết nối API thất bại (network/CORS/server). Vui lòng thử lại sau.');
     } finally {
       setScanLoading(false);
     }
@@ -207,4 +219,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-}
+                               }
