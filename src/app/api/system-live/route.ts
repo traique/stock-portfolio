@@ -4,7 +4,8 @@ const headers = {
   Origin: 'https://sieutinhieu.vn',
   Referer: 'https://sieutinhieu.vn/',
   'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Linux; Android 11; SM-A705F Build/RP1A.200720.012; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/146.0.7680.177 Mobile Safari/537.36',
+  Accept: '*/*',
 };
 
 export async function GET(request: Request) {
