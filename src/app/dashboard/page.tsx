@@ -3,17 +3,17 @@
 import {
   ArrowDownRight,
   ArrowUpRight,
-  ChevronDown,
-  ChevronUp,
   Landmark,
   PieChart,
   Send,
+  Trash2,
   TrendingDown,
   TrendingUp,
   Wallet,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShellHeader from '@/components/app-shell-header';
+import { DashboardSection as Section, DashboardStatCard as StatCard } from '@/components/dashboard/dashboard-primitives';
 import {
   calcCashSummary,
   calcPosition,
@@ -120,35 +120,6 @@ function getTransactionLabel(type: TxTypeFilter | Transaction['transaction_type'
     case 'WITHDRAW': return 'Rút tiền';
     default: return 'Tất cả';
   }
-}
-
-function Section({ kicker, title, open, onToggle, children }: { kicker: string; title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
-  return (
-    <section style={{ ...cardStyle, padding: 14 }}>
-      <button type="button" className="ab-section-toggle" onClick={onToggle} style={{ minHeight: 'unset', width: '100%', color: fg() }}>
-        <div className="ab-section-toggle-copy">
-          <div className="ab-card-kicker" style={{ color: muted() }}>{kicker}</div>
-          <div className="ab-section-toggle-title" style={{ fontSize: 18, color: fg() }}>{title}</div>
-        </div>
-        <div className="ab-section-toggle-icon" style={{ color: muted() }}>{open ? <ChevronUp size={18} /> : <ChevronDown size={18} />}</div>
-      </button>
-      {open ? <div style={{ marginTop: 12 }}>{children}</div> : null}
-    </section>
-  );
-}
-
-function StatCard({ label, value, icon, subValue, tone = 'neutral', strong = false }: { label: string; value: string; icon: React.ReactNode; subValue?: string; tone?: 'neutral' | 'up' | 'down'; strong?: boolean }) {
-  const color = tone === 'up' ? up() : tone === 'down' ? down() : fg();
-  return (
-    <article style={{ ...(strong ? strongCardStyle : cardStyle), padding: 14 }}>
-      <div className="ab-stat-head" style={{ marginBottom: 6, color: tone === 'neutral' ? muted() : color }}>
-        {icon}
-        <span className="ab-soft-label">{label}</span>
-      </div>
-      <div style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.15, color }}>{value}</div>
-      {subValue ? <div style={{ fontSize: 12, marginTop: 4, color: tone === 'neutral' ? muted() : color }}>{subValue}</div> : null}
-    </article>
-  );
 }
 
 export default function DashboardPage() {
@@ -468,6 +439,28 @@ export default function DashboardPage() {
     await loadPortfolio(userId, email);
   }
 
+  async function deleteSymbol(symbol: string) {
+    if (!userId) { setMessage('Phiên đăng nhập không hợp lệ'); return; }
+    const symbolUpper = symbol.toUpperCase();
+    const transactionCount = transactions.filter((item) => item.symbol.toUpperCase() === symbolUpper).length;
+    if (!window.confirm(`Xóa toàn bộ ${transactionCount} giao dịch của mã ${symbolUpper}? Hành động này sẽ cập nhật lại danh mục và lãi/lỗ.`)) return;
+    setMessage('');
+    const { error } = await supabase.from('transactions').delete().eq('user_id', userId).eq('symbol', symbolUpper);
+    if (error) { setMessage(error.message); return; }
+    setExpandedSymbols((prev) => {
+      const next = { ...prev };
+      delete next[symbolUpper];
+      return next;
+    });
+    if (editingTradeId && tradeForm.symbol.trim().toUpperCase() === symbolUpper) {
+      setEditingTradeId(null);
+      setTradeForm(DEFAULT_TRADE_FORM);
+      setTradeOpen(false);
+    }
+    if (historySymbol.trim().toUpperCase() === symbolUpper) setHistorySymbol('');
+    await loadPortfolio(userId, email);
+  }
+
   async function handleSaveTelegram(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTelegramSaving(true);
@@ -545,7 +538,7 @@ export default function DashboardPage() {
           const pnlColor = positive ? up() : down();
           const isExpanded = !!expandedSymbols[position.symbol];
           return <article key={position.symbol} style={{ ...cardStyle, padding: 14 }}>
-            <div className="ab-row-between align-start" style={{ marginBottom: 6 }}><div><div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1, color: fg() }}>{position.symbol}</div><div style={{ fontSize: 12, color: muted(), marginTop: 4 }}>{position.holdings.length} lệnh mua mở · SL {position.quantity}</div></div><button type="button" className="ab-delete ghost" onClick={() => setExpandedSymbols((prev) => ({ ...prev, [position.symbol]: !prev[position.symbol] }))} style={pillStyle}>{isExpanded ? 'Ẩn lệnh' : 'Xem lệnh'}</button></div>
+            <div className="ab-row-between align-start" style={{ marginBottom: 6 }}><div><div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1, color: fg() }}>{position.symbol}</div><div style={{ fontSize: 12, color: muted(), marginTop: 4 }}>{position.holdings.length} lệnh mua mở · SL {position.quantity}</div></div><div style={{ display: 'flex', gap: 8 }}><button type="button" className="ab-delete ghost" onClick={() => setExpandedSymbols((prev) => ({ ...prev, [position.symbol]: !prev[position.symbol] }))} style={pillStyle}>{isExpanded ? 'Ẩn lệnh' : 'Xem lệnh'}</button><button type="button" className="ab-delete ghost" onClick={() => deleteSymbol(position.symbol)} title={`Xóa mã ${position.symbol}`} aria-label={`Xóa mã ${position.symbol}`}><Trash2 size={14} />Xóa mã</button></div></div>
             <div style={{ fontSize: 22, fontWeight: 900, color: fg() }}>{formatCompactPrice(quote?.price ?? row.currentPrice)}</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: getChangeColor(quote?.change), marginTop: 4 }}>{formatChange(quote?.change)} · {formatPct(quote?.pct)}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}><div style={pillStyle}>SL tổng {position.quantity}</div><div style={pillStyle}>Giá vốn TB {formatCurrency(position.avgBuyPrice)}</div></div>
