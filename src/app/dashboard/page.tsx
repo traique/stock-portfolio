@@ -156,6 +156,7 @@ export default function DashboardPage() {
   const [telegramMessage, setTelegramMessage] = useState('');
   const [historyFilter, setHistoryFilter] = useState<TxTypeFilter>('ALL');
   const [historySymbol, setHistorySymbol] = useState('');
+  const [resettingPortfolio, setResettingPortfolio] = useState(false);
 
   const bootstrapSession = useCallback(async () => {
     const [{ data: userData }, token] = await Promise.all([supabase.auth.getUser(), getAccessToken()]);
@@ -461,6 +462,43 @@ export default function DashboardPage() {
     await loadPortfolio(userId, email);
   }
 
+  async function resetPortfolio() {
+    if (!userId) return;
+    const ok = window.confirm('Xóa toàn bộ danh mục hiện tại để tạo danh mục mới? Hành động này sẽ xóa tất cả giao dịch cổ phiếu, tiền mặt và cấu hình điều chỉnh.');
+    if (!ok) return;
+
+    setResettingPortfolio(true);
+    setMessage('');
+    try {
+      const [tradeRes, cashRes, settingsRes] = await Promise.all([
+        supabase.from('transactions').delete().eq('user_id', userId),
+        supabase.from('cash_transactions').delete().eq('user_id', userId),
+        supabase.from('portfolio_settings').delete().eq('user_id', userId),
+      ]);
+
+      const firstError = tradeRes.error || cashRes.error || settingsRes.error;
+      if (firstError) {
+        setMessage(firstError.message || 'Không thể xóa danh mục');
+        return;
+      }
+
+      setExpandedSymbols({});
+      setEditingTradeId(null);
+      setEditingCashId(null);
+      setTradeForm(DEFAULT_TRADE_FORM);
+      setCashForm(DEFAULT_CASH_FORM);
+      setTradeOpen(false);
+      setCashOpen(false);
+      setHistoryOpen(false);
+      setMessage('Đã xóa toàn bộ danh mục. Bạn có thể tạo danh mục mới.');
+      await loadPortfolio(userId, email);
+    } catch {
+      setMessage('Không thể xóa danh mục');
+    } finally {
+      setResettingPortfolio(false);
+    }
+  }
+
   async function handleSaveTelegram(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTelegramSaving(true);
@@ -512,6 +550,18 @@ export default function DashboardPage() {
     <main className="ab-page">
       <div className="ab-shell premium-gap" style={{ gap: 12 }}>
         <AppShellHeader title="Danh mục cá nhân" isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
+        <section style={{ ...cardStyle, padding: 12 }}>
+          <div className="ab-row-between align-center" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <div>
+              <div className="ab-card-kicker" style={{ color: muted() }}>Quản lý danh mục</div>
+              <div style={{ fontSize: 13, color: muted(), marginTop: 4 }}>Xóa sạch dữ liệu để bắt đầu danh mục mới.</div>
+            </div>
+            <button type="button" className="ab-delete ghost" onClick={resetPortfolio} disabled={resettingPortfolio}>
+              <Trash2 size={14} />
+              {resettingPortfolio ? 'Đang xóa...' : 'Xóa toàn bộ danh mục'}
+            </button>
+          </div>
+        </section>
 
         <section className="ab-summary-grid premium-summary-grid compact-top-grid" style={{ gap: 10 }}>
           <StatCard label="Tổng vốn" value={loading ? '...' : formatCurrency(totalCapital)} icon={<Landmark size={16} />} strong />
@@ -569,4 +619,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-}
+  }
