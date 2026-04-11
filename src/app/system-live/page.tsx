@@ -12,6 +12,7 @@ type LiveSignal = {
   signal_type?: string;
   price?: number | null;
   trading_value?: number | null;
+  timestamp?: string | null;
   created_at?: string | null;
   ts?: number | null;
 };
@@ -30,6 +31,10 @@ function fmtMoney(value?: number | null) {
 }
 
 function fmtDate(signal: LiveSignal) {
+  if (signal.timestamp) {
+    const d = new Date(signal.timestamp);
+    if (Number.isFinite(d.getTime())) return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(d);
+  }
   if (signal.created_at) {
     const d = new Date(signal.created_at);
     if (Number.isFinite(d.getTime())) return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(d);
@@ -65,7 +70,7 @@ export default function SystemLivePage() {
     setMessage('');
 
     try {
-      const response = await fetch(`/api/system-live?type=${nextType}&limit=30`, { cache: 'no-store' });
+      const response = await fetch(`/api/system-live?type=${nextType}&timeframe=1D&limit=200`, { cache: 'no-store' });
       const data: LiveResponse = await response.json();
 
       if (!response.ok) {
@@ -202,4 +207,4 @@ export default function SystemLivePage() {
       </div>
     </main>
   );
-    }
+}
