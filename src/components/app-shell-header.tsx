@@ -174,7 +174,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         <div className="ab-premium-tabs">
           <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}><House size={15} /><span>Home</span></Link>
           <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}><BriefcaseBusiness size={15} /><span>Danh mục</span></Link>
-          <Link href="/system-live" className={`ab-premium-tab ${currentTab === 'system-live' ? 'active' : ''}`}><Activity size={15} /><span>Hệ thống Live</span></Link>
+          <Link href="/system-live" className={`ab-premium-tab ${currentTab === 'system-live' ? 'active' : ''}`}><Activity size={15} /><span>TOP BUY SELL</span></Link>
           <Link href="/backtest" className={`ab-premium-tab ${currentTab === 'backtest' ? 'active' : ''}`}><LineChart size={15} /><span>Backtest</span></Link>
           <Link href="/gold" className={`ab-premium-tab ${currentTab === 'gold' ? 'active' : ''}`}><Gem size={15} /><span>Giá vàng</span></Link>
           <Link href="/oil" className={`ab-premium-tab ${currentTab === 'oil' ? 'active' : ''}`}><Droplets size={15} /><span>Giá xăng</span></Link>
