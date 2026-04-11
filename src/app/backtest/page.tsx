@@ -28,19 +28,6 @@ type ScanResponse = {
   error?: string;
 };
 
-const fetchWithTimeout = async (url: string, timeout = 8000) => {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
-  try {
-    const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
-    clearTimeout(id);
-    return res;
-  } catch (error) {
-    clearTimeout(id);
-    throw error;
-  }
-};
-
 function fmtPrice(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 20 }).format(value);
@@ -85,21 +72,22 @@ export default function BacktestPage() {
     setMessage('');
 
     try {
-      const response = await fetchWithTimeout(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712676508`, 10000);
+      const response = await fetch(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712676508`, {
+        cache: 'no-store',
+      });
       const data: ScanResponse = await response.json();
 
       if (!response.ok || !data.success || !data.data) {
         setScanData(null);
-        setMessage(data.error || 'ERR_DATA_NOT_FOUND');
+        setMessage(data.error || 'Không lấy được dữ liệu backtest cho mã này');
         return;
       }
 
       setScanData(data.data);
       setSymbolInput(normalized);
-    } catch (error) {
-      const err = error as { name?: string };
+    } catch {
       setScanData(null);
-      setMessage(err?.name === 'AbortError' ? 'ERR_TIMEOUT' : 'ERR_CONNECTION_REFUSED');
+      setMessage('Không thể kết nối API backtest. Vui lòng thử lại sau.');
     } finally {
       setScanLoading(false);
     }
@@ -219,4 +207,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-  }
+}
