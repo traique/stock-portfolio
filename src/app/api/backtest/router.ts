@@ -1,33 +1,47 @@
 import { NextResponse } from 'next/server';
-import { fetchBacktestData } from './service';
+
+const SIEU_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-A705F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36',
+  Referer: 'https://sieutinhieu.vn/',
+  Accept: 'application/json',
+};
 
 export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const symbol = (searchParams.get('symbol') || '').trim().toUpperCase();
-    const timeframe = (searchParams.get('timeframe') || '1D').toUpperCase();
-    const limit = Number(searchParams.get('limit') || '5000');
-    const start = Number(searchParams.get('start') || '1712824910');
+  const { searchParams } = new URL(request.url);
+  const symbol = (searchParams.get('symbol') || 'HPG').toUpperCase();
+  const timeframe = (searchParams.get('timeframe') || '1D').toUpperCase();
+  const limit = Number(searchParams.get('limit') || '5000');
+  const start = Number(searchParams.get('start') || '1712676508');
 
-    if (!symbol) {
-      return NextResponse.json({ error: 'Missing symbol' }, { status: 400 });
+  try {
+    const url = `https://sieutinhieu.vn/api/v1/signals/performance?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(
+      timeframe
+    )}&limit=${Number.isFinite(limit) ? limit : 5000}&start=${Number.isFinite(start) ? start : 1712676508}`;
+
+    const res = await fetch(url, {
+      headers: SIEU_HEADERS,
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
     }
 
-    const data = await fetchBacktestData(symbol, timeframe, limit, start);
-
+    const payload = await res.json();
     return NextResponse.json({
       provider: 'sieutinhieu',
       symbol,
       timeframe,
-      limit: Number.isFinite(limit) ? limit : 5000,
-      start: Number.isFinite(start) ? start : 1712824910,
       updatedAt: new Date().toISOString(),
-      data,
+      data: payload?.data ?? payload,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message === 'Missing symbol' ? 400 : message.startsWith('Upstream failed:') ? 502 : 500;
-
-    return NextResponse.json({ error: message }, { status });
+    console.error('Performance fetch error:', error);
+    return NextResponse.json(
+      {
+        error: 'Failed to fetch performance data',
+      },
+      { status: 500 }
+    );
   }
 }
