@@ -2,7 +2,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { BarChart3, RefreshCw, Search } from 'lucide-react';
+import { BarChart3, RefreshCw, Search, TrendingUp } from 'lucide-react';
 import AppShellHeader from '@/components/app-shell-header';
 import { supabase } from '@/lib/supabase';
 
@@ -57,9 +57,7 @@ export default function BacktestPage() {
   const [scanData, setScanData] = useState<ScanData | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [chartError, setChartError] = useState(false);
 
-  // Check user authentication
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const user = data.user;
@@ -77,7 +75,6 @@ export default function BacktestPage() {
 
     setScanLoading(true);
     setMessage('');
-    setChartError(false);
 
     try {
       const endpoints = [
@@ -90,7 +87,6 @@ export default function BacktestPage() {
       for (const endpoint of endpoints) {
         const response = await fetch(endpoint, { cache: 'no-store' });
         const raw = await response.text();
-        
         let data: ScanResponse = {};
         try {
           data = raw ? (JSON.parse(raw) as ScanResponse) : {};
@@ -112,7 +108,7 @@ export default function BacktestPage() {
       setMessage(finalError);
     } catch {
       setScanData(null);
-      setMessage('Kết nối API thất bại (network/CORS/server). Vui lòng thử lại sau.');
+      setMessage('Kết nối API thất bại. Vui lòng thử lại sau.');
     } finally {
       setScanLoading(false);
     }
@@ -125,16 +121,11 @@ export default function BacktestPage() {
 
   const latestTrade = useMemo(() => scanData?.trades?.[0], [scanData]);
 
-  // Chart URL cho sieutinhieu
-  const originalChartUrl = useMemo(() => {
+  // TradingView Chart URL (rất ổn định)
+  const tvChartUrl = useMemo(() => {
     const symbol = symbolInput.trim().toUpperCase() || 'HPG';
-    return `https://sieutinhieu.vn/chart.html?embed=1&theme=light&_t=\( {Date.now()}&chartMode=candle&symbol= \){encodeURIComponent(symbol)}`;
+    return `https://www.tradingview.com/widgetembed/?symbol=HOSE:${symbol}&interval=D&theme=dark&style=1&locale=vi&toolbarbg=f1f3f6&enablepublishing=false&hideideas=1&studies_overrides=%7B%7D&hide_top_toolbar=0`;
   }, [symbolInput]);
-
-  // URL qua Proxy
-  const proxyChartUrl = useMemo(() => {
-    return `/api/chart/proxy?url=${encodeURIComponent(originalChartUrl)}`;
-  }, [originalChartUrl]);
 
   return (
     <main className="ab-page">
@@ -147,7 +138,7 @@ export default function BacktestPage() {
           onLogout={handleLogout}
         />
 
-        {/* Control Section */}
+        {/* Control */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
           <div className="ab-row-between align-center" style={{ gap: 8, flexWrap: 'wrap' }}>
             <div className="ab-row-between align-center" style={{ gap: 8 }}>
@@ -165,10 +156,7 @@ export default function BacktestPage() {
           </div>
 
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void loadScan(symbolInput);
-            }}
+            onSubmit={(e) => { e.preventDefault(); void loadScan(symbolInput); }}
             style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
           >
             <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
@@ -194,10 +182,13 @@ export default function BacktestPage() {
           {message && <div className="ab-error">{message}</div>}
         </section>
 
-        {/* Biểu đồ qua Proxy */}
+        {/* TradingView Chart - Không còn "Connecting..." nữa */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 10 }}>
           <div className="ab-row-between align-center">
-            <strong>Biểu đồ kỹ thuật (Proxy Bypass)</strong>
+            <div className="flex items-center gap-2">
+              <TrendingUp size={18} />
+              <strong>Biểu đồ kỹ thuật (TradingView)</strong>
+            </div>
             <span className="ab-soft-label">{symbolInput.trim().toUpperCase() || 'HPG'}</span>
           </div>
           
@@ -205,38 +196,27 @@ export default function BacktestPage() {
             borderRadius: 16, 
             overflow: 'hidden', 
             border: '1px solid var(--border)',
-            background: '#0a0a0a'
+            background: '#0f172a'
           }}>
             {symbolInput.trim() ? (
               <iframe
-                key={proxyChartUrl}
-                src={proxyChartUrl}
-                title="Sieutinhieu Chart via Proxy"
+                src={tvChartUrl}
+                title="TradingView Chart"
                 style={{ 
                   width: '100%', 
-                  height: 480, 
+                  height: 520, 
                   border: 0, 
                   display: 'block' 
                 }}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
-                allow="fullscreen"
+                allowFullScreen
                 loading="lazy"
-                referrerPolicy="no-referrer"
-                onError={() => setChartError(true)}
               />
             ) : (
-              <div style={{ height: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
-                Nhập mã và bấm "Phân tích" để hiển thị biểu đồ
+              <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                Nhập mã và bấm "Phân tích" để xem biểu đồ
               </div>
             )}
           </div>
-
-          {chartError && (
-            <div className="ab-error">
-              Proxy chart gặp lỗi. Sieutinhieu có thể đã chặn mạnh hơn. 
-              Hãy thử reload hoặc chuyển sang TradingView sau.
-            </div>
-          )}
         </section>
 
         {/* Backtest Results */}
@@ -290,14 +270,12 @@ export default function BacktestPage() {
                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.entry_price)}</td>
                       <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.exit_ts)}</td>
                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.exit_price)}</td>
-                      <td 
-                        style={{ 
-                          padding: '10px 8px', 
-                          textAlign: 'right', 
-                          fontWeight: 700, 
-                          color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' 
-                        }}
-                      >
+                      <td style={{ 
+                        padding: '10px 8px', 
+                        textAlign: 'right', 
+                        fontWeight: 700, 
+                        color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' 
+                      }}>
                         {fmtPct(trade.pnl_pct)}
                       </td>
                     </tr>
@@ -316,4 +294,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-          }
+            }
