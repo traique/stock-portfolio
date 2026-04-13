@@ -1,3 +1,4 @@
+// src/app/backtest/page.tsx
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
@@ -36,14 +37,18 @@ function fmtPrice(value?: number | null) {
 function fmtPct(value?: number | null) {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
   const sign = value > 0 ? '+' : '';
-  return `${sign}${value.toFixed(2)}%`;
+  return `\( {sign} \){value.toFixed(2)}%`;
 }
 
 function fmtTradeDate(ts?: number) {
   if (!ts || !Number.isFinite(ts)) return '—';
   const d = new Date(ts * 1000);
   if (!Number.isFinite(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }).format(d);
+  return new Intl.DateTimeFormat('vi-VN', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: '2-digit' 
+  }).format(d);
 }
 
 export default function BacktestPage() {
@@ -52,7 +57,9 @@ export default function BacktestPage() {
   const [scanData, setScanData] = useState<ScanData | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [chartError, setChartError] = useState(false);
 
+  // Check user authentication
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       const user = data.user;
@@ -70,6 +77,7 @@ export default function BacktestPage() {
 
     setScanLoading(true);
     setMessage('');
+    setChartError(false);
 
     try {
       const endpoints = [
@@ -82,6 +90,7 @@ export default function BacktestPage() {
       for (const endpoint of endpoints) {
         const response = await fetch(endpoint, { cache: 'no-store' });
         const raw = await response.text();
+        
         let data: ScanResponse = {};
         try {
           data = raw ? (JSON.parse(raw) as ScanResponse) : {};
@@ -115,10 +124,17 @@ export default function BacktestPage() {
   }
 
   const latestTrade = useMemo(() => scanData?.trades?.[0], [scanData]);
-  const chartUrl = useMemo(() => {
-    const symbol = (symbolInput.trim().toUpperCase() || 'HPG');
-    return `https://sieutinhieu.vn/chart.html?embed=1&theme=light&_t=${Date.now()}&chartMode=candle&symbol=${encodeURIComponent(symbol)}`;
+
+  // Chart URL cho sieutinhieu
+  const originalChartUrl = useMemo(() => {
+    const symbol = symbolInput.trim().toUpperCase() || 'HPG';
+    return `https://sieutinhieu.vn/chart.html?embed=1&theme=light&_t=\( {Date.now()}&chartMode=candle&symbol= \){encodeURIComponent(symbol)}`;
   }, [symbolInput]);
+
+  // URL qua Proxy
+  const proxyChartUrl = useMemo(() => {
+    return `/api/chart/proxy?url=${encodeURIComponent(originalChartUrl)}`;
+  }, [originalChartUrl]);
 
   return (
     <main className="ab-page">
@@ -131,13 +147,19 @@ export default function BacktestPage() {
           onLogout={handleLogout}
         />
 
+        {/* Control Section */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
           <div className="ab-row-between align-center" style={{ gap: 8, flexWrap: 'wrap' }}>
             <div className="ab-row-between align-center" style={{ gap: 8 }}>
               <BarChart3 size={16} />
               <strong>DATA.SCAN theo mã</strong>
             </div>
-            <button type="button" className="ab-btn ab-btn-ghost" onClick={() => void loadScan(symbolInput)}>
+            <button 
+              type="button" 
+              className="ab-btn ab-btn-ghost" 
+              onClick={() => void loadScan(symbolInput)}
+              disabled={scanLoading}
+            >
               <RefreshCw size={15} /> Quét lại
             </button>
           </div>
@@ -157,31 +179,67 @@ export default function BacktestPage() {
                 placeholder="Nhập mã (VD: GVR, SSI, HPG...)"
                 className="ab-input"
                 style={{ paddingLeft: 36 }}
+                disabled={scanLoading}
               />
             </div>
-            <button type="submit" className="ab-btn ab-btn-primary">Phân tích</button>
+            <button 
+              type="submit" 
+              className="ab-btn ab-btn-primary"
+              disabled={scanLoading}
+            >
+              Phân tích
+            </button>
           </form>
 
-          {message ? <div className="ab-error">{message}</div> : null}
+          {message && <div className="ab-error">{message}</div>}
         </section>
 
+        {/* Biểu đồ qua Proxy */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 10 }}>
           <div className="ab-row-between align-center">
-            <strong>Biểu đồ kỹ thuật</strong>
+            <strong>Biểu đồ kỹ thuật (Proxy Bypass)</strong>
             <span className="ab-soft-label">{symbolInput.trim().toUpperCase() || 'HPG'}</span>
           </div>
-          <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <iframe
-              key={chartUrl}
-              src={chartUrl}
-              title="Sieutinhieu Chart"
-              style={{ width: '100%', height: 460, border: 0, display: 'block' }}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            />
+          
+          <div style={{ 
+            borderRadius: 16, 
+            overflow: 'hidden', 
+            border: '1px solid var(--border)',
+            background: '#0a0a0a'
+          }}>
+            {symbolInput.trim() ? (
+              <iframe
+                key={proxyChartUrl}
+                src={proxyChartUrl}
+                title="Sieutinhieu Chart via Proxy"
+                style={{ 
+                  width: '100%', 
+                  height: 480, 
+                  border: 0, 
+                  display: 'block' 
+                }}
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-modals"
+                allow="fullscreen"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={() => setChartError(true)}
+              />
+            ) : (
+              <div style={{ height: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                Nhập mã và bấm "Phân tích" để hiển thị biểu đồ
+              </div>
+            )}
           </div>
+
+          {chartError && (
+            <div className="ab-error">
+              Proxy chart gặp lỗi. Sieutinhieu có thể đã chặn mạnh hơn. 
+              Hãy thử reload hoặc chuyển sang TradingView sau.
+            </div>
+          )}
         </section>
 
+        {/* Backtest Results */}
         {scanLoading ? (
           <section className="ab-premium-card">
             <div className="ab-soft-label">Đang tải dữ liệu backtest...</div>
@@ -203,7 +261,9 @@ export default function BacktestPage() {
               </article>
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Lệnh gần nhất</div>
-                <div style={{ fontSize: 20, fontWeight: 800 }}>{latestTrade?.side || '—'} · {fmtPct(latestTrade?.pnl_pct)}</div>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>
+                  {latestTrade?.side || '—'} · {fmtPct(latestTrade?.pnl_pct)}
+                </div>
               </article>
             </div>
 
@@ -221,13 +281,23 @@ export default function BacktestPage() {
                 </thead>
                 <tbody>
                   {(scanData.trades || []).slice(0, 20).map((trade, idx) => (
-                    <tr key={`${trade.entry_ts || idx}-${idx}`} style={{ borderTop: '1px solid var(--soft-2)' }}>
+                    <tr 
+                      key={`\( {trade.entry_ts || idx}- \){idx}`} 
+                      style={{ borderTop: '1px solid var(--soft-2)' }}
+                    >
                       <td style={{ padding: '10px 8px', fontWeight: 700 }}>{trade.side || '—'}</td>
                       <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.entry_ts)}</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.entry_price ?? null)}</td>
+                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.entry_price)}</td>
                       <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.exit_ts)}</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.exit_price ?? null)}</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.exit_price)}</td>
+                      <td 
+                        style={{ 
+                          padding: '10px 8px', 
+                          textAlign: 'right', 
+                          fontWeight: 700, 
+                          color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' 
+                        }}
+                      >
                         {fmtPct(trade.pnl_pct)}
                       </td>
                     </tr>
@@ -238,10 +308,12 @@ export default function BacktestPage() {
           </section>
         ) : (
           <section className="ab-premium-card">
-            <div className="ab-soft-label">Nhập mã cổ phiếu và bấm "Phân tích" để xem backtest.</div>
+            <div className="ab-soft-label">
+              Nhập mã cổ phiếu và bấm "Phân tích" để xem backtest.
+            </div>
           </section>
         )}
       </div>
     </main>
   );
-               }
+          }
