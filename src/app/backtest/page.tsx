@@ -115,6 +115,10 @@ export default function BacktestPage() {
   }
 
   const latestTrade = useMemo(() => scanData?.trades?.[0], [scanData]);
+  const chartUrl = useMemo(() => {
+    const symbol = (symbolInput.trim().toUpperCase() || 'HPG');
+    return `https://sieutinhieu.vn/chart.html?embed=1&theme=light&_t=${Date.now()}&chartMode=candle&symbol=${encodeURIComponent(symbol)}`;
+  }, [symbolInput]);
 
   return (
     <main className="ab-page">
@@ -159,6 +163,23 @@ export default function BacktestPage() {
           </form>
 
           {message ? <div className="ab-error">{message}</div> : null}
+        </section>
+
+        <section className="ab-premium-card" style={{ display: 'grid', gap: 10 }}>
+          <div className="ab-row-between align-center">
+            <strong>Biểu đồ kỹ thuật</strong>
+            <span className="ab-soft-label">{symbolInput.trim().toUpperCase() || 'HPG'}</span>
+          </div>
+          <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)' }}>
+            <iframe
+              key={chartUrl}
+              src={chartUrl}
+              title="Sieutinhieu Chart"
+              style={{ width: '100%', height: 460, border: 0, display: 'block' }}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+            />
+          </div>
         </section>
 
         {scanLoading ? (
@@ -223,4 +244,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-                }
+               }
