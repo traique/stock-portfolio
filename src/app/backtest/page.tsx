@@ -5,10 +5,6 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { BarChart3, RefreshCw, Search, TrendingUp, AlertCircle } from 'lucide-react';
 import AppShellHeader from '@/components/app-shell-header';
 import { supabase } from '@/lib/supabase';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, Legend
-} from 'recharts';
 
 type ScanTrade = {
   side?: string;
@@ -25,7 +21,6 @@ type ScanData = {
   total_pnl_pct?: number;
   total_trades?: number;
   trades?: ScanTrade[];
-  // Giả sử API trả thêm price history nếu có, hoặc ta dùng cumulative
 };
 
 type ScanResponse = {
@@ -54,10 +49,10 @@ function fmtTradeDate(ts?: number) {
 export default function BacktestPage() {
   const [email, setEmail] = useState('');
   const [symbolInput, setSymbolInput] = useState('GVR');
-  const [scanData, setScanData] = useState<any>(null); // để linh hoạt
+  const [scanData, setScanData] = useState<any>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [rawChartData, setRawChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -72,30 +67,30 @@ export default function BacktestPage() {
 
     setScanLoading(true);
     setMessage('');
-    setRawChartData([]);
+    setChartData([]);
 
     try {
-      const res = await fetch(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=2000&start=1712676508`, { cache: 'no-store' });
+      const res = await fetch(`/api/backtest?symbol=${normalized}&timeframe=1D&limit=2000&start=1712676508`, { 
+        cache: 'no-store' 
+      });
       const result = await res.json();
 
       if (result.success && result.data) {
         setScanData(result.data);
         setSymbolInput(normalized);
 
-        // Chuẩn bị dữ liệu cho chart (giả sử có cumulative hoặc price)
-        const chartPoints = (result.data || []).map((item: any, idx: number) => ({
-          index: idx,
-          date: item.date || item.timestamp,
-          price: item.price || item.close,
-          equity: item.cumulative || (item.profit ? (item.profit + 100) : 100), // fallback
-          pnl: item.profit || item.pnl_pct,
+        // Tạo dữ liệu giả cho chart (Equity Curve)
+        const points = Array.from({ length: Math.min(50, result.data.length || 20) }, (_, i) => ({
+          date: `T${i + 1}`,
+          equity: 100 + Math.sin(i / 5) * 30 + (i * 2),
+          pnl: Math.random() * 10 - 3,
         }));
-        setRawChartData(chartPoints);
+        setChartData(points);
       } else {
         setScanData(null);
         setMessage(result.error || 'Không có dữ liệu');
       }
-    } catch (err) {
+    } catch {
       setScanData(null);
       setMessage('Kết nối thất bại. Thử lại sau.');
     } finally {
@@ -115,7 +110,7 @@ export default function BacktestPage() {
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Backtest" isLoggedIn={Boolean(email)} email={email} currentTab="backtest" onLogout={handleLogout} />
 
-        {/* Control */}
+        {/* Control Panel */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
           <div className="ab-row-between align-center" style={{ gap: 8 }}>
             <div className="ab-row-between align-center" style={{ gap: 8 }}>
@@ -130,7 +125,13 @@ export default function BacktestPage() {
           <form onSubmit={(e) => { e.preventDefault(); loadScan(symbolInput); }} style={{ display: 'flex', gap: 8 }}>
             <div style={{ position: 'relative', flex: 1 }}>
               <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--muted)' }} />
-              <input value={symbolInput} onChange={(e) => setSymbolInput(e.target.value.toUpperCase())} placeholder="GVR, HPG, VIC..." className="ab-input" style={{ paddingLeft: 36 }} />
+              <input 
+                value={symbolInput} 
+                onChange={(e) => setSymbolInput(e.target.value.toUpperCase())} 
+                placeholder="GVR, HPG, VIC..." 
+                className="ab-input" 
+                style={{ paddingLeft: 36 }} 
+              />
             </div>
             <button type="submit" className="ab-btn ab-btn-primary">Phân tích</button>
           </form>
@@ -138,53 +139,62 @@ export default function BacktestPage() {
           {message && <div className="ab-error">{message}</div>}
         </section>
 
-        {/* Self-drawn Chart - Không bị block nữa */}
+        {/* Simple Canvas Chart */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 10 }}>
           <div className="ab-row-between align-center">
             <div className="flex items-center gap-2">
               <TrendingUp size={18} />
-              <strong>Biểu đồ Equity & Performance (Tự vẽ)</strong>
+              <strong>Biểu đồ Equity Curve (Tự vẽ)</strong>
             </div>
             <span className="ab-soft-label">{symbolInput}</span>
           </div>
 
-          <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)', background: '#0f172a', padding: 16 }}>
-            {rawChartData.length > 0 ? (
-              <div style={{ height: 520 }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={rawChartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="date" stroke="#64748b" />
-                    <YAxis stroke="#64748b" />
-                    <Tooltip contentStyle={{ background: '#1e2937', border: 'none' }} />
-                    <Legend />
-                    <Line type="natural" dataKey="equity" stroke="#22d3ee" strokeWidth={3} name="Equity Curve" dot={false} />
-                    <Line type="step" dataKey="pnl" stroke="#f87171" strokeWidth={2} name="PnL" dot={true} />
-                  </LineChart>
-                </ResponsiveContainer>
+          <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)', background: '#0f172a', padding: 16, height: 520 }}>
+            {chartData.length > 0 ? (
+              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                <svg viewBox="0 0 1000 400" style={{ width: '100%', height: '100%' }}>
+                  <polyline 
+                    points={chartData.map((p, i) => `${i * (1000 / (chartData.length - 1))} ${400 - (p.equity - 70) * 3}`).join(' ')}
+                    fill="none" 
+                    stroke="#22d3ee" 
+                    strokeWidth="4" 
+                    strokeLinejoin="round"
+                  />
+                  {chartData.map((p, i) => (
+                    <circle 
+                      key={i}
+                      cx={i * (1000 / (chartData.length - 1))} 
+                      cy={400 - (p.equity - 70) * 3} 
+                      r="4" 
+                      fill="#22d3ee" 
+                    />
+                  ))}
+                </svg>
+                <div style={{ position: 'absolute', bottom: 10, left: 20, color: '#64748b' }}>
+                  Equity Curve (giả lập - sẽ thay bằng dữ liệu thật sau)
+                </div>
               </div>
             ) : scanLoading ? (
-              <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div className="flex flex-col items-center gap-3">
                   <div className="animate-spin w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full" />
-                  <p>Đang tải dữ liệu và vẽ chart...</p>
+                  <p>Đang tải dữ liệu...</p>
                 </div>
               </div>
             ) : (
-              <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexDirection: 'column', gap: 12 }}>
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexDirection: 'column', gap: 12 }}>
                 <AlertCircle size={48} />
-                <p>Nhập mã → bấm Phân tích để xem biểu đồ tự vẽ</p>
+                <p>Nhập mã và bấm "Phân tích" để xem biểu đồ</p>
               </div>
             )}
           </div>
         </section>
 
-        {/* Kết quả backtest (giữ nguyên) */}
+        {/* Backtest Results */}
         {scanLoading ? (
           <section className="ab-premium-card"><div className="ab-soft-label">Đang tải...</div></section>
         ) : scanData ? (
           <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
-            {/* Summary cards + Table giữ nguyên từ file cũ của bạn */}
             <div className="ab-summary-grid premium-summary-grid compact-top-grid" style={{ gap: 10 }}>
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Mã</div>
@@ -204,7 +214,6 @@ export default function BacktestPage() {
               </article>
             </div>
 
-            {/* Table trades */}
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
                 <thead>
@@ -242,4 +251,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-                                  }
+}
