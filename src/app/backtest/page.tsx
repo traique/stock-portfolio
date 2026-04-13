@@ -2,7 +2,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { BarChart3, RefreshCw, Search, TrendingUp, AlertCircle } from 'lucide-react';
+import { BarChart3, RefreshCw, Search, TrendingUp, AlertCircle, Globe } from 'lucide-react';
 import AppShellHeader from '@/components/app-shell-header';
 import { supabase } from '@/lib/supabase';
 
@@ -57,7 +57,7 @@ export default function BacktestPage() {
   const [scanData, setScanData] = useState<ScanData | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [chartLoaded, setChartLoaded] = useState(false);
+  const [chartProvider, setChartProvider] = useState<'tradingview' | 'investing'>('tradingview');
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -76,7 +76,6 @@ export default function BacktestPage() {
 
     setScanLoading(true);
     setMessage('');
-    setChartLoaded(false);
 
     try {
       const endpoints = [
@@ -90,20 +89,14 @@ export default function BacktestPage() {
         const response = await fetch(endpoint, { cache: 'no-store' });
         const raw = await response.text();
         let data: ScanResponse = {};
-        try {
-          data = raw ? (JSON.parse(raw) as ScanResponse) : {};
-        } catch {
-          data = {};
-        }
-
+        try { data = raw ? (JSON.parse(raw) as ScanResponse) : {}; } catch {}
+        
         if (response.ok && data.success && data.data) {
           setScanData(data.data);
           setSymbolInput(normalized);
           return;
         }
-
         if (data.error) finalError = data.error;
-        else if (!response.ok) finalError = `API backtest lỗi (${response.status}).`;
       }
 
       setScanData(null);
@@ -123,12 +116,18 @@ export default function BacktestPage() {
 
   const latestTrade = useMemo(() => scanData?.trades?.[0], [scanData]);
 
-  // TradingView Chart URL - Fix symbol format cho chứng khoán Việt Nam
-  const tvChartUrl = useMemo(() => {
-    const symbol = symbolInput.trim().toUpperCase() || 'HPG';
-    // Sử dụng format tốt nhất hiện nay cho widget TradingView VN
-    return `https://www.tradingview.com/widgetembed/?symbol=BINANCE:${symbol}USDT&interval=D&theme=dark&style=1&locale=vi&toolbarbg=f1f3f6&enablepublishing=false&hideideas=1&studies_overrides=%7B%7D&hide_top_toolbar=0`;
-  }, [symbolInput]);
+  // Chart URLs
+  const chartUrl = useMemo(() => {
+    const sym = symbolInput.trim().toUpperCase() || 'HPG';
+    
+    if (chartProvider === 'tradingview') {
+      // Thử format HOSE trực tiếp - đôi khi hoạt động
+      return `https://www.tradingview.com/widgetembed/?symbol=HOSE:${sym}&interval=D&theme=dark&style=1&locale=vi&hideideas=1&allow_symbol_change=1`;
+    } else {
+      // Investing.com - hỗ trợ tốt VN stocks
+      return `https://www.investing.com/equities/${sym.toLowerCase()}-chart`;
+    }
+  }, [symbolInput, chartProvider]);
 
   return (
     <main className="ab-page">
@@ -141,100 +140,70 @@ export default function BacktestPage() {
           onLogout={handleLogout}
         />
 
-        {/* Control Panel */}
+        {/* Control */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
           <div className="ab-row-between align-center" style={{ gap: 8, flexWrap: 'wrap' }}>
             <div className="ab-row-between align-center" style={{ gap: 8 }}>
               <BarChart3 size={16} />
               <strong>DATA.SCAN theo mã</strong>
             </div>
-            <button 
-              type="button" 
-              className="ab-btn ab-btn-ghost" 
-              onClick={() => void loadScan(symbolInput)}
-              disabled={scanLoading}
-            >
+            <button type="button" className="ab-btn ab-btn-ghost" onClick={() => void loadScan(symbolInput)} disabled={scanLoading}>
               <RefreshCw size={15} /> Quét lại
             </button>
           </div>
 
-          <form
-            onSubmit={(e) => { e.preventDefault(); void loadScan(symbolInput); }}
-            style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-          >
+          <form onSubmit={(e) => { e.preventDefault(); void loadScan(symbolInput); }} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
               <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--muted)' }} />
               <input
                 value={symbolInput}
                 onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
-                placeholder="Nhập mã (VD: GVR, HPG, VIC, SSI...)"
+                placeholder="Nhập mã (VD: GVR, HPG, VIC...)"
                 className="ab-input"
                 style={{ paddingLeft: 36 }}
                 disabled={scanLoading}
               />
             </div>
-            <button 
-              type="submit" 
-              className="ab-btn ab-btn-primary"
-              disabled={scanLoading}
-            >
-              Phân tích
-            </button>
+            <button type="submit" className="ab-btn ab-btn-primary" disabled={scanLoading}>Phân tích</button>
           </form>
 
           {message && <div className="ab-error">{message}</div>}
         </section>
 
-        {/* TradingView Chart */}
+        {/* Chart Section với Toggle */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 10 }}>
           <div className="ab-row-between align-center">
             <div className="flex items-center gap-2">
               <TrendingUp size={18} />
-              <strong>Biểu đồ kỹ thuật (TradingView)</strong>
+              <strong>Biểu đồ kỹ thuật</strong>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setChartProvider('tradingview')}
+                className={`px-4 py-1 rounded-lg text-sm ${chartProvider === 'tradingview' ? 'bg-cyan-600' : 'bg-gray-800'}`}
+              >
+                TradingView
+              </button>
+              <button 
+                onClick={() => setChartProvider('investing')}
+                className={`px-4 py-1 rounded-lg text-sm flex items-center gap-1 ${chartProvider === 'investing' ? 'bg-cyan-600' : 'bg-gray-800'}`}
+              >
+                <Globe size={14} /> Investing
+              </button>
             </div>
             <span className="ab-soft-label">{symbolInput.trim().toUpperCase() || 'HPG'}</span>
           </div>
           
-          <div style={{ 
-            borderRadius: 16, 
-            overflow: 'hidden', 
-            border: '1px solid var(--border)',
-            background: '#0f172a',
-            position: 'relative'
-          }}>
+          <div style={{ borderRadius: 16, overflow: 'hidden', border: '1px solid var(--border)', background: '#0f172a' }}>
             {symbolInput.trim() ? (
-              <>
-                <iframe
-                  src={tvChartUrl}
-                  title="TradingView Chart"
-                  style={{ 
-                    width: '100%', 
-                    height: 520, 
-                    border: 0, 
-                    display: 'block' 
-                  }}
-                  allowFullScreen
-                  loading="lazy"
-                  onLoad={() => setChartLoaded(true)}
-                />
-                
-                {!chartLoaded && (
-                  <div style={{ 
-                    position: 'absolute', 
-                    top: 0, left: 0, right: 0, bottom: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'rgba(15, 23, 42, 0.95)',
-                    zIndex: 10
-                  }}>
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="animate-spin w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
-                      <p>Đang tải biểu đồ...</p>
-                    </div>
-                  </div>
-                )}
-              </>
+              <iframe
+                key={`\( {chartProvider}- \){symbolInput}`}
+                src={chartUrl}
+                title="Stock Chart"
+                style={{ width: '100%', height: 520, border: 0, display: 'block' }}
+                allowFullScreen
+                loading="lazy"
+              />
             ) : (
               <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexDirection: 'column', gap: 12 }}>
                 <AlertCircle size={48} />
@@ -242,15 +211,22 @@ export default function BacktestPage() {
               </div>
             )}
           </div>
+          
+          <div className="text-xs text-gray-500 text-center">
+            {chartProvider === 'tradingview' 
+              ? 'TradingView đôi khi hạn chế embed sàn VN. Nếu không load → thử Investing.com' 
+              : 'Investing.com thường hỗ trợ tốt hơn với cổ phiếu Việt Nam'}
+          </div>
         </section>
 
-        {/* Backtest Results */}
+        {/* Backtest Results - giữ nguyên như cũ */}
         {scanLoading ? (
           <section className="ab-premium-card">
             <div className="ab-soft-label">Đang tải dữ liệu backtest...</div>
           </section>
         ) : scanData ? (
           <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
+            {/* ... giữ nguyên phần summary + table như file trước ... */}
             <div className="ab-summary-grid premium-summary-grid compact-top-grid" style={{ gap: 10 }}>
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Mã</div>
@@ -286,21 +262,13 @@ export default function BacktestPage() {
                 </thead>
                 <tbody>
                   {(scanData.trades || []).slice(0, 20).map((trade, idx) => (
-                    <tr 
-                      key={`\( {trade.entry_ts || idx}- \){idx}`} 
-                      style={{ borderTop: '1px solid var(--soft-2)' }}
-                    >
+                    <tr key={`\( {trade.entry_ts || idx}- \){idx}`} style={{ borderTop: '1px solid var(--soft-2)' }}>
                       <td style={{ padding: '10px 8px', fontWeight: 700 }}>{trade.side || '—'}</td>
                       <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.entry_ts)}</td>
                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.entry_price)}</td>
                       <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.exit_ts)}</td>
                       <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.exit_price)}</td>
-                      <td style={{ 
-                        padding: '10px 8px', 
-                        textAlign: 'right', 
-                        fontWeight: 700, 
-                        color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' 
-                      }}>
+                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
                         {fmtPct(trade.pnl_pct)}
                       </td>
                     </tr>
@@ -311,12 +279,10 @@ export default function BacktestPage() {
           </section>
         ) : (
           <section className="ab-premium-card">
-            <div className="ab-soft-label">
-              Nhập mã cổ phiếu và bấm "Phân tích" để xem backtest.
-            </div>
+            <div className="ab-soft-label">Nhập mã cổ phiếu và bấm "Phân tích" để xem backtest.</div>
           </section>
         )}
       </div>
     </main>
   );
-    }
+  }
