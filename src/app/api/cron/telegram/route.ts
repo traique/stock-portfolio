@@ -20,6 +20,16 @@ type QuoteDebugItem = {
   pct: number;
 };
 
+function getVnDay(date: Date) {
+  const vnDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+  return vnDate.getDay();
+}
+
+function isWeekendInVn(date: Date) {
+  const day = getVnDay(date);
+  return day === 0 || day === 6;
+}
+
 async function loadPrices(symbols: string[]) {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
   if (!baseUrl) throw new Error('Missing NEXT_PUBLIC_SITE_URL');
@@ -44,6 +54,17 @@ export async function GET(request: NextRequest) {
   }
 
   const now = new Date();
+
+  if (isWeekendInVn(now)) {
+    return NextResponse.json({
+      ok: true,
+      processed: 0,
+      sent: 0,
+      details: [],
+      status: 'skip:weekend_vn',
+      ran_at: now.toISOString(),
+    });
+  }
 
   const { data: settingsRows, error: settingsError } = await supabaseServer
     .from('telegram_settings')
