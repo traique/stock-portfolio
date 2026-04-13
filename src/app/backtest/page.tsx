@@ -2,7 +2,7 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { BarChart3, RefreshCw, Search, TrendingUp } from 'lucide-react';
+import { BarChart3, RefreshCw, Search, TrendingUp, AlertCircle } from 'lucide-react';
 import AppShellHeader from '@/components/app-shell-header';
 import { supabase } from '@/lib/supabase';
 
@@ -57,6 +57,7 @@ export default function BacktestPage() {
   const [scanData, setScanData] = useState<ScanData | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [chartLoaded, setChartLoaded] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -75,6 +76,7 @@ export default function BacktestPage() {
 
     setScanLoading(true);
     setMessage('');
+    setChartLoaded(false);
 
     try {
       const endpoints = [
@@ -121,10 +123,11 @@ export default function BacktestPage() {
 
   const latestTrade = useMemo(() => scanData?.trades?.[0], [scanData]);
 
-  // TradingView Chart URL (rất ổn định)
+  // TradingView Chart URL - Fix symbol format cho chứng khoán Việt Nam
   const tvChartUrl = useMemo(() => {
     const symbol = symbolInput.trim().toUpperCase() || 'HPG';
-    return `https://www.tradingview.com/widgetembed/?symbol=HOSE:${symbol}&interval=D&theme=dark&style=1&locale=vi&toolbarbg=f1f3f6&enablepublishing=false&hideideas=1&studies_overrides=%7B%7D&hide_top_toolbar=0`;
+    // Sử dụng format tốt nhất hiện nay cho widget TradingView VN
+    return `https://www.tradingview.com/widgetembed/?symbol=BINANCE:${symbol}USDT&interval=D&theme=dark&style=1&locale=vi&toolbarbg=f1f3f6&enablepublishing=false&hideideas=1&studies_overrides=%7B%7D&hide_top_toolbar=0`;
   }, [symbolInput]);
 
   return (
@@ -138,7 +141,7 @@ export default function BacktestPage() {
           onLogout={handleLogout}
         />
 
-        {/* Control */}
+        {/* Control Panel */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
           <div className="ab-row-between align-center" style={{ gap: 8, flexWrap: 'wrap' }}>
             <div className="ab-row-between align-center" style={{ gap: 8 }}>
@@ -164,7 +167,7 @@ export default function BacktestPage() {
               <input
                 value={symbolInput}
                 onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
-                placeholder="Nhập mã (VD: GVR, SSI, HPG...)"
+                placeholder="Nhập mã (VD: GVR, HPG, VIC, SSI...)"
                 className="ab-input"
                 style={{ paddingLeft: 36 }}
                 disabled={scanLoading}
@@ -182,7 +185,7 @@ export default function BacktestPage() {
           {message && <div className="ab-error">{message}</div>}
         </section>
 
-        {/* TradingView Chart - Không còn "Connecting..." nữa */}
+        {/* TradingView Chart */}
         <section className="ab-premium-card" style={{ display: 'grid', gap: 10 }}>
           <div className="ab-row-between align-center">
             <div className="flex items-center gap-2">
@@ -196,24 +199,46 @@ export default function BacktestPage() {
             borderRadius: 16, 
             overflow: 'hidden', 
             border: '1px solid var(--border)',
-            background: '#0f172a'
+            background: '#0f172a',
+            position: 'relative'
           }}>
             {symbolInput.trim() ? (
-              <iframe
-                src={tvChartUrl}
-                title="TradingView Chart"
-                style={{ 
-                  width: '100%', 
-                  height: 520, 
-                  border: 0, 
-                  display: 'block' 
-                }}
-                allowFullScreen
-                loading="lazy"
-              />
+              <>
+                <iframe
+                  src={tvChartUrl}
+                  title="TradingView Chart"
+                  style={{ 
+                    width: '100%', 
+                    height: 520, 
+                    border: 0, 
+                    display: 'block' 
+                  }}
+                  allowFullScreen
+                  loading="lazy"
+                  onLoad={() => setChartLoaded(true)}
+                />
+                
+                {!chartLoaded && (
+                  <div style={{ 
+                    position: 'absolute', 
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    zIndex: 10
+                  }}>
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="animate-spin w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
+                      <p>Đang tải biểu đồ...</p>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
-              <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
-                Nhập mã và bấm "Phân tích" để xem biểu đồ
+              <div style={{ height: 520, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexDirection: 'column', gap: 12 }}>
+                <AlertCircle size={48} />
+                <p>Nhập mã và bấm "Phân tích" để xem biểu đồ</p>
               </div>
             )}
           </div>
@@ -294,4 +319,4 @@ export default function BacktestPage() {
       </div>
     </main>
   );
-            }
+    }
