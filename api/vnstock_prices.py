@@ -1,147 +1,124 @@
+import json
+import time
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
-import json
-import os
-from datetime import datetime
 
-from vnstock import Trading, register_user
-
-REGISTERED = False
+from vnstock import Trading
 
 
-def ensure_vnstock_auth():
-    global REGISTERED
-    if REGISTERED:
-        return
-
-    api_key = os.getenv("VNSTOCK_API_KEY", "").strip()
-    if api_key:
-        try:
-            register_user(api_key=api_key)
-        except Exception:
-            pass
-
-    REGISTERED = True
+# ===== CONFIG =====
+SOURCES = ["SSI", "VND", "VCI"]
+MAX_RETRIES = 2
+SLEEP_BETWEEN_RETRIES = 0.5
 
 
-def normalize_symbols(raw: str):
-    return list(dict.fromkeys([s.strip().upper() for s in raw.split(",") if s.strip()]))
-
-
-def to_number(value):
+def fetch_from_source(symbols, source):
     try:
-        number = float(value)
-        if number > 0:
-            return number
-    except Exception:
-        pass
-    return 0.0
+        trading = Trading(source=source)
+        board = trading.price_board(symbols=symbols)
+
+        if board is None or board.empty:
+            raise ValueError("Empty board")
+
+        return board
+
+    except Exception as e:
+        raise Exception(f"{source} failed: {str(e)}")
 
 
-def fetch_prices(symbols):
-    ensure_vnstock_auth()
+def extract_prices(board):
+    results = {}
 
-    # Đổi sang VCI cho ổn định hơn với bảng giá
-    trading = Trading(source="VCI")
-    board = trading.price_board(
-        symbols_list=symbols,
-        flatten_columns=True,
-        drop_levels=[0],
-    )
+    for _, row in board.iterrows():
+        symbol = str(row.get("symbol", "")).upper()
 
-    if board is None or getattr(board, "empty", False):
-        raise ValueError("Không lấy được dữ liệu bảng giá từ Vnstock")
+        price = None
 
-    board.columns = [str(col).strip().lower() for col in board.columns]
-    rows = board.to_dict(orient="records")
+        # fallback nhiều field vì vnstock hay đổi format
+        for key in [
+            "match_price",
+            "close",
+            "close_price",
+            "price",
+            "last",
+        ]:
+            if key in row and row[key]:
+                price = row[key]
+                break
 
-    prices = {}
-    debug_rows = []
+        if price is None:
+            price = 0
 
-    for row in rows:
-        symbol = str(row.get("symbol", "")).upper().strip()
-        if not symbol:
-            continue
+        results[symbol] = int(price)
 
-        price = to_number(row.get("match_price"))
-
-        if not price:
-            for key in ["close", "close_price", "price", "last_price", "ask_1_price", "bid_1_price"]:
-                price = to_number(row.get(key))
-                if price:
-                    break
-
-        if price:
-            prices[symbol] = price
-
-        debug_rows.append(
-            {
-                "symbol": symbol,
-                "match_price": row.get("match_price"),
-                "close": row.get("close"),
-                "close_price": row.get("close_price"),
-                "price": row.get("price"),
-                "last_price": row.get("last_price"),
-                "ask_1_price": row.get("ask_1_price"),
-                "bid_1_price": row.get("bid_1_price"),
-            }
-        )
-
-    if not prices:
-        raise ValueError("Có dữ liệu trả về nhưng không đọc được giá hợp lệ")
-
-    return prices, debug_rows
+    return results
 
 
+def get_prices(symbols):
+    errors = []
+
+    for source in SOURCES:
+        for attempt in range(MAX_RETRIES):
+            try:
+                board = fetch_from_source(symbols, source)
+                prices = extract_prices(board)
+
+                # validate: ít nhất 1 giá hợp lệ
+                if any(v > 0 for v in prices.values()):
+                    return {
+                        "prices": prices,
+                        "provider": f"vnstock-{source.lower()}",
+                        "error": None,
+                    }
+
+                raise Exception("All prices = 0")
+
+            except Exception as e:
+                err_msg = f"{source} attempt {attempt+1}: {str(e)}"
+                print(err_msg)
+                errors.append(err_msg)
+                time.sleep(SLEEP_BETWEEN_RETRIES)
+
+    return {
+        "prices": {s: 0 for s in symbols},
+        "provider": "vnstock-failed",
+        "error": "; ".join(errors),
+    }
+
+
+# ===== VERCEL HANDLER =====
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
-            parsed = urlparse(self.path)
-            query = parse_qs(parsed.query)
-            raw_symbols = query.get("symbols", [""])[0]
-            debug_mode = query.get("debug", ["0"])[0] == "1"
-            symbols = normalize_symbols(raw_symbols)
+            query = parse_qs(urlparse(self.path).query)
+            symbols_param = query.get("symbols", [""])[0]
+
+            symbols = [
+                s.strip().upper()
+                for s in symbols_param.split(",")
+                if s.strip()
+            ]
 
             if not symbols:
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.end_headers()
-                self.wfile.write(
-                    json.dumps(
-                        {
-                            "prices": {},
-                            "updatedAt": datetime.utcnow().isoformat() + "Z",
-                            "provider": "vnstock-empty",
-                        }
-                    ).encode("utf-8")
-                )
+                self.respond(400, {"error": "Missing symbols"})
                 return
 
-            prices, debug_rows = fetch_prices(symbols)
+            result = get_prices(symbols)
 
-            payload = {
-                "prices": prices,
-                "updatedAt": datetime.utcnow().isoformat() + "Z",
-                "provider": "vnstock-vci",
+            response = {
+                "prices": result["prices"],
+                "provider": result["provider"],
+                "error": result["error"],
+                "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
 
-            if debug_mode:
-                payload["debug"] = debug_rows
+            self.respond(200, response)
 
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(json.dumps(payload).encode("utf-8"))
+        except Exception as e:
+            self.respond(500, {"error": str(e)})
 
-        except Exception as error:
-            self.send_response(500)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(
-                json.dumps(
-                    {
-                        "error": str(error),
-                        "provider": "vnstock-vci",
-                    }
-                ).encode("utf-8")
-            )
+    def respond(self, status, data):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
