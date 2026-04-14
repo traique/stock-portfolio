@@ -1,153 +1,138 @@
-import { NextRequest, NextResponse } from 'next/server';
+import yahooFinance from "yahoo-finance2";
 
-function normalizeSymbols(raw: string) {
-  return [...new Set(raw.split(',').map((item) => item.trim().toUpperCase()).filter(Boolean))];
-}
+const VNSTOCK_API_URL = process.env.VNSTOCK_API_URL || "";
 
-function isVnIndexSymbol(symbol: string) {
-  return symbol === 'VNINDEX' || symbol === '^VNINDEX';
-}
-
-function getYahooCandidates(symbol: string) {
-  if (isVnIndexSymbol(symbol)) {
-    return ['^VNINDEX', '^VNINDEX.VN', 'VNINDEX', 'VNINDEX.VN'];
-  }
-  return [symbol + '.VN'];
-}
-
-function safeNumber(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function roundPrice(value: number) {
-  return Math.round(value / 10) * 10;
-}
-
-function estimateCeiling(previousClose: number) {
-  return roundPrice(previousClose * 1.07);
-}
-
-function estimateFloor(previousClose: number) {
-  return roundPrice(previousClose * 0.93);
-}
-
-async function fetchYahooTicker(baseSymbol: string, ticker: string) {
-  const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(ticker) + '?interval=1m&range=1d&_=' + Date.now();
-
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-      Accept: '*/*',
-    },
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    throw new Error('Yahoo request failed for ' + ticker + ': ' + response.status);
-  }
-
-  const data = await response.json();
-  const result = data?.chart?.result?.[0];
-  const meta = result?.meta;
-
-  if (!meta) {
-    throw new Error('Yahoo returned empty meta for ' + ticker);
-  }
-
-  const price = safeNumber(meta.regularMarketPrice);
-  const previousClose = safeNumber(meta.previousClose);
-  const regularMarketVolume = safeNumber(meta.regularMarketVolume);
-  const dayHigh = safeNumber(meta.regularMarketDayHigh);
-  const dayLow = safeNumber(meta.regularMarketDayLow);
-
-  if (!price || !previousClose) {
-    throw new Error('Missing market data for ' + ticker);
-  }
-
-  const change = price - previousClose;
-  const pct = previousClose ? (change / previousClose) * 100 : 0;
-
-  return {
-    symbol: baseSymbol,
-    ticker,
-    price,
-    change,
-    pct,
-    previousClose,
-    ceilingPriceEstimate: estimateCeiling(previousClose),
-    floorPriceEstimate: estimateFloor(previousClose),
-    dayHigh,
-    dayLow,
-    marketTime: meta.regularMarketTime ?? null,
-    currency: meta.currency ?? 'VND',
-    volume: regularMarketVolume,
-  };
-}
-
-async function getYahooFinance(symbol: string) {
-  const candidates = getYahooCandidates(symbol);
-  let lastError: Error | null = null;
-
-  for (const ticker of candidates) {
-    try {
-      return await fetchYahooTicker(symbol, ticker);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown error');
-    }
-  }
-
-  throw lastError || new Error('No Yahoo ticker matched for ' + symbol);
-}
-
-export async function GET(request: NextRequest) {
+/**
+ * Fetch từ Yahoo Finance
+ */
+async function fetchYahoo(symbol: string) {
   try {
-    const symbols = normalizeSymbols(request.nextUrl.searchParams.get('symbols') || '');
+    const ticker = `${symbol}.VN`;
 
-    if (!symbols.length) {
-      return NextResponse.json({
-        prices: {},
-        updatedAt: new Date().toISOString(),
-        provider: 'market',
-        debug: [],
-      });
+    const quote: any = await yahooFinance.quote(ticker);
+
+    if (!quote || !quote.regularMarketPrice) {
+      throw new Error("No Yahoo price");
     }
 
-    const results = await Promise.all(
-      symbols.map(async (symbol) => {
-        try {
-          return await getYahooFinance(symbol);
-        } catch (error) {
-          return {
-            symbol,
-            ticker: getYahooCandidates(symbol)[0],
-            price: 0,
-            change: 0,
-            pct: 0,
-            previousClose: 0,
-            ceilingPriceEstimate: 0,
-            floorPriceEstimate: 0,
-            dayHigh: 0,
-            dayLow: 0,
-            marketTime: null,
-            currency: 'VND',
-            volume: 0,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          };
-        }
-      })
+    return {
+      price: quote.regularMarketPrice,
+      change: quote.regularMarketChange || 0,
+      pct: quote.regularMarketChangePercent || 0,
+      volume: quote.regularMarketVolume || 0,
+      previousClose: quote.regularMarketPreviousClose || 0,
+      source: "yahoo",
+    };
+  } catch (err: any) {
+    throw new Error(`Yahoo failed: ${err.message}`);
+  }
+}
+
+/**
+ * Fetch từ VNStock (Python API)
+ */
+async function fetchVnstock(symbol: string) {
+  try {
+    if (!VNSTOCK_API_URL) {
+      throw new Error("VNSTOCK_API_URL not set");
+    }
+
+    const res = await fetch(
+      `${VNSTOCK_API_URL}?symbols=${symbol}`,
+      {
+        cache: "no-store",
+      }
     );
 
-    const prices = Object.fromEntries(results.filter((item) => Number(item.price) > 0).map((item) => [item.symbol, item.price]));
+    const data = await res.json();
 
-    return NextResponse.json({
-      prices,
-      updatedAt: new Date().toISOString(),
-      provider: 'market',
-      debug: results,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: message, provider: 'market' }, { status: 500 });
+    if (!data || !data[symbol]) {
+      throw new Error("No VNStock price");
+    }
+
+    return {
+      price: data[symbol],
+      change: 0,
+      pct: 0,
+      volume: 0,
+      previousClose: 0,
+      source: "vnstock",
+    };
+  } catch (err: any) {
+    throw new Error(`VNStock failed: ${err.message}`);
   }
 }
+
+/**
+ * Hybrid logic: Yahoo → fallback VNStock
+ */
+async function getPrice(symbol: string) {
+  // 1. Try Yahoo trước
+  try {
+    const yahoo = await fetchYahoo(symbol);
+
+    // reject nếu giá = 0 (case lỗi phổ biến)
+    if (!yahoo.price || yahoo.price === 0) {
+      throw new Error("Invalid Yahoo price");
+    }
+
+    return yahoo;
+  } catch (yahooError: any) {
+    console.log(`Yahoo failed for ${symbol}:`, yahooError.message);
+
+    // 2. fallback VNStock
+    try {
+      const vn = await fetchVnstock(symbol);
+      return vn;
+    } catch (vnError: any) {
+      console.error(`VNStock failed for ${symbol}:`, vnError.message);
+
+      return {
+        price: 0,
+        change: 0,
+        pct: 0,
+        volume: 0,
+        previousClose: 0,
+        source: "none",
+        error: "Both Yahoo and VNStock failed",
+      };
+    }
+  }
+}
+
+/**
+ * API handler
+ */
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const symbolsParam = searchParams.get("symbols") || "";
+
+  const symbols = symbolsParam
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+
+  const prices: Record<string, number> = {};
+  const debug: any[] = [];
+
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      const result = await getPrice(symbol);
+
+      prices[symbol] = result.price;
+
+      debug.push({
+        symbol,
+        ticker: `${symbol}.VN`,
+        ...result,
+      });
+    })
+  );
+
+  return Response.json({
+    prices,
+    updatedAt: new Date().toISOString(),
+    provider: "hybrid",
+    debug,
+  });
+        }
