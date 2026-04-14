@@ -1,12 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Sparkles, TrendingDown, TrendingUp, Trash2 } from 'lucide-react';
+import { Activity, ArrowRight, BriefcaseBusiness, Sparkles, Trash2, Wrench } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 
 type QuoteItem = { symbol: string; price: number; change: number; pct: number; volume?: number };
-type PricesResponse = { debug?: QuoteItem[]; error?: string };
+type PricesResponse = { debug?: QuoteItem[]; error?: string; cached?: boolean };
+
 const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
 const formatPrice = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v));
 const formatPct = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : v < 0 ? '' : ''}${v.toFixed(2)}%`);
@@ -49,34 +51,42 @@ export default function HomePage() {
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    void (async () => {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
       const session = data.session;
-      setIsLoggedIn(!!session);
+      setIsLoggedIn(Boolean(session));
       setUserEmail(session?.user?.email || '');
       setUserId(session?.user?.id || '');
       setSessionChecked(true);
     })();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setIsLoggedIn(!!session);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsLoggedIn(Boolean(session));
       setUserEmail(session?.user?.email || '');
       setUserId(session?.user?.id || '');
       if (session) setShowAuth(false);
       setSessionChecked(true);
     });
-    return () => { mounted = false; subscription.unsubscribe(); };
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       if (!sessionChecked) return;
       setWatchlistReady(false);
+
       if (isLoggedIn && userId) {
         try {
           const { data, error } = await supabase.from('watchlists').select('symbol').order('symbol', { ascending: true });
           if (!error && Array.isArray(data) && data.length) {
-            const symbols = sortSymbols(data.map((r) => normalizeSymbol(String(r.symbol))).filter(Boolean));
+            const symbols = sortSymbols(data.map((row) => normalizeSymbol(String(row.symbol))).filter(Boolean));
             setWatchlist(symbols);
             lastSavedPayloadRef.current = JSON.stringify(symbols);
             setWatchlistReady(true);
@@ -84,12 +94,13 @@ export default function HomePage() {
           }
         } catch {}
       }
+
       const saved = localStorage.getItem(getWatchlistKey(userEmail || undefined));
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed) && parsed.length) {
-            const symbols = sortSymbols(parsed.map((i) => normalizeSymbol(String(i))).filter(Boolean));
+            const symbols = sortSymbols(parsed.map((item) => normalizeSymbol(String(item))).filter(Boolean));
             setWatchlist(symbols);
             lastSavedPayloadRef.current = JSON.stringify(symbols);
             setWatchlistReady(true);
@@ -97,6 +108,7 @@ export default function HomePage() {
           }
         } catch {}
       }
+
       const fallback = sortSymbols(DEFAULT_WATCHLIST);
       setWatchlist(fallback);
       lastSavedPayloadRef.current = JSON.stringify(fallback);
@@ -110,7 +122,8 @@ export default function HomePage() {
     const payload = JSON.stringify(sorted);
     localStorage.setItem(getWatchlistKey(userEmail || undefined), payload);
     if (payload === lastSavedPayloadRef.current) return;
-    (async () => {
+
+    void (async () => {
       if (isLoggedIn && userId) {
         try {
           await supabase.from('watchlists').delete().eq('user_id', userId);
@@ -122,12 +135,18 @@ export default function HomePage() {
   }, [watchlist, userEmail, userId, isLoggedIn, sessionChecked, watchlistReady]);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       if (!watchlistReady) return;
-      if (!watchlist.length) { setQuotes([]); setLoading(false); return; }
-      setLoading(true); setMarketError('');
+      if (!watchlist.length) {
+        setQuotes([]);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setMarketError('');
       try {
-        const response = await fetch(`/api/prices?symbols=${encodeURIComponent(watchlist.join(','))}`, { cache: 'no-store' });
+        const response = await fetch(`/api/prices-cache?symbols=${encodeURIComponent(watchlist.join(','))}`, { cache: 'no-store' });
         const data: PricesResponse = await response.json();
         if (!response.ok) {
           setMarketError(data?.error || 'Không lấy được dữ liệu');
@@ -145,9 +164,9 @@ export default function HomePage() {
   }, [watchlist, watchlistReady]);
 
   useEffect(() => {
-    (async () => {
+    void (async () => {
       try {
-        const response = await fetch('/api/prices?symbols=VNINDEX', { cache: 'no-store' });
+        const response = await fetch('/api/prices-cache?symbols=VNINDEX', { cache: 'no-store' });
         const data: PricesResponse = await response.json();
         const item = data?.debug?.[0];
         setVnIndex(item && Number(item.price) > 0 ? item : null);
@@ -157,16 +176,7 @@ export default function HomePage() {
     })();
   }, []);
 
-  const breadth = useMemo(() => {
-    const valid = quotes.filter((i) => Number.isFinite(i.pct));
-    return {
-      gainers: valid.filter((i) => i.pct > 0).length,
-      losers: valid.filter((i) => i.pct < 0).length,
-      avgPct: valid.length ? valid.reduce((s, i) => s + i.pct, 0) / valid.length : 0,
-    };
-  }, [quotes]);
-
-  const topPositive = useMemo(() => [...quotes].filter((i) => i.pct > 0).sort((a, b) => b.pct - a.pct).slice(0, 3), [quotes]);
+  const bestMover = useMemo(() => [...quotes].sort((a, b) => b.pct - a.pct)[0] || null, [quotes]);
 
   async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -186,7 +196,9 @@ export default function HomePage() {
     }
   }
 
-  async function handleLogout() { await supabase.auth.signOut(); }
+  async function handleLogout() {
+    await supabase.auth.signOut();
+  }
 
   function addWatchSymbol(symbolRaw?: string) {
     const symbol = normalizeSymbol(symbolRaw ?? watchInput);
@@ -198,38 +210,64 @@ export default function HomePage() {
   }
 
   function removeWatchSymbol(symbol: string) {
-    setWatchlist((prev) => sortSymbols(prev.filter((i) => i !== symbol)));
+    setWatchlist((prev) => sortSymbols(prev.filter((item) => item !== symbol)));
   }
 
-  if (!sessionChecked) return <main className="ab-page"><div className="ab-shell"><section className="ab-card">Đang tải...</section></div></main>;
+  if (!sessionChecked) {
+    return (
+      <main className="ab-page">
+        <div className="ab-shell">
+          <section className="ab-card">Đang tải...</section>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="ab-page">
       <div className="ab-shell premium-gap">
-        <AppShellHeader title="Radar đầu tư" isLoggedIn={isLoggedIn} email={userEmail} currentTab="home" onLogout={handleLogout} onAuthOpen={() => setShowAuth((p) => !p)} />
+        <AppShellHeader
+          title="Watchlist"
+          isLoggedIn={isLoggedIn}
+          email={userEmail}
+          currentTab="home"
+          onLogout={handleLogout}
+          onAuthOpen={() => setShowAuth((prev) => !prev)}
+        />
 
-        <section className="ab-premium-card ab-market-strip-pro ab-market-board-premium">
-          <div className="ab-strip-vnindex">
-            <span className="ab-soft-label ab-strip-head"><Activity size={14} />VN-Index</span>
-            <div className="ab-strip-vnindex-main">{vnIndex ? formatPrice(vnIndex.price) : '--'}</div>
-            <div className="ab-strip-vnindex-change" style={{ color: colorFor(vnIndex?.pct) }}>
-              {vnIndex ? `${formatIndexChange(vnIndex.change)} · ${formatPct(vnIndex.pct)}` : 'Đang tải'}
+        <section className="ab-premium-card ab-market-strip-pro" style={{ display: 'grid', gap: 12 }}>
+          <div className="ab-row-between align-center" style={{ flexWrap: 'wrap' }}>
+            <div>
+              <div className="ab-card-kicker">Nhìn nhanh thị trường</div>
+              <div className="ab-card-headline small">Một màn hình, đúng thứ cần xem</div>
+            </div>
+            <div className="ab-strip-vnindex" style={{ minWidth: 220 }}>
+              <span className="ab-soft-label ab-strip-head"><Activity size={14} />VN-Index</span>
+              <div className="ab-strip-vnindex-main">{vnIndex ? formatPrice(vnIndex.price) : '--'}</div>
+              <div className="ab-strip-vnindex-change" style={{ color: colorFor(vnIndex?.pct) }}>
+                {vnIndex ? `${formatIndexChange(vnIndex.change)} · ${formatPct(vnIndex.pct)}` : 'Đang tải'}
+              </div>
             </div>
           </div>
 
-          <div className="ab-strip-metrics">
-            <div className="ab-metric-cell">
-              <span>Mã tăng</span>
-              <strong className="positive">{loading ? '--' : breadth.gainers}</strong>
-            </div>
-            <div className="ab-metric-cell">
-              <span>Mã giảm</span>
-              <strong className="negative">{loading ? '--' : breadth.losers}</strong>
-            </div>
-            <div className="ab-metric-cell wide">
-              <span>Biến động TB</span>
-              <strong style={{ color: colorFor(breadth.avgPct) }}>{Number.isFinite(breadth.avgPct) ? formatPct(breadth.avgPct) : 'N/A'}</strong>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+            <Link href="/dashboard" className="ab-premium-card" style={{ padding: 14, display: 'grid', gap: 8 }}>
+              <div className="ab-row-between align-center"><span className="ab-card-kicker">Trung tâm</span><BriefcaseBusiness size={16} /></div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>Danh mục</div>
+              <div className="ab-soft-label">NAV, PnL, holdings và lịch sử giao dịch.</div>
+            </Link>
+
+            <Link href="/market" className="ab-premium-card" style={{ padding: 14, display: 'grid', gap: 8 }}>
+              <div className="ab-row-between align-center"><span className="ab-card-kicker">Dữ liệu</span><Sparkles size={16} /></div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>Market</div>
+              <div className="ab-soft-label">Top Buy/Sell và nhịp thị trường trong ngày.</div>
+            </Link>
+
+            <Link href="/tools" className="ab-premium-card" style={{ padding: 14, display: 'grid', gap: 8 }}>
+              <div className="ab-row-between align-center"><span className="ab-card-kicker">Tiện ích</span><Wrench size={16} /></div>
+              <div style={{ fontSize: 20, fontWeight: 800 }}>Tools</div>
+              <div className="ab-soft-label">Backtest, giá vàng và giá xăng ở một chỗ riêng.</div>
+            </Link>
           </div>
         </section>
 
@@ -241,20 +279,36 @@ export default function HomePage() {
               <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mật khẩu" type="password" required className="ab-input" />
               <button type="submit" className="ab-btn ab-btn-primary ab-btn-full ab-auth-full">{loadingAuth ? 'Đang xử lý...' : authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</button>
             </form>
-            <button type="button" onClick={() => setAuthMode((p) => (p === 'login' ? 'signup' : 'login'))} className="ab-link-btn">{authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}</button>
+            <button type="button" onClick={() => setAuthMode((prev) => (prev === 'login' ? 'signup' : 'login'))} className="ab-link-btn">
+              {authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}
+            </button>
             {authMessage ? <div className="ab-note">{authMessage}</div> : null}
           </section>
         ) : null}
 
-        <section className="ab-home-grid single-focus">
+        <section className="ab-home-grid" style={{ gridTemplateColumns: 'minmax(0, 1.5fr) minmax(280px, 0.9fr)' }}>
           <section className="ab-premium-card ab-watch-shell compact-watch-shell">
             <div className="ab-row-between align-center">
-              <div className="ab-card-kicker">Danh sách theo dõi cá nhân</div>
+              <div>
+                <div className="ab-card-kicker">Theo dõi cá nhân</div>
+                <div className="ab-card-headline small">Watchlist của bạn</div>
+              </div>
               <div className="ab-watch-count">{quotes.length} mã</div>
             </div>
 
             <div className="ab-add-row premium compact">
-              <input value={watchInput} onChange={(e) => setWatchInput(e.target.value)} placeholder="Nhập mã cổ phiếu" className="ab-input" />
+              <input
+                value={watchInput}
+                onChange={(event) => setWatchInput(event.target.value)}
+                placeholder="Nhập mã cổ phiếu"
+                className="ab-input"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    addWatchSymbol();
+                  }
+                }}
+              />
               <button type="button" onClick={() => addWatchSymbol()} className="ab-btn ab-btn-primary">Thêm</button>
             </div>
 
@@ -277,54 +331,67 @@ export default function HomePage() {
                       </button>
                     </div>
                     <div className="ab-price premium compact">{formatPrice(item.price)}</div>
-                    <div className="ab-soft-change under-price" style={{ color: colorFor(item.change) }}>{formatPrice(item.change)} · {formatPct(item.pct)}</div>
+                    <div className="ab-soft-change under-price" style={{ color: colorFor(item.change) }}>
+                      {formatPrice(item.change)} · {formatPct(item.pct)}
+                    </div>
                   </article>
                 ))
               ) : (
-                <div className="ab-note">Chưa có mã</div>
+                <div className="ab-note">Chưa có mã trong watchlist.</div>
               )}
             </div>
           </section>
 
           <aside className="ab-side-stack">
-            <section className="ab-premium-card ab-movers-card compact-side-card">
+            <section className="ab-premium-card compact-side-card" style={{ display: 'grid', gap: 10 }}>
               <div className="ab-row-between align-center">
                 <div>
-                  <div className="ab-card-kicker">Điểm nhấn trong ngày</div>
-                  <div className="ab-card-headline small">Tăng tốt nhất</div>
+                  <div className="ab-card-kicker">Điểm nhấn nhanh</div>
+                  <div className="ab-card-headline small">Mã nổi bật nhất</div>
                 </div>
-                <Sparkles size={16} />
+                <ArrowRight size={16} />
               </div>
-              <div className="ab-mini-list">
-                {loading ? (
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <div key={index} className="ab-mini-row ab-skeleton-row">
-                      <div className="ab-skeleton skeleton-line short" />
-                      <div className="ab-skeleton skeleton-line tiny" />
-                    </div>
-                  ))
-                ) : topPositive.length ? topPositive.map((item) => (
-                  <div key={item.symbol} className="ab-mini-row">
-                    <div>
-                      <div className="ab-mini-symbol">{item.symbol}</div>
-                      <div className="ab-mini-price">{formatPrice(item.price)}</div>
-                    </div>
-                    <div className="ab-mini-pct positive">{formatPct(item.pct)}</div>
+
+              {bestMover ? (
+                <div className="ab-mini-card premium">
+                  <div className="ab-row-between align-center">
+                    <div style={{ fontSize: 28, fontWeight: 900 }}>{bestMover.symbol}</div>
+                    <div className="ab-mini-pct positive" style={{ fontSize: 16 }}>{formatPct(bestMover.pct)}</div>
                   </div>
-                )) : <div className="ab-note">Chưa có dữ liệu tăng giá.</div>}
-              </div>
+                  <div className="ab-soft-label" style={{ marginTop: 6 }}>Giá hiện tại: {formatPrice(bestMover.price)}</div>
+                </div>
+              ) : (
+                <div className="ab-note">Chưa có dữ liệu nổi bật.</div>
+              )}
             </section>
 
-            <section className="ab-premium-card ab-tone-card compact-side-card">
-              <div className="ab-card-kicker">Nhịp thị trường</div>
-              <div className="ab-tone-content">
-                {breadth.gainers >= breadth.losers ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                <span>{breadth.gainers >= breadth.losers ? 'Dòng tiền đang nghiêng về phía tăng.' : 'Áp lực giảm đang chiếm ưu thế.'}</span>
-              </div>
+            <section className="ab-premium-card compact-side-card" style={{ display: 'grid', gap: 10 }}>
+              <div className="ab-card-kicker">Gợi ý điều hướng</div>
+              <Link href="/dashboard" className="ab-mini-row" style={{ padding: '6px 0' }}>
+                <div>
+                  <div className="ab-mini-symbol">Danh mục</div>
+                  <div className="ab-mini-price">Xem NAV và PnL tổng</div>
+                </div>
+                <ArrowRight size={16} />
+              </Link>
+              <Link href="/market" className="ab-mini-row" style={{ padding: '6px 0' }}>
+                <div>
+                  <div className="ab-mini-symbol">Market</div>
+                  <div className="ab-mini-price">Theo dõi Top Buy/Sell</div>
+                </div>
+                <ArrowRight size={16} />
+              </Link>
+              <Link href="/tools" className="ab-mini-row" style={{ padding: '6px 0' }}>
+                <div>
+                  <div className="ab-mini-symbol">Tools</div>
+                  <div className="ab-mini-price">Backtest và giá hàng hóa</div>
+                </div>
+                <ArrowRight size={16} />
+              </Link>
             </section>
           </aside>
         </section>
       </div>
     </main>
   );
-      }
+                  }
