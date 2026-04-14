@@ -6,19 +6,20 @@ import { Solar } from 'lunar-javascript';
 import {
   Activity,
   ArrowRight,
+  BarChart3,
   BriefcaseBusiness,
   Cloud,
   CloudFog,
   CloudLightning,
   CloudRain,
   CloudSun,
-  Droplets,
   Gem,
   House,
-  LineChart,
+  LayoutGrid,
   LogOut,
   Moon,
   Sun,
+  Wrench,
 } from 'lucide-react';
 
 type ThemeMode = 'light' | 'dark';
@@ -27,7 +28,7 @@ type Props = {
   title: string;
   email?: string;
   isLoggedIn: boolean;
-  currentTab: 'home' | 'dashboard' | 'gold' | 'oil' | 'system-live' | 'backtest';
+  currentTab: 'home' | 'dashboard' | 'market' | 'tools' | 'gold' | 'oil' | 'system-live' | 'backtest';
   onLogout?: () => void;
   onAuthOpen?: () => void;
 };
@@ -50,6 +51,12 @@ function getWeatherIcon(code: number | null) {
   if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return CloudRain;
   if ([95, 96, 99].includes(code)) return CloudLightning;
   return CloudSun;
+}
+
+function getPrimaryTab(currentTab: Props['currentTab']) {
+  if (currentTab === 'gold' || currentTab === 'oil' || currentTab === 'backtest') return 'tools';
+  if (currentTab === 'system-live') return 'market';
+  return currentTab;
 }
 
 export default function AppShellHeader({ title, email, isLoggedIn, currentTab, onLogout, onAuthOpen }: Props) {
@@ -114,10 +121,11 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
       }
     }
 
-    buildInfo();
+    void buildInfo();
   }, []);
 
   const WeatherIcon = useMemo(() => getWeatherIcon(weatherCode), [weatherCode]);
+  const primaryTab = getPrimaryTab(currentTab);
 
   function toggleTheme() {
     const nextTheme: ThemeMode = theme === 'light' ? 'dark' : 'light';
@@ -171,15 +179,21 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
           </div>
         </div>
 
-        <div className="ab-premium-tabs">
-          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}><House size={15} /><span>Home</span></Link>
-          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}><BriefcaseBusiness size={15} /><span>Danh mục</span></Link>
-          <Link href="/system-live" className={`ab-premium-tab ${currentTab === 'system-live' ? 'active' : ''}`}><Activity size={15} /><span>TOP BUY SELL</span></Link>
-          <Link href="/backtest" className={`ab-premium-tab ${currentTab === 'backtest' ? 'active' : ''}`}><LineChart size={15} /><span>Backtest</span></Link>
-          <Link href="/gold" className={`ab-premium-tab ${currentTab === 'gold' ? 'active' : ''}`}><Gem size={15} /><span>Giá vàng</span></Link>
-          <Link href="/oil" className={`ab-premium-tab ${currentTab === 'oil' ? 'active' : ''}`}><Droplets size={15} /><span>Giá xăng</span></Link>
+        <div style={{ display: 'grid', gap: 8, justifyItems: 'end' }}>
+          <div className="ab-premium-tabs">
+            <Link href="/dashboard" className={`ab-premium-tab ${primaryTab === 'dashboard' ? 'active' : ''}`}><BriefcaseBusiness size={15} /><span>Danh mục</span></Link>
+            <Link href="/" className={`ab-premium-tab ${primaryTab === 'home' ? 'active' : ''}`}><House size={15} /><span>Watchlist</span></Link>
+            <Link href="/market" className={`ab-premium-tab ${primaryTab === 'market' ? 'active' : ''}`}><LayoutGrid size={15} /><span>Market</span></Link>
+            <Link href="/tools" className={`ab-premium-tab ${primaryTab === 'tools' ? 'active' : ''}`}><Wrench size={15} /><span>Tools</span></Link>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <Link href="/system-live" className="ab-premium-tab" style={{ padding: '8px 12px', fontSize: 12 }}><Activity size={14} /><span>Top Buy/Sell</span></Link>
+            <Link href="/backtest" className="ab-premium-tab" style={{ padding: '8px 12px', fontSize: 12 }}><BarChart3 size={14} /><span>Backtest</span></Link>
+            <Link href="/gold" className="ab-premium-tab" style={{ padding: '8px 12px', fontSize: 12 }}><Gem size={14} /><span>Giá vàng</span></Link>
+          </div>
         </div>
       </div>
     </section>
   );
-}
+                                                                     }
