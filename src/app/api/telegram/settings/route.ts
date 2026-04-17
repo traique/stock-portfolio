@@ -1,30 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
+import {
+  getBearerToken,
+  validationErrorResponse,
+} from '@/lib/server/api-utils';
+import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 
-function getUserClient(accessToken: string) {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
-}
+const telegramSettingsBodySchema = z.object({
+  chat_id: z.string().trim().min(1, 'Thiếu chat_id'),
+  is_enabled: z.coerce.boolean().optional().default(false),
+  notify_daily: z.coerce.boolean().optional().default(true),
+  notify_threshold: z.coerce.boolean().optional().default(true),
+  threshold_pct: z.coerce.number().min(0).max(100).optional().default(3),
+  daily_hour_utc: z.coerce.number().int().min(0).max(23).optional().default(9),
+});
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const token = getBearerToken(request);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabase = getUserClient(token);
+  const supabase = getSupabaseUserClient(token);
   const { data: userRes } = await supabase.auth.getUser();
   const user = userRes.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -40,29 +35,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const token = getBearerToken(request);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabase = getUserClient(token);
+  const supabase = getSupabaseUserClient(token);
   const { data: userRes } = await supabase.auth.getUser();
   const user = userRes.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const body = await request.json();
+  const rawBody = await request.json();
+  const parsed = telegramSettingsBodySchema.safeParse(rawBody);
+  if (!parsed.success) return validationErrorResponse(parsed.error);
+
   const payload = {
     user_id: user.id,
-    chat_id: String(body.chat_id || '').trim(),
-    is_enabled: Boolean(body.is_enabled),
-    notify_daily: body.notify_daily !== false,
-    notify_threshold: body.notify_threshold !== false,
-    threshold_pct: Number(body.threshold_pct || 3),
-    daily_hour_utc: Number(body.daily_hour_utc ?? 9),
+    ...parsed.data,
   };
-
-  if (!payload.chat_id) {
-    return NextResponse.json({ error: 'Thiếu chat_id' }, { status: 400 });
-  }
 
   const { data, error } = await supabase
     .from('telegram_settings')
@@ -72,4 +60,4 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ settings: data });
-}
+    }
