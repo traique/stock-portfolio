@@ -1,12 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
+import { envServer } from '@/lib/env-server';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const key = process.env.SUPABASE_SERVER_KEY || '';
-
-export const supabaseServer = createClient(url, key, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-    detectSessionInUrl: false,
-  },
-});
+export const supabaseServer = createClient(
+  envServer.NEXT_PUBLIC_SUPABASE_URL,
+  envServer.SUPABASE_SERVER_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  }
+);
