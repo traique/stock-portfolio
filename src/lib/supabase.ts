@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { envPublic } from '@/lib/env-public';
 
 export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+  envPublic.NEXT_PUBLIC_SUPABASE_URL,
+  envPublic.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
