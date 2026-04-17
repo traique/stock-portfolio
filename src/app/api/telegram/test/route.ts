@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { buildDailyMessage, QuoteDebugItem, sendTelegramMessage } from '@/lib/telegram';
 import type {
   CashTransaction,
@@ -7,28 +6,12 @@ import type {
   PriceMap,
   Transaction,
 } from '@/lib/calculations';
-
-function getUserClient(accessToken: string) {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-    {
-      global: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      },
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  );
-}
+import { envServer } from '@/lib/env-server';
+import { getBearerToken } from '@/lib/server/api-utils';
+import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 
 async function loadPrices(symbols: string[]) {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const baseUrl = envServer.NEXT_PUBLIC_SITE_URL || envServer.VERCEL_PROJECT_PRODUCTION_URL;
 
   if (!baseUrl) throw new Error('Missing NEXT_PUBLIC_SITE_URL');
 
@@ -48,11 +31,10 @@ async function loadPrices(symbols: string[]) {
 }
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get('authorization') || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const token = getBearerToken(request);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const supabase = getUserClient(token);
+  const supabase = getSupabaseUserClient(token);
   const { data: userRes } = await supabase.auth.getUser();
   const user = userRes.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
