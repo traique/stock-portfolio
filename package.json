@@ -13,10 +13,11 @@
     "cheerio": "^1.0.0",
     "lucide-react": "^0.542.0",
     "lunar-javascript": "^1.7.4",
-    "next": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "yahoo-finance2": "latest"
+    "next": "15.5.15",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "yahoo-finance2": "3.14.0",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
