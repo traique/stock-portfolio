@@ -12,6 +12,7 @@ import type {
   PriceMap,
   Transaction,
 } from '@/lib/calculations';
+import { envServer } from '@/lib/env-server';
 
 type QuoteDebugItem = {
   symbol: string;
@@ -31,7 +32,7 @@ function isWeekendInVn(date: Date) {
 }
 
 async function loadPrices(symbols: string[]) {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const baseUrl = envServer.NEXT_PUBLIC_SITE_URL || envServer.VERCEL_PROJECT_PRODUCTION_URL;
   if (!baseUrl) throw new Error('Missing NEXT_PUBLIC_SITE_URL');
 
   const normalizedBase = baseUrl.startsWith('http') ? baseUrl : `https://${baseUrl}`;
@@ -49,7 +50,9 @@ async function loadPrices(symbols: string[]) {
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = envServer.CRON_SECRET;
+
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -163,4 +166,4 @@ export async function GET(request: NextRequest) {
     details,
     ran_at: now.toISOString(),
   });
-}
+                    }
