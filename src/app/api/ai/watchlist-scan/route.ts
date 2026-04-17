@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { buildTechnicalSignals, callOpenRouterJson } from '@/lib/server/ai-insights';
 import { validationErrorResponse } from '@/lib/server/api-utils';
-import { envServer } from '@/lib/env-server';
+import { envServer, getOptionalServerEnv } from '@/lib/env-server';
 import { buildAiCacheMeta, getAiCache, setAiCache } from '@/lib/server/ai-cache';
 
 const bodySchema = z.object({
@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
   };
 
   const aiResponse = await callOpenRouterJson<WatchlistScanResponse>(
-    envServer.OPENROUTER_API_KEY,
-    envServer.OPENROUTER_MODEL || 'openrouter/auto',
+    getOptionalServerEnv('OPENROUTER_API_KEY') || envServer.OPENROUTER_API_KEY,
+    getOptionalServerEnv('OPENROUTER_MODEL') || envServer.OPENROUTER_MODEL || 'openrouter/auto',
     `Bạn là trợ lý quét watchlist cổ phiếu. Trả JSON hợp lệ với keys: summary, picks, avoid.
 Mỗi pick gồm symbol, score(0-100), reason, entry, tp, sl. Ưu tiên quản trị rủi ro.`,
     JSON.stringify({ risk_profile: parsed.data.risk_profile, scored }),
