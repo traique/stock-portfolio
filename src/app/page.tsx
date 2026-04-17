@@ -7,6 +7,15 @@ import AppShellHeader from '@/components/app-shell-header';
 
 type QuoteItem = { symbol: string; price: number; change: number; pct: number; volume?: number };
 type PricesResponse = { debug?: QuoteItem[]; error?: string };
+type AiWatchlistResponse = {
+  summary: string;
+  picks: Array<{ symbol: string; score: number; reason: string; entry: number; tp: number; sl: number }>;
+  avoid: string[];
+  cached?: boolean;
+  cache_ttl_seconds?: number;
+  cached_at?: string;
+  error?: string;
+};
 const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
 const formatPrice = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v));
 const formatPct = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : v < 0 ? '' : ''}${v.toFixed(2)}%`);
@@ -44,6 +53,9 @@ export default function HomePage() {
   const [vnIndex, setVnIndex] = useState<QuoteItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiWatchlist, setAiWatchlist] = useState<AiWatchlistResponse | null>(null);
   const [watchlistReady, setWatchlistReady] = useState(false);
   const lastSavedPayloadRef = useRef('');
 
@@ -67,6 +79,31 @@ export default function HomePage() {
     });
     return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
+
+  async function runAiWatchlistScan() {
+    if (!watchlist.length) return;
+    setAiLoading(true);
+    setAiError('');
+    try {
+      const response = await fetch('/api/ai/watchlist-scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols: watchlist, risk_profile: 'balanced' }),
+      });
+      const payload: AiWatchlistResponse = await response.json();
+      if (!response.ok) {
+        setAiError(payload?.error || 'Không thể phân tích watchlist');
+        setAiWatchlist(null);
+      } else {
+        setAiWatchlist(payload);
+      }
+    } catch {
+      setAiError('Không thể kết nối AI');
+      setAiWatchlist(null);
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -322,9 +359,37 @@ export default function HomePage() {
                 <span>{breadth.gainers >= breadth.losers ? 'Dòng tiền đang nghiêng về phía tăng.' : 'Áp lực giảm đang chiếm ưu thế.'}</span>
               </div>
             </section>
+
+            <section className="ab-premium-card compact-side-card">
+              <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
+                <div>
+                  <div className="ab-card-kicker">AI Watchlist Assistant</div>
+                  <div className="ab-soft-label">Quét mã và gợi ý mua + TP/SL</div>
+                </div>
+                <button type="button" className="ab-btn ab-btn-primary" onClick={runAiWatchlistScan} disabled={aiLoading || !watchlist.length}>
+                  {aiLoading ? 'Đang quét...' : 'Quét AI'}
+                </button>
+              </div>
+              {aiError ? <div className="ab-error">{aiError}</div> : null}
+              {aiWatchlist?.cached ? <div className="ab-note">Kết quả cache ~{Math.round((aiWatchlist.cache_ttl_seconds || 0) / 60)} phút để tránh spam API.</div> : null}
+              {aiWatchlist ? (
+                <div className="ab-mini-list">
+                  <div className="ab-note">{aiWatchlist.summary}</div>
+                  {(aiWatchlist.picks || []).slice(0, 3).map((pick) => (
+                    <div key={pick.symbol} className="ab-mini-row">
+                      <div>
+                        <div className="ab-mini-symbol">{pick.symbol} · {pick.score.toFixed(1)}</div>
+                        <div className="ab-mini-price">Entry {formatPrice(pick.entry)} · TP {formatPrice(pick.tp)} · SL {formatPrice(pick.sl)}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {aiWatchlist.avoid?.length ? <div className="ab-note">Cẩn trọng: {aiWatchlist.avoid.join(', ')}</div> : null}
+                </div>
+              ) : <div className="ab-note">Nhấn “Quét AI” để nhận gợi ý cho watchlist.</div>}
+            </section>
           </aside>
         </section>
       </div>
     </main>
   );
-      }
+                                                                                                            }
