@@ -4,7 +4,7 @@ import { getBearerToken, validationErrorResponse } from '@/lib/server/api-utils'
 import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 import { buildTechnicalSignals, callOpenRouterJson } from '@/lib/server/ai-insights';
 import { deriveOpenHoldings, groupHoldingsBySymbol, Transaction } from '@/lib/calculations';
-import { envServer } from '@/lib/env-server';
+import { envServer, getOptionalServerEnv } from '@/lib/env-server';
 import { buildAiCacheMeta, getAiCache, setAiCache } from '@/lib/server/ai-cache';
 
 const bodySchema = z.object({
@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
   };
 
   const aiResponse = await callOpenRouterJson<AiPortfolioResponse>(
-    envServer.OPENROUTER_API_KEY,
-    envServer.OPENROUTER_MODEL || 'openrouter/auto',
+    getOptionalServerEnv('OPENROUTER_API_KEY') || envServer.OPENROUTER_API_KEY,
+    getOptionalServerEnv('OPENROUTER_MODEL') || envServer.OPENROUTER_MODEL || 'openrouter/auto',
     `Bạn là trợ lý đầu tư cổ phiếu Việt Nam. Trả JSON hợp lệ với keys: summary, actions, risks.
 Mỗi action phải có symbol, action(BUY|HOLD|REDUCE|SELL|WATCH), reason, confidence(LOW|MEDIUM|HIGH), tp, sl.
 Ưu tiên kiểm soát rủi ro và kỷ luật SL.`,
@@ -134,4 +134,4 @@ Mỗi action phải có symbol, action(BUY|HOLD|REDUCE|SELL|WATCH), reason, conf
     ...aiResponse,
     ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS),
   });
-                                                                   }
+      }
