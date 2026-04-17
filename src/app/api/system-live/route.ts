@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { validationErrorResponse } from '@/lib/server/api-utils';
 
 type SystemSignal = {
   symbol: string;
@@ -17,14 +19,20 @@ const headers = {
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
 };
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const limit = Math.min(Math.max(Number(searchParams.get('limit') || 30), 1), 100);
-    const signalType = (searchParams.get('type') || 'BUY').toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
+const querySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).optional().default(30),
+  type: z.enum(['BUY', 'SELL']).optional().default('BUY'),
+  timeframe: z.string().trim().toUpperCase().optional().default('1D'),
+});
 
-    const timeframe = (searchParams.get('timeframe') || '1D').toUpperCase();
-    const upstream = `https://sieutinhieu.vn/api/v1/realtime-signals/live-signals/today-trend-changes?limit=${limit}&timeframe=${timeframe}&signal_type=${signalType}&include_all_today=false&sort_by=trading_value`;
+export async function GET(request: NextRequest) {
+  const parsed = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));
+  if (!parsed.success) return validationErrorResponse(parsed.error);
+
+  const { limit, type, timeframe } = parsed.data;
+
+  try {
+    const upstream = `https://sieutinhieu.vn/api/v1/realtime-signals/live-signals/today-trend-changes?limit=${limit}&timeframe=${timeframe}&signal_type=${type}&include_all_today=false&sort_by=trading_value`;
 
     const response = await fetch(upstream, {
       headers,
@@ -32,7 +40,10 @@ export async function GET(request: Request) {
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: `Upstream failed: ${response.status}` }, { status: 502 });
+      return NextResponse.json(
+        { error: `Upstream failed: ${response.status}` },
+        { status: 502 }
+      );
     }
 
     const payload = await response.json();
@@ -46,7 +57,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       provider: 'sieutinhieu',
-      type: signalType,
+      type,
       updatedAt: new Date().toISOString(),
       count: signals.length,
       signals,
