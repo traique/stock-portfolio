@@ -1,22 +1,37 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { validationErrorResponse } from '@/lib/server/api-utils';
 
 const SIEU_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-A705F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36',
+  'User-Agent':
+    'Mozilla/5.0 (Linux; Android 11; SM-A705F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36',
   Referer: 'https://sieutinhieu.vn/',
   Accept: 'application/json',
 };
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const symbol = (searchParams.get('symbol') || 'HPG').toUpperCase();
-  const timeframe = (searchParams.get('timeframe') || '1D').toUpperCase();
-  const limit = Number(searchParams.get('limit') || '5000');
-  const start = Number(searchParams.get('start') || '1712676508');
+const querySchema = z.object({
+  symbol: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .regex(/^[A-Z0-9]{1,10}$/)
+    .optional()
+    .default('HPG'),
+  timeframe: z.string().trim().toUpperCase().optional().default('1D'),
+  limit: z.coerce.number().int().min(1).max(10000).optional().default(5000),
+  start: z.coerce.number().int().min(1).optional().default(1712676508),
+});
+
+export async function GET(request: NextRequest) {
+  const parsed = querySchema.safeParse(Object.fromEntries(request.nextUrl.searchParams.entries()));
+  if (!parsed.success) return validationErrorResponse(parsed.error);
+
+  const { symbol, timeframe, limit, start } = parsed.data;
 
   try {
-    const url = `https://sieutinhieu.vn/api/v1/signals/performance?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(
-      timeframe
-    )}&limit=${Number.isFinite(limit) ? limit : 5000}&start=${Number.isFinite(start) ? start : 1712676508}`;
+    const url = `https://sieutinhieu.vn/api/v1/signals/performance?symbol=${encodeURIComponent(
+      symbol
+    )}&timeframe=${encodeURIComponent(timeframe)}&limit=${limit}&start=${start}`;
 
     const res = await fetch(url, {
       headers: SIEU_HEADERS,
@@ -43,4 +58,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
+      }
