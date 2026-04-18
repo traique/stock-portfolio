@@ -4,7 +4,7 @@ import { getBearerToken, validationErrorResponse } from '@/lib/server/api-utils'
 import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 import { buildTechnicalSignals, callOpenRouterJson } from '@/lib/server/ai-insights';
 import { deriveOpenHoldings, groupHoldingsBySymbol, Transaction } from '@/lib/calculations';
-import { envServer, getOptionalServerEnv } from '@/lib/env-server';
+import { envServer } from '@/lib/env-server';
 import { buildAiCacheMeta, getAiCache, setAiCache } from '@/lib/server/ai-cache';
 
 const bodySchema = z.object({
@@ -28,7 +28,7 @@ type AiPortfolioResponse = {
 
 function buildPortfolioCacheKey(
   userId: string,
-  riskProfile: 'conservative' | 'balanced' | 'aggressive',
+  riskProfile: string,
   transactions: Transaction[]
 ) {
   const txSignature = transactions
@@ -64,20 +64,17 @@ export async function POST(request: NextRequest) {
   const transactions = (txRows || []) as Transaction[];
   if (!transactions.length) {
     return NextResponse.json({
-      summary: 'Chưa có giao dịch để phân tích.',
+      summary: 'Tài khoản chưa có dữ liệu giao dịch để phân tích.',
       actions: [],
-      risks: ['Không có dữ liệu vị thế mở'],
+      risks: ['Thiếu dữ liệu vị thế'],
       ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS),
-    } satisfies AiPortfolioResponse & { cached: boolean; cache_ttl_seconds: number; cached_at: string });
+    });
   }
 
   const cacheKey = buildPortfolioCacheKey(user.id, parsed.data.risk_profile, transactions);
   const cached = getAiCache<AiPortfolioResponse>(cacheKey);
   if (cached) {
-    return NextResponse.json({
-      ...cached,
-      ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS),
-    });
+    return NextResponse.json({ ...cached, ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS) });
   }
 
   const openHoldings = deriveOpenHoldings(transactions);
@@ -93,40 +90,46 @@ export async function POST(request: NextRequest) {
     let action: 'BUY' | 'HOLD' | 'REDUCE' | 'SELL' | 'WATCH' = 'HOLD';
     if (pnlPct < -7 || signal.momentum5dPct < -5) action = 'SELL';
     else if (pnlPct > 12 && signal.momentum5dPct < 0) action = 'REDUCE';
-    else if (signal.momentum5dPct > 4 && signal.trend3mPct > 0) action = 'HOLD';
 
     return {
       symbol: signal.symbol,
       action,
-      reason: `P/L ${pnlPct.toFixed(2)}%, momentum 5d ${signal.momentum5dPct.toFixed(2)}%`,
-      confidence: Math.abs(signal.momentum5dPct) > 5 ? 'HIGH' : 'MEDIUM',
+      reason: `P/L: ${pnlPct.toFixed(2)}% | Momentum 5D: ${signal.momentum5dPct.toFixed(2)}%`,
+      confidence: 'MEDIUM',
       tp: signal.suggestedTp,
       sl: signal.suggestedSl,
-    } as AiPortfolioResponse['actions'][number];
+    } as const;
   });
 
   const fallback: AiPortfolioResponse = {
-    summary:
-      'Phân tích kỹ thuật tự động: đã tính TP/SL theo ATR, biến động 3 tháng và momentum 5 phiên gần nhất.',
-    actions: baseActions,
-    risks: ['Thị trường biến động cao, cần tuân thủ SL kỷ luật.'],
+    summary: 'Phân tích kỹ thuật dựa trên dữ liệu giá và momentum hiện tại.',
+    actions: baseActions as any,
+    risks: ['Thị trường biến động, cần tuân thủ SL kỷ luật.'],
   };
 
-  const promptData = {
-    risk_profile: parsed.data.risk_profile,
-    portfolio: baseActions,
-    technicals: signals,
-  };
+  const apiKey = envServer.OPENROUTER_API_KEY;
+  const aiModel = envServer.OPENROUTER_MODEL || 'openrouter/auto';
+  let aiResponse = fallback;
 
-  const aiResponse = await callOpenRouterJson<AiPortfolioResponse>(
-    getOptionalServerEnv('OPENROUTER_API_KEY') || envServer.OPENROUTER_API_KEY,
-    getOptionalServerEnv('OPENROUTER_MODEL') || envServer.OPENROUTER_MODEL || 'openrouter/auto',
-    `Bạn là trợ lý đầu tư cổ phiếu Việt Nam. Trả JSON hợp lệ với keys: summary, actions, risks.
-Mỗi action phải có symbol, action(BUY|HOLD|REDUCE|SELL|WATCH), reason, confidence(LOW|MEDIUM|HIGH), tp, sl.
-Ưu tiên kiểm soát rủi ro và kỷ luật SL.`,
-    JSON.stringify(promptData),
-    fallback
-  );
+  if (apiKey) {
+    const prompt = `Bạn là Giám đốc Đầu tư (CIO) chứng khoán lão luyện tại VN với 20 năm kinh nghiệm. 
+Hãy đánh giá danh mục này dưới góc nhìn "Dòng tiền thông minh" và quản trị rủi ro chuyên nghiệp.
+
+YÊU CẦU TRẢ VỀ JSON:
+- summary: Nhận định sắc sảo, thực chiến về trạng thái danh mục và xu hướng dòng tiền.
+- actions: Mảng object (symbol, action[BUY|HOLD|REDUCE|SELL|WATCH], reason[dùng ngôn ngữ trader: cạn cung, bùng nổ, phân kỳ...], confidence, tp, sl).
+- risks: Các rủi ro hệ thống hoặc nhóm ngành cần lưu tâm.
+
+Khẩu vị rủi ro: ${parsed.data.risk_profile}.`;
+
+    aiResponse = await callOpenRouterJson<AiPortfolioResponse>(
+      apiKey,
+      aiModel,
+      prompt,
+      JSON.stringify({ positions, signals, risk_profile: parsed.data.risk_profile }),
+      fallback
+    );
+  }
 
   setAiCache(cacheKey, aiResponse, PORTFOLIO_AI_CACHE_TTL_MS);
 
@@ -134,4 +137,4 @@ Mỗi action phải có symbol, action(BUY|HOLD|REDUCE|SELL|WATCH), reason, conf
     ...aiResponse,
     ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS),
   });
-      }
+}
