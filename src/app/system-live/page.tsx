@@ -75,7 +75,7 @@ export default function SystemLivePage() {
     setMessage('');
 
     try {
-      const response = await fetch(`/api/system-live?type=${nextType}&timeframe=1D&limit=200`, { cache: 'no-store' });
+      const response = await fetch(`/api/system-live?type=${nextType}&timeframe=1D&limit=100`, { cache: 'no-store' });
       const data: LiveResponse = await response.json();
 
       if (!response.ok) {
