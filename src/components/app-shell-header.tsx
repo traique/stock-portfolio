@@ -19,6 +19,8 @@ import {
   LogOut,
   Moon,
   Sun,
+  LayoutGrid,
+  ChevronDown
 } from 'lucide-react';
 
 type ThemeMode = 'light' | 'dark';
@@ -55,9 +57,12 @@ function getWeatherIcon(code: number | null) {
 export default function AppShellHeader({ title, email, isLoggedIn, currentTab, onLogout, onAuthOpen }: Props) {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false); // State cho Menu Công cụ
   const [infoLine, setInfoLine] = useState('');
   const [weatherCode, setWeatherCode] = useState<number | null>(null);
+  
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const toolsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('alphaboard_theme') as ThemeMode | null;
@@ -66,50 +71,46 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
     document.documentElement.dataset.theme = nextTheme;
   }, []);
 
+  // Xử lý click ra ngoài để đóng các dropdown menu
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+      if (toolsRef.current && !toolsRef.current.contains(event.target as Node)) {
+        setToolsOpen(false);
+      }
     }
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Lấy dữ liệu ngày tháng và thời tiết (Mặc định TP.HCM)
   useEffect(() => {
     async function buildInfo() {
       try {
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
-        const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
+        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
+        const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}`;
+        
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
-        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${now.getFullYear()} ÂL`;
+        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
 
-        let lat = 10.7769;
-        let lon = 106.7009;
-
-        try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error('Geolocation unavailable'));
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000, maximumAge: 15 * 60 * 1000 });
-          });
-          lat = position.coords.latitude;
-          lon = position.coords.longitude;
-        } catch {}
+        // Đã gỡ bỏ Geolocation, set cứng tọa độ TP Hồ Chí Minh
+        const lat = 10.7769;
+        const lon = 106.7009;
 
         const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FHo_Chi_Minh`, { cache: 'no-store' });
         const data = await response.json();
+        
         const temp = Math.round(Number(data?.current?.temperature_2m ?? 24));
         const code = Number.isFinite(Number(data?.current?.weather_code)) ? Number(data.current.weather_code) : null;
+        
         setWeatherCode(code);
-        setInfoLine(`${solarText} · ${lunarText} · ${temp}°C`);
+        setInfoLine(`${solarText} · ${lunarText} · TP.HCM ${temp}°C`);
       } catch {
-        const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'long', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
-        const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}/${now.getFullYear()}`;
-        const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
-        const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())}/${now.getFullYear()} ÂL`;
-        setInfoLine(`${solarText} · ${lunarText}`);
+        const now = new Date();
+        setInfoLine(`${pad2(now.getDate())}/${pad2(now.getMonth() + 1)} · Lỗi thời tiết`);
         setWeatherCode(null);
       }
     }
@@ -125,6 +126,9 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
     document.documentElement.dataset.theme = nextTheme;
     localStorage.setItem('alphaboard_theme', nextTheme);
   }
+
+  // Kiểm tra xem user có đang ở trong một tab công cụ hay không để highight menu
+  const isToolActive = ['system-live', 'backtest', 'gold', 'oil'].includes(currentTab);
 
   return (
     <section className="ab-hero-premium">
@@ -148,7 +152,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
               </button>
             )}
 
-            {menuOpen && isLoggedIn ? (
+            {menuOpen && isLoggedIn && (
               <div className="ab-account-menu premium">
                 <div className="ab-account-name">{getDisplayName(email)}</div>
                 <div className="ab-account-email">{email}</div>
@@ -157,7 +161,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
                   <span>Đăng xuất</span>
                 </button>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
       </div>
@@ -165,19 +169,68 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
       <div className="ab-hero-main">
         <div className="ab-hero-copy">
           <h1 className="ab-hero-title">{title}</h1>
-          <div className="ab-hero-subline">
-            <WeatherIcon size={15} strokeWidth={2} />
+          <div className="ab-hero-subline" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--soft)', borderRadius: 100, fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
+            <WeatherIcon size={14} strokeWidth={2} />
             <span>{infoLine || 'Đang tải...'}</span>
           </div>
         </div>
 
-        <div className="ab-premium-tabs">
-          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}><House size={15} /><span>Home</span></Link>
-          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}><BriefcaseBusiness size={15} /><span>Danh mục</span></Link>
-          <Link href="/system-live" className={`ab-premium-tab ${currentTab === 'system-live' ? 'active' : ''}`}><Activity size={15} /><span>TOP BUY SELL</span></Link>
-          <Link href="/backtest" className={`ab-premium-tab ${currentTab === 'backtest' ? 'active' : ''}`}><LineChart size={15} /><span>Backtest</span></Link>
-          <Link href="/gold" className={`ab-premium-tab ${currentTab === 'gold' ? 'active' : ''}`}><Gem size={15} /><span>Giá vàng</span></Link>
-          <Link href="/oil" className={`ab-premium-tab ${currentTab === 'oil' ? 'active' : ''}`}><Droplets size={15} /><span>Giá xăng</span></Link>
+        <div className="ab-premium-tabs" style={{ display: 'flex', gap: 8, overflow: 'visible' }}>
+          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}>
+            <House size={15} /><span>Home</span>
+          </Link>
+          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}>
+            <BriefcaseBusiness size={15} /><span>Danh mục</span>
+          </Link>
+
+          {/* Menu thả xuống cho các Công cụ */}
+          <div ref={toolsRef} style={{ position: 'relative' }}>
+            <button 
+              type="button" 
+              className={`ab-premium-tab ${isToolActive ? 'active' : ''}`}
+              onClick={() => setToolsOpen(!toolsOpen)}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <LayoutGrid size={15} />
+              <span>Công cụ</span>
+              <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            </button>
+
+            {toolsOpen && (
+              <div 
+                className="ab-tools-dropdown"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: 8,
+                  background: 'var(--card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 16,
+                  padding: 8,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  minWidth: 180,
+                  zIndex: 50,
+                  boxShadow: 'var(--shadow)'
+                }}
+              >
+                <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
+                  <Activity size={15} /> <span>TOP BUY SELL</span>
+                </Link>
+                <Link href="/backtest" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
+                  <LineChart size={15} /> <span>Backtest</span>
+                </Link>
+                <Link href="/gold" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
+                  <Gem size={15} /> <span>Giá vàng</span>
+                </Link>
+                <Link href="/oil" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
+                  <Droplets size={15} /> <span>Giá xăng</span>
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>
