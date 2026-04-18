@@ -25,28 +25,31 @@ type LiveResponse = {
   count?: number;
 };
 
+// TỐI ƯU 1: Khởi tạo các Formatter một lần duy nhất ở ngoài Component để tăng hiệu suất render
+const priceFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 });
+const moneyFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
+const dateFormatter = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+
 function fmtPrice(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 20 }).format(value);
+  if (value == null || !Number.isFinite(value)) return '—';
+  return priceFormatter.format(value);
 }
 
 function fmtMoney(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value);
+  if (value == null || !Number.isFinite(value)) return '—';
+  return moneyFormatter.format(value);
 }
 
+// TỐI ƯU 2: Gộp logic parse thời gian ngắn gọn hơn
 function fmtDate(signal: LiveSignal) {
-  if (signal.timestamp) {
-    const d = new Date(signal.timestamp);
-    if (Number.isFinite(d.getTime())) return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(d);
-  }
-  if (signal.created_at) {
-    const d = new Date(signal.created_at);
-    if (Number.isFinite(d.getTime())) return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(d);
-  }
-  if (signal.ts && Number.isFinite(signal.ts)) {
-    const d = new Date(Number(signal.ts) * 1000);
-    if (Number.isFinite(d.getTime())) return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(d);
+  let d: Date | null = null;
+
+  if (signal.timestamp) d = new Date(signal.timestamp);
+  else if (signal.created_at) d = new Date(signal.created_at);
+  else if (signal.ts && Number.isFinite(signal.ts)) d = new Date(Number(signal.ts) * 1000);
+
+  if (d && Number.isFinite(d.getTime())) {
+    return dateFormatter.format(d);
   }
   return '—';
 }
@@ -61,12 +64,11 @@ export default function SystemLivePage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const user = data.user;
-      if (!user) {
+      if (!data.user) {
         window.location.href = '/';
         return;
       }
-      setEmail(user.email || '');
+      setEmail(data.user.email || '');
     });
   }, []);
 
@@ -75,7 +77,10 @@ export default function SystemLivePage() {
     setMessage('');
 
     try {
-      const response = await fetch(`/api/system-live?type=${nextType}&timeframe=1D&limit=100`, { cache: 'no-store' });
+      // Giới hạn đã được đồng bộ với max=200 ở backend
+      const response = await fetch(`/api/system-live?type=${nextType}&timeframe=1D&limit=200`, { 
+        cache: 'no-store' 
+      });
       const data: LiveResponse = await response.json();
 
       if (!response.ok) {
@@ -88,7 +93,7 @@ export default function SystemLivePage() {
       setUpdatedAt(data.updatedAt || null);
     } catch {
       setSignals([]);
-      setMessage('Lỗi kết nối dữ liệu system live');
+      setMessage('Lỗi kết nối tới máy chủ của bạn.');
     } finally {
       setLoading(false);
     }
@@ -108,11 +113,7 @@ export default function SystemLivePage() {
     const date = new Date(updatedAt);
     if (!Number.isFinite(date.getTime())) return '—';
     return new Intl.DateTimeFormat('vi-VN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
+      hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric',
     }).format(date);
   }, [updatedAt]);
 
@@ -133,8 +134,8 @@ export default function SystemLivePage() {
               <Activity size={16} />
               <strong>Bộ lọc tín hiệu</strong>
             </div>
-            <button type="button" className="ab-btn ab-btn-ghost" onClick={() => void loadSignals(type)}>
-              <RefreshCw size={15} /> Làm mới
+            <button type="button" className="ab-btn ab-btn-ghost" onClick={() => void loadSignals(type)} disabled={loading}>
+              <RefreshCw size={15} className={loading ? 'spin-animation' : ''} /> Làm mới
             </button>
           </div>
 
@@ -144,6 +145,7 @@ export default function SystemLivePage() {
                 type="button"
                 className={`ab-btn ${type === 'BUY' ? 'ab-btn-primary' : 'ab-btn-ghost'}`}
                 onClick={() => setType('BUY')}
+                disabled={loading}
               >
                 BUY
               </button>
@@ -151,6 +153,7 @@ export default function SystemLivePage() {
                 type="button"
                 className={`ab-btn ${type === 'SELL' ? 'ab-btn-primary' : 'ab-btn-ghost'}`}
                 onClick={() => setType('SELL')}
+                disabled={loading}
               >
                 SELL
               </button>
@@ -159,11 +162,11 @@ export default function SystemLivePage() {
           </div>
         </section>
 
-        {message ? (
+        {message && (
           <section className="ab-premium-card">
             <div className="ab-error">{message}</div>
           </section>
-        ) : null}
+        )}
 
         <section className="ab-premium-card" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 680 }}>
@@ -203,7 +206,9 @@ export default function SystemLivePage() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={5} style={{ padding: '16px 10px' }} className="ab-soft-label">Chưa có tín hiệu.</td>
+                  <td colSpan={5} style={{ padding: '16px 10px', textAlign: 'center' }} className="ab-soft-label">
+                    Chưa có tín hiệu nào.
+                  </td>
                 </tr>
               )}
             </tbody>
