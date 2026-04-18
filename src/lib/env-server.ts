@@ -1,9 +1,13 @@
 import { z } from 'zod';
 
 const serverEnvSchema = z.object({
-  NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1).optional(),
-  SUPABASE_SERVER_KEY: z.string().min(1).optional(),
+  // 1. BỎ .optional() ở các biến quan trọng. 
+  // TypeScript sẽ tự động hiểu kiểu của chúng là 'string' thay vì 'string | undefined'
+  NEXT_PUBLIC_SUPABASE_URL: z.string().url({ message: "Thiếu URL hoặc sai định dạng" }),
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, { message: "Thiếu Anon Key" }),
+  SUPABASE_SERVER_KEY: z.string().min(1, { message: "Thiếu Server Key" }),
+  
+  // 2. Các biến không bắt buộc thì giữ lại .optional()
   NEXT_PUBLIC_SITE_URL: z.string().url().optional(),
   VERCEL_PROJECT_PRODUCTION_URL: z.string().min(1).optional(),
   TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
@@ -27,8 +31,9 @@ const parsedServerEnv = serverEnvSchema.safeParse({
 if (!parsedServerEnv.success) {
   const message = parsedServerEnv.error.issues
     .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-    .join('; ');
-  throw new Error(`Biến môi trường server không hợp lệ: ${message}`);
+    .join('\n');
+  // In ra lỗi rõ ràng lúc build/start nếu quên set biến môi trường
+  throw new Error(`❌ Biến môi trường server không hợp lệ:\n${message}`);
 }
 
 export const envServer = parsedServerEnv.data;
@@ -38,7 +43,8 @@ export function getRequiredServerEnv<K extends keyof typeof envServer>(key: K): 
   if (!value) {
     throw new Error(`Thiếu biến môi trường bắt buộc: ${String(key)}`);
   }
-  return value;
+  // Cần ép kiểu thành string vì các trường optional có thể trả về undefined
+  return value as string; 
 }
 
 export function getOptionalServerEnv(key: string): string | undefined {
