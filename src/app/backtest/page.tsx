@@ -19,6 +19,10 @@ type ScanData = {
   win_rate?: number;
   total_pnl_pct?: number;
   total_trades?: number;
+  // Bổ sung các trường giá để render lên UI
+  current_price?: number;
+  price_change?: number;
+  price_change_pct?: number;
   trades?: ScanTrade[];
 };
 
@@ -28,13 +32,17 @@ type ScanResponse = {
   error?: string;
 };
 
+// TỐI ƯU: Đưa các hàm Formatter ra ngoài để tránh re-render tốn bộ nhớ
+const priceFormatter = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 });
+const dateFormatter = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' });
+
 function fmtPrice(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 20 }).format(value);
+  if (value == null || !Number.isFinite(value)) return '—';
+  return priceFormatter.format(value);
 }
 
 function fmtPct(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  if (value == null || !Number.isFinite(value)) return '—';
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
 }
@@ -43,7 +51,7 @@ function fmtTradeDate(ts?: number) {
   if (!ts || !Number.isFinite(ts)) return '—';
   const d = new Date(ts * 1000);
   if (!Number.isFinite(d.getTime())) return '—';
-  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }).format(d);
+  return dateFormatter.format(d);
 }
 
 export default function BacktestPage() {
@@ -55,12 +63,11 @@ export default function BacktestPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      const user = data.user;
-      if (!user) {
+      if (!data.user) {
         window.location.href = '/';
         return;
       }
-      setEmail(user.email || '');
+      setEmail(data.user.email || '');
     });
   }, []);
 
@@ -72,8 +79,9 @@ export default function BacktestPage() {
     setMessage('');
 
     try {
+      // Đã bỏ cứng start=... để dùng default từ backend
       const endpoints = [
-        `/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000&start=1712676508`,
+        `/api/backtest?symbol=${normalized}&timeframe=1D&limit=5000`,
         `/api/sieutinhieu/performance?symbol=${normalized}`,
       ];
 
@@ -92,18 +100,18 @@ export default function BacktestPage() {
         if (response.ok && data.success && data.data) {
           setScanData(data.data);
           setSymbolInput(normalized);
-          return;
+          return; // Thành công thì thoát vòng lặp ngay
         }
 
         if (data.error) finalError = data.error;
-        else if (!response.ok) finalError = `API backtest lỗi (${response.status}).`;
+        else if (!response.ok) finalError = `API lỗi (${response.status}).`;
       }
 
       setScanData(null);
       setMessage(finalError);
     } catch {
       setScanData(null);
-      setMessage('Kết nối API thất bại (network/CORS/server). Vui lòng thử lại sau.');
+      setMessage('Kết nối API thất bại (network/CORS). Vui lòng thử lại sau.');
     } finally {
       setScanLoading(false);
     }
@@ -115,6 +123,12 @@ export default function BacktestPage() {
   }
 
   const latestTrade = useMemo(() => scanData?.trades?.[0], [scanData]);
+
+  // Logic màu sắc cho % thay đổi giá
+  const getChangeColor = (val?: number) => {
+    if (!val) return 'inherit';
+    return val > 0 ? 'var(--green)' : val < 0 ? 'var(--red)' : 'var(--yellow)';
+  };
 
   return (
     <main className="ab-page">
@@ -133,8 +147,8 @@ export default function BacktestPage() {
               <BarChart3 size={16} />
               <strong>DATA.SCAN theo mã</strong>
             </div>
-            <button type="button" className="ab-btn ab-btn-ghost" onClick={() => void loadScan(symbolInput)}>
-              <RefreshCw size={15} /> Quét lại
+            <button type="button" className="ab-btn ab-btn-ghost" onClick={() => void loadScan(symbolInput)} disabled={scanLoading}>
+              <RefreshCw size={15} className={scanLoading ? 'spin-animation' : ''} /> Quét lại
             </button>
           </div>
 
@@ -155,7 +169,9 @@ export default function BacktestPage() {
                 style={{ paddingLeft: 36 }}
               />
             </div>
-            <button type="submit" className="ab-btn ab-btn-primary">Phân tích</button>
+            <button type="submit" className="ab-btn ab-btn-primary" disabled={scanLoading}>
+              Phân tích
+            </button>
           </form>
 
           {message ? <div className="ab-error">{message}</div> : null}
@@ -167,26 +183,46 @@ export default function BacktestPage() {
           </section>
         ) : scanData ? (
           <section className="ab-premium-card" style={{ display: 'grid', gap: 12 }}>
-            <div className="ab-summary-grid premium-summary-grid compact-top-grid" style={{ gap: 10 }}>
+            {/* TỐI ƯU UI: Bổ sung thẻ hiển thị Giá và Biến động */}
+            <div className="ab-summary-grid premium-summary-grid compact-top-grid" style={{ gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Mã</div>
-                <div style={{ fontSize: 24, fontWeight: 800 }}>{scanData.symbol || symbolInput}</div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>{scanData.symbol || symbolInput}</div>
               </article>
+              
+              <article className="ab-premium-card" style={{ padding: 12 }}>
+                <div className="ab-soft-label">Giá hiện tại</div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>{fmtPrice(scanData.current_price)}</div>
+              </article>
+
+              <article className="ab-premium-card" style={{ padding: 12 }}>
+                <div className="ab-soft-label">Biến động</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: getChangeColor(scanData.price_change) }}>
+                  {fmtPrice(scanData.price_change)} ({fmtPct(scanData.price_change_pct)})
+                </div>
+              </article>
+
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Win rate</div>
-                <div style={{ fontSize: 24, fontWeight: 800 }}>{fmtPct(scanData.win_rate)}</div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>{fmtPct(scanData.win_rate)}</div>
               </article>
+
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Tổng PnL</div>
-                <div style={{ fontSize: 24, fontWeight: 800 }}>{fmtPct(scanData.total_pnl_pct)}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: (scanData.total_pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                  {fmtPct(scanData.total_pnl_pct)}
+                </div>
               </article>
+
               <article className="ab-premium-card" style={{ padding: 12 }}>
                 <div className="ab-soft-label">Lệnh gần nhất</div>
-                <div style={{ fontSize: 20, fontWeight: 800 }}>{latestTrade?.side || '—'} · {fmtPct(latestTrade?.pnl_pct)}</div>
+                <div style={{ fontSize: 18, fontWeight: 800 }}>
+                  {latestTrade?.side || '—'} <span style={{ color: (latestTrade?.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>({fmtPct(latestTrade?.pnl_pct)})</span>
+                </div>
               </article>
             </div>
 
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflowX: 'auto', marginTop: 8 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 820 }}>
                 <thead>
                   <tr>
@@ -199,18 +235,30 @@ export default function BacktestPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(scanData.trades || []).slice(0, 20).map((trade, idx) => (
-                    <tr key={`${trade.entry_ts || idx}-${idx}`} style={{ borderTop: '1px solid var(--soft-2)' }}>
-                      <td style={{ padding: '10px 8px', fontWeight: 700 }}>{trade.side || '—'}</td>
-                      <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.entry_ts)}</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.entry_price ?? null)}</td>
-                      <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.exit_ts)}</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.exit_price ?? null)}</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: (trade.pnl_pct || 0) >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                        {fmtPct(trade.pnl_pct)}
+                  {(scanData.trades || []).slice(0, 20).map((trade, idx) => {
+                    const isWin = (trade.pnl_pct || 0) >= 0;
+                    return (
+                      <tr key={`${trade.entry_ts || idx}-${idx}`} style={{ borderTop: '1px solid var(--soft-2)' }}>
+                        <td style={{ padding: '10px 8px', fontWeight: 700, color: trade.side === 'BUY' ? 'var(--green)' : trade.side === 'SELL' ? 'var(--red)' : 'inherit' }}>
+                          {trade.side || '—'}
+                        </td>
+                        <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.entry_ts)}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.entry_price)}</td>
+                        <td style={{ padding: '10px 8px' }}>{fmtTradeDate(trade.exit_ts)}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>{fmtPrice(trade.exit_price)}</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: isWin ? 'var(--green)' : 'var(--red)' }}>
+                          {fmtPct(trade.pnl_pct)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!(scanData.trades?.length) && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '16px', textAlign: 'center' }} className="ab-soft-label">
+                        Không có dữ liệu lịch sử lệnh.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
