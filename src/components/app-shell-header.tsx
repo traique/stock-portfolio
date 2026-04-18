@@ -57,7 +57,7 @@ function getWeatherIcon(code: number | null) {
 export default function AppShellHeader({ title, email, isLoggedIn, currentTab, onLogout, onAuthOpen }: Props) {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false); // State cho Menu Công cụ
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [infoLine, setInfoLine] = useState('');
   const [weatherCode, setWeatherCode] = useState<number | null>(null);
   
@@ -71,7 +71,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
     document.documentElement.dataset.theme = nextTheme;
   }, []);
 
-  // Xử lý click ra ngoài để đóng các dropdown menu
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -85,7 +84,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Lấy dữ liệu ngày tháng và thời tiết (Mặc định TP.HCM)
   useEffect(() => {
     async function buildInfo() {
       try {
@@ -96,7 +94,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
         const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
 
-        // Đã gỡ bỏ Geolocation, set cứng tọa độ TP Hồ Chí Minh
         const lat = 10.7769;
         const lon = 106.7009;
 
@@ -127,11 +124,11 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
     localStorage.setItem('alphaboard_theme', nextTheme);
   }
 
-  // Kiểm tra xem user có đang ở trong một tab công cụ hay không để highight menu
   const isToolActive = ['system-live', 'backtest', 'gold', 'oil'].includes(currentTab);
 
   return (
-    <section className="ab-hero-premium">
+    {/* SỬA LỖI Ở ĐÂY: Thêm overflow: visible và zIndex lớn để không bị cắt thẻ con */}
+    <section className="ab-hero-premium" style={{ overflow: 'visible', zIndex: 100, position: 'relative' }}>
       <div className="ab-hero-topline">
         <div className="ab-brand-mark">LCTA</div>
 
@@ -153,7 +150,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
             )}
 
             {menuOpen && isLoggedIn && (
-              <div className="ab-account-menu premium">
+              <div className="ab-account-menu premium" style={{ zIndex: 999 }}>
                 <div className="ab-account-name">{getDisplayName(email)}</div>
                 <div className="ab-account-email">{email}</div>
                 <button type="button" className="ab-menu-btn danger" onClick={onLogout}>
@@ -166,7 +163,8 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         </div>
       </div>
 
-      <div className="ab-hero-main">
+      {/* SỬA LỖI Ở ĐÂY: Thêm overflow: visible */}
+      <div className="ab-hero-main" style={{ overflow: 'visible' }}>
         <div className="ab-hero-copy">
           <h1 className="ab-hero-title">{title}</h1>
           <div className="ab-hero-subline" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--soft)', borderRadius: 100, fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
@@ -183,7 +181,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
             <BriefcaseBusiness size={15} /><span>Danh mục</span>
           </Link>
 
-          {/* Menu thả xuống cho các Công cụ */}
           <div ref={toolsRef} style={{ position: 'relative' }}>
             <button 
               type="button" 
@@ -212,8 +209,8 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
                   flexDirection: 'column',
                   gap: 4,
                   minWidth: 180,
-                  zIndex: 50,
-                  boxShadow: 'var(--shadow)'
+                  zIndex: 9999, /* SỬA LỖI Ở ĐÂY: Ép Z-index lên cao nhất có thể */
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.2)' /* Tăng bóng đổ cho dễ nhìn */
                 }}
               >
                 <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
