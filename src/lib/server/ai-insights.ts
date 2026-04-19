@@ -186,6 +186,7 @@ export async function buildTechnicalSignals(symbols: string[]) {
   return entries;
 }
 
+// Hàm dọn dẹp mã rác markdown do AI miễn phí hay sinh ra
 function stripCodeFence(input: string) {
   return input
     .replace(/^```json\s*/i, '')
@@ -203,8 +204,16 @@ export async function callOpenRouterJson<T>(
 ): Promise<T> {
   if (!apiKey) return fallback;
 
+  // LỚP GIÁP BẢO VỆ VĂN PHONG (MAGIC PROMPT)
+  const strictSystemPrompt = `${systemPrompt}
+  
+YÊU CẦU TỐI THƯỢNG VỀ NGÔN NGỮ (NẾU VI PHẠM SẼ BỊ PHẠT LỖI):
+1. BẮT BUỘC TRẢ VỀ ĐÚNG ĐỊNH DẠNG JSON. Không giải thích lằng nhằng bên ngoài.
+2. SỬ DỤNG 100% TIẾNG VIỆT TỰ NHIÊN. TUYỆT ĐỐI KHÔNG DÙNG TIẾNG ANH LÓNG, TIẾNG PHÁP HAY TIẾNG Ý.
+3. TUYỆT ĐỐI KHÔNG DỊCH "WORD-BY-WORD". Phải dùng ĐÚNG THUẬT NGỮ CHỨNG KHOÁN VIỆT NAM (Ví dụ: Dùng "Tăng tỷ trọng" thay vì "tăng cân nặng", dùng "Cạn cung", "Hỗ trợ", "Kháng cự", "Rũ bỏ", "Giải ngân").`;
+
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch('[https://openrouter.ai/api/v1/chat/completions](https://openrouter.ai/api/v1/chat/completions)', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -213,9 +222,9 @@ export async function callOpenRouterJson<T>(
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        response_format: { type: 'json_object' },
+        // ĐÃ XÓA `response_format` ĐỂ TƯƠNG THÍCH MỌI MODEL MIỄN PHÍ
         messages: [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: strictSystemPrompt },
           { role: 'user', content: userPrompt },
         ],
       }),
@@ -223,12 +232,16 @@ export async function callOpenRouterJson<T>(
     });
 
     if (!response.ok) return fallback;
+    
     const payload = await response.json();
     const text = payload?.choices?.[0]?.message?.content;
+    
     if (typeof text !== 'string' || !text.trim()) return fallback;
 
+    // Parse JSON sau khi đã lột vỏ markdown
     return JSON.parse(stripCodeFence(text)) as T;
-  } catch {
+  } catch (error) {
+    // Bắt lỗi Parse JSON nếu AI trả lời tào lao
     return fallback;
   }
 }
