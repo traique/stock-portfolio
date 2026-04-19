@@ -94,6 +94,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
         const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
 
+        // Tọa độ mặc định: TP. Hồ Chí Minh
         const lat = 10.7769;
         const lon = 106.7009;
 
@@ -127,7 +128,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
   const isToolActive = ['system-live', 'backtest', 'gold', 'oil'].includes(currentTab);
 
   return (
-    {/* SỬA LỖI Ở ĐÂY: Thêm overflow: visible và zIndex lớn để không bị cắt thẻ con */}
     <section className="ab-hero-premium" style={{ overflow: 'visible', zIndex: 100, position: 'relative' }}>
       <div className="ab-hero-topline">
         <div className="ab-brand-mark">LCTA</div>
@@ -163,7 +163,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         </div>
       </div>
 
-      {/* SỬA LỖI Ở ĐÂY: Thêm overflow: visible */}
       <div className="ab-hero-main" style={{ overflow: 'visible' }}>
         <div className="ab-hero-copy">
           <h1 className="ab-hero-title">{title}</h1>
@@ -209,8 +208,8 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
                   flexDirection: 'column',
                   gap: 4,
                   minWidth: 180,
-                  zIndex: 9999, /* SỬA LỖI Ở ĐÂY: Ép Z-index lên cao nhất có thể */
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.2)' /* Tăng bóng đổ cho dễ nhìn */
+                  zIndex: 9999,
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
                 }}
               >
                 <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
