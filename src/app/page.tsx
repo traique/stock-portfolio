@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Sparkles, TrendingDown, TrendingUp, Trash2 } from 'lucide-react';
+import { Activity, Sparkles, TrendingDown, TrendingUp, Trash2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 
@@ -16,21 +16,26 @@ type AiWatchlistResponse = {
   cached_at?: string;
   error?: string;
 };
+
 const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
-const formatPrice = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v));
-const formatPct = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : v < 0 ? '' : ''}${v.toFixed(2)}%`);
-const formatIndexChange = (v?: number | null) => (v === null || v === undefined || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : v < 0 ? '' : ''}${v.toFixed(2)}`);
+
+// Tối ưu các hàm format
+const priceFormatter = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const formatPrice = (v?: number | null) => (v == null || !Number.isFinite(v) ? 'N/A' : priceFormatter.format(v));
+const formatPct = (v?: number | null) => (v == null || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
+const formatIndexChange = (v?: number | null) => (v == null || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
+
 const normalizeSymbol = (s: string) => s.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 const sortSymbols = (s: string[]) => [...s].sort((a, b) => a.localeCompare(b, 'vi', { numeric: true }));
-const colorFor = (v?: number | null) => !Number.isFinite(v as number) ? 'var(--muted)' : (v as number) > 0 ? 'var(--green)' : (v as number) < 0 ? 'var(--red)' : 'var(--muted)';
+const colorFor = (v?: number | null) => (!Number.isFinite(v as number) ? 'var(--muted)' : (v as number) > 0 ? 'var(--green)' : (v as number) < 0 ? 'var(--red)' : 'var(--muted)');
 const getWatchlistKey = (email?: string) => `lcta_watchlist_${email ? email.toLowerCase() : 'guest'}`;
 
 function LoadingCard() {
   return (
     <article className="ab-watch-card premium ab-skeleton-card">
-      <div className="ab-skeleton skeleton-title" />
-      <div className="ab-skeleton skeleton-price" />
-      <div className="ab-skeleton skeleton-line" />
+      <div className="ab-skeleton skeleton-title" style={{ width: '40%' }} />
+      <div className="ab-skeleton skeleton-price" style={{ width: '60%' }} />
+      <div className="ab-skeleton skeleton-line" style={{ width: '50%' }} />
     </article>
   );
 }
@@ -44,20 +49,24 @@ export default function HomePage() {
   const [loadingAuth, setLoadingAuth] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [authMessage, setAuthMessage] = useState('');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  
   const [watchlist, setWatchlist] = useState<string[]>(DEFAULT_WATCHLIST);
   const [watchInput, setWatchInput] = useState('');
   const [watchError, setWatchError] = useState('');
+  const [watchlistReady, setWatchlistReady] = useState(false);
+  const lastSavedPayloadRef = useRef('');
+
   const [quotes, setQuotes] = useState<QuoteItem[]>([]);
   const [vnIndex, setVnIndex] = useState<QuoteItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [marketError, setMarketError] = useState('');
+  
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiWatchlist, setAiWatchlist] = useState<AiWatchlistResponse | null>(null);
-  const [watchlistReady, setWatchlistReady] = useState(false);
-  const lastSavedPayloadRef = useRef('');
 
   useEffect(() => {
     let mounted = true;
@@ -98,13 +107,14 @@ export default function HomePage() {
         setAiWatchlist(payload);
       }
     } catch {
-      setAiError('Không thể kết nối AI');
+      setAiError('Không thể kết nối với dịch vụ AI.');
       setAiWatchlist(null);
     } finally {
       setAiLoading(false);
     }
   }
 
+  // Khôi phục Watchlist từ DB hoặc LocalStorage
   useEffect(() => {
     (async () => {
       if (!sessionChecked) return;
@@ -141,12 +151,15 @@ export default function HomePage() {
     })();
   }, [sessionChecked, isLoggedIn, userEmail, userId]);
 
+  // Lưu Watchlist mỗi khi có thay đổi
   useEffect(() => {
     if (!sessionChecked || !watchlistReady) return;
     const sorted = sortSymbols(watchlist);
     const payload = JSON.stringify(sorted);
     localStorage.setItem(getWatchlistKey(userEmail || undefined), payload);
+    
     if (payload === lastSavedPayloadRef.current) return;
+    
     (async () => {
       if (isLoggedIn && userId) {
         try {
@@ -158,22 +171,25 @@ export default function HomePage() {
     })();
   }, [watchlist, userEmail, userId, isLoggedIn, sessionChecked, watchlistReady]);
 
+  // Load giá thị trường
   useEffect(() => {
     (async () => {
       if (!watchlistReady) return;
       if (!watchlist.length) { setQuotes([]); setLoading(false); return; }
-      setLoading(true); setMarketError('');
+      
+      setLoading(true); 
+      setMarketError('');
       try {
         const response = await fetch(`/api/prices?symbols=${encodeURIComponent(watchlist.join(','))}`, { cache: 'no-store' });
         const data: PricesResponse = await response.json();
         if (!response.ok) {
-          setMarketError(data?.error || 'Không lấy được dữ liệu');
+          setMarketError(data?.error || 'Không lấy được dữ liệu giá.');
           setQuotes([]);
         } else {
           setQuotes([...(data.debug || [])].sort((a, b) => a.symbol.localeCompare(b.symbol, 'vi', { numeric: true })));
         }
       } catch {
-        setMarketError('Lỗi kết nối dữ liệu');
+        setMarketError('Lỗi kết nối dữ liệu máy chủ.');
         setQuotes([]);
       } finally {
         setLoading(false);
@@ -181,6 +197,7 @@ export default function HomePage() {
     })();
   }, [watchlist, watchlistReady]);
 
+  // Load VN-Index
   useEffect(() => {
     (async () => {
       try {
@@ -212,11 +229,11 @@ export default function HomePage() {
     try {
       if (authMode === 'signup') {
         const { error } = await supabase.auth.signUp({ email, password });
-        setAuthMessage(error ? error.message : 'Tạo tài khoản thành công');
+        setAuthMessage(error ? error.message : 'Tạo tài khoản thành công! Vui lòng kiểm tra email.');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) setAuthMessage(error.message);
-        else window.location.href = '/dashboard';
+        else window.location.href = '/';
       }
     } finally {
       setLoadingAuth(false);
@@ -225,10 +242,13 @@ export default function HomePage() {
 
   async function handleLogout() { await supabase.auth.signOut(); }
 
-  function addWatchSymbol(symbolRaw?: string) {
-    const symbol = normalizeSymbol(symbolRaw ?? watchInput);
-    if (!symbol) return setWatchError('Nhập mã hợp lệ');
-    if (watchlist.includes(symbol)) return setWatchError('Mã đã có');
+  function addWatchSymbol() {
+    const symbol = normalizeSymbol(watchInput);
+    if (!symbol) return setWatchError('Vui lòng nhập mã cổ phiếu hợp lệ.');
+    if (watchlist.includes(symbol)) {
+        setWatchInput(''); // Clear input nếu đã có
+        return setWatchError(`Mã ${symbol} đã có trong danh sách.`);
+    }
     setWatchlist((prev) => sortSymbols([...prev, symbol]));
     setWatchInput('');
     setWatchError('');
@@ -238,158 +258,213 @@ export default function HomePage() {
     setWatchlist((prev) => sortSymbols(prev.filter((i) => i !== symbol)));
   }
 
-  if (!sessionChecked) return <main className="ab-page"><div className="ab-shell"><section className="ab-card">Đang tải...</section></div></main>;
+  // Lắng nghe sự kiện Enter khi nhập mã
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addWatchSymbol();
+    }
+  };
+
+  if (!sessionChecked) {
+      return (
+          <main className="ab-page">
+              <div className="ab-shell"><section className="ab-premium-card"><div className="ab-soft-label" style={{textAlign: 'center', padding: 20}}>Đang tải dữ liệu phiên làm việc...</div></section></div>
+          </main>
+      );
+  }
 
   return (
     <main className="ab-page">
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Radar đầu tư" isLoggedIn={isLoggedIn} email={userEmail} currentTab="home" onLogout={handleLogout} onAuthOpen={() => setShowAuth((p) => !p)} />
 
-        <section className="ab-premium-card ab-market-strip-pro ab-market-board-premium">
-          <div className="ab-strip-vnindex">
-            <span className="ab-soft-label ab-strip-head"><Activity size={14} />VN-Index</span>
-            <div className="ab-strip-vnindex-main">{vnIndex ? formatPrice(vnIndex.price) : '--'}</div>
-            <div className="ab-strip-vnindex-change" style={{ color: colorFor(vnIndex?.pct) }}>
-              {vnIndex ? `${formatIndexChange(vnIndex.change)} · ${formatPct(vnIndex.pct)}` : 'Đang tải'}
+        {/* Tối ưu UI cho phần hiển thị điểm số chung */}
+        <section className="ab-premium-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="ab-soft-label" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                <Activity size={16} /> VN-Index
+            </span>
+            <div style={{ fontSize: 28, fontWeight: 800 }}>{vnIndex ? formatPrice(vnIndex.price) : '--'}</div>
+            <div style={{ color: colorFor(vnIndex?.pct), fontWeight: 600 }}>
+              {vnIndex ? `${formatIndexChange(vnIndex.change)} (${formatPct(vnIndex.pct)})` : 'Đang lấy dữ liệu...'}
             </div>
           </div>
 
-          <div className="ab-strip-metrics">
-            <div className="ab-metric-cell">
-              <span>Mã tăng</span>
-              <strong className="positive">{loading ? '--' : breadth.gainers}</strong>
+          <div style={{ display: 'flex', gap: 24 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <span className="ab-soft-label">Mã tăng</span>
+              <strong style={{ color: 'var(--green)', fontSize: 20 }}>{loading ? '--' : breadth.gainers}</strong>
             </div>
-            <div className="ab-metric-cell">
-              <span>Mã giảm</span>
-              <strong className="negative">{loading ? '--' : breadth.losers}</strong>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <span className="ab-soft-label">Mã giảm</span>
+              <strong style={{ color: 'var(--red)', fontSize: 20 }}>{loading ? '--' : breadth.losers}</strong>
             </div>
-            <div className="ab-metric-cell wide">
-              <span>Biến động TB</span>
-              <strong style={{ color: colorFor(breadth.avgPct) }}>{Number.isFinite(breadth.avgPct) ? formatPct(breadth.avgPct) : 'N/A'}</strong>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <span className="ab-soft-label">Biến động TB</span>
+              <strong style={{ color: colorFor(breadth.avgPct), fontSize: 20 }}>
+                  {Number.isFinite(breadth.avgPct) ? formatPct(breadth.avgPct) : 'N/A'}
+              </strong>
             </div>
           </div>
         </section>
 
         {showAuth && !isLoggedIn ? (
-          <section id="auth" className="ab-premium-card ab-auth-card compact">
-            <div className="ab-card-headline">{authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</div>
-            <form onSubmit={handleAuthSubmit} className="ab-form two-col-premium">
+          <section id="auth" className="ab-premium-card">
+            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>{authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</div>
+            <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" required className="ab-input" />
               <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mật khẩu" type="password" required className="ab-input" />
-              <button type="submit" className="ab-btn ab-btn-primary ab-btn-full ab-auth-full">{loadingAuth ? 'Đang xử lý...' : authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</button>
+              <button type="submit" className="ab-btn ab-btn-primary" disabled={loadingAuth}>
+                  {loadingAuth ? 'Đang xử lý...' : authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+              </button>
             </form>
-            <button type="button" onClick={() => setAuthMode((p) => (p === 'login' ? 'signup' : 'login'))} className="ab-link-btn">{authMode === 'login' ? 'Chưa có tài khoản? Tạo mới' : 'Đã có tài khoản? Đăng nhập'}</button>
-            {authMessage ? <div className="ab-note">{authMessage}</div> : null}
+            <button type="button" onClick={() => setAuthMode((p) => (p === 'login' ? 'signup' : 'login'))} className="ab-btn ab-btn-ghost" style={{ marginTop: 8 }}>
+                {authMode === 'login' ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
+            </button>
+            {authMessage ? <div className="ab-error" style={{ marginTop: 8 }}>{authMessage}</div> : null}
           </section>
         ) : null}
 
-        <section className="ab-home-grid single-focus">
-          <section className="ab-premium-card ab-watch-shell compact-watch-shell">
+        <section className="ab-home-grid single-focus" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+          
+          {/* Cột trái: Watchlist */}
+          <section className="ab-premium-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="ab-row-between align-center">
-              <div className="ab-card-kicker">Danh sách theo dõi cá nhân</div>
-              <div className="ab-watch-count">{quotes.length} mã</div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Danh sách theo dõi</div>
+              <div className="ab-soft-label">{quotes.length} mã</div>
             </div>
 
-            <div className="ab-add-row premium compact">
-              <input value={watchInput} onChange={(e) => setWatchInput(e.target.value)} placeholder="Nhập mã cổ phiếu" className="ab-input" />
-              <button type="button" onClick={() => addWatchSymbol()} className="ab-btn ab-btn-primary">Thêm</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input 
+                  value={watchInput} 
+                  onChange={(e) => setWatchInput(e.target.value)} 
+                  onKeyDown={handleKeyDown}
+                  placeholder="Thêm mã (VD: SSI)" 
+                  className="ab-input" 
+                  style={{ flex: 1 }} 
+              />
+              <button type="button" onClick={addWatchSymbol} className="ab-btn ab-btn-primary">Thêm</button>
             </div>
 
             {watchError ? <div className="ab-error">{watchError}</div> : null}
             {marketError ? <div className="ab-error">{marketError}</div> : null}
 
-            <div className="ab-watch-grid premium compact">
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))' }}>
               {loading ? (
-                Array.from({ length: Math.min(4, Math.max(2, watchlist.length || 2)) }).map((_, index) => <LoadingCard key={index} />)
+                Array.from({ length: Math.max(4, watchlist.length || 4) }).map((_, index) => <LoadingCard key={index} />)
               ) : quotes.length ? (
                 quotes.map((item) => (
-                  <article key={item.symbol} className="ab-watch-card premium compact tighter">
-                    <div className="ab-row-between align-start">
-                      <div className="ab-symbol-wrap">
-                        <div className="ab-symbol premium compact">{item.symbol}</div>
-                        <div className="ab-soft-label mini-top">Theo dõi</div>
-                      </div>
-                      <button type="button" className="ab-delete icon-only" onClick={() => removeWatchSymbol(item.symbol)} aria-label={`Xóa ${item.symbol}`}>
-                        <Trash2 size={16} />
+                  <article key={item.symbol} className="ab-premium-card" style={{ padding: 12, position: 'relative' }}>
+                    <div className="ab-row-between align-start" style={{ marginBottom: 8 }}>
+                      <div style={{ fontWeight: 800, fontSize: 18 }}>{item.symbol}</div>
+                      <button type="button" className="ab-btn ab-btn-ghost" style={{ padding: 4 }} onClick={() => removeWatchSymbol(item.symbol)} aria-label={`Xóa ${item.symbol}`}>
+                        <Trash2 size={14} />
                       </button>
                     </div>
-                    <div className="ab-price premium compact">{formatPrice(item.price)}</div>
-                    <div className="ab-soft-change under-price" style={{ color: colorFor(item.change) }}>{formatPrice(item.change)} · {formatPct(item.pct)}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600 }}>{formatPrice(item.price)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: colorFor(item.change), marginTop: 4 }}>
+                        {formatPrice(item.change)} ({formatPct(item.pct)})
+                    </div>
                   </article>
                 ))
               ) : (
-                <div className="ab-note">Chưa có mã</div>
+                <div className="ab-soft-label" style={{ gridColumn: '1 / -1' }}>Danh sách trống. Vui lòng thêm mã cổ phiếu.</div>
               )}
             </div>
           </section>
 
-          <aside className="ab-side-stack">
-            <section className="ab-premium-card ab-movers-card compact-side-card">
-              <div className="ab-row-between align-center">
-                <div>
-                  <div className="ab-card-kicker">Điểm nhấn trong ngày</div>
-                  <div className="ab-card-headline small">Tăng tốt nhất</div>
-                </div>
-                <Sparkles size={16} />
-              </div>
-              <div className="ab-mini-list">
-                {loading ? (
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <div key={index} className="ab-mini-row ab-skeleton-row">
-                      <div className="ab-skeleton skeleton-line short" />
-                      <div className="ab-skeleton skeleton-line tiny" />
-                    </div>
-                  ))
-                ) : topPositive.length ? topPositive.map((item) => (
-                  <div key={item.symbol} className="ab-mini-row">
-                    <div>
-                      <div className="ab-mini-symbol">{item.symbol}</div>
-                      <div className="ab-mini-price">{formatPrice(item.price)}</div>
-                    </div>
-                    <div className="ab-mini-pct positive">{formatPct(item.pct)}</div>
-                  </div>
-                )) : <div className="ab-note">Chưa có dữ liệu tăng giá.</div>}
-              </div>
-            </section>
-
-            <section className="ab-premium-card ab-tone-card compact-side-card">
-              <div className="ab-card-kicker">Nhịp thị trường</div>
-              <div className="ab-tone-content">
-                {breadth.gainers >= breadth.losers ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-                <span>{breadth.gainers >= breadth.losers ? 'Dòng tiền đang nghiêng về phía tăng.' : 'Áp lực giảm đang chiếm ưu thế.'}</span>
-              </div>
-            </section>
-
-            <section className="ab-premium-card compact-side-card">
-              <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
-                <div>
-                  <div className="ab-card-kicker">AI Watchlist Assistant</div>
-                  <div className="ab-soft-label">Quét mã và gợi ý mua + TP/SL</div>
-                </div>
+          {/* Cột phải: AI & Market Movers */}
+          <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            
+            <section className="ab-premium-card">
+              <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>AI Watchlist Scan</div>
                 <button type="button" className="ab-btn ab-btn-primary" onClick={runAiWatchlistScan} disabled={aiLoading || !watchlist.length}>
-                  {aiLoading ? 'Đang quét...' : 'Quét AI'}
+                  {aiLoading ? <><RefreshCw size={14} className="spin-animation" /> Đang quét</> : 'Quét AI'}
                 </button>
               </div>
+              
+              <div className="ab-soft-label" style={{ marginBottom: 16 }}>Tự động quét kỹ thuật và gợi ý điểm mua bán an toàn cho các mã trong danh sách.</div>
+              
               {aiError ? <div className="ab-error">{aiError}</div> : null}
-              {aiWatchlist?.cached ? <div className="ab-note">Kết quả cache ~{Math.round((aiWatchlist.cache_ttl_seconds || 0) / 60)} phút để tránh spam API.</div> : null}
+              {aiWatchlist?.cached ? <div className="ab-note" style={{ marginBottom: 12 }}>⚡ Kết quả được lấy từ bộ nhớ đệm (làm mới sau {Math.round((aiWatchlist.cache_ttl_seconds || 0) / 60)} phút).</div> : null}
+              
               {aiWatchlist ? (
-                <div className="ab-mini-list">
-                  <div className="ab-note">{aiWatchlist.summary}</div>
-                  {(aiWatchlist.picks || []).slice(0, 3).map((pick) => (
-                    <div key={pick.symbol} className="ab-mini-row">
-                      <div>
-                        <div className="ab-mini-symbol">{pick.symbol} · {pick.score.toFixed(1)}</div>
-                        <div className="ab-mini-price">Entry {formatPrice(pick.entry)} · TP {formatPrice(pick.tp)} · SL {formatPrice(pick.sl)}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ padding: 12, backgroundColor: 'var(--soft-1)', borderRadius: 8, fontStyle: 'italic' }}>
+                      "{aiWatchlist.summary}"
+                  </div>
+                  
+                  {(aiWatchlist.picks || []).map((pick) => (
+                    <div key={pick.symbol} style={{ padding: 12, border: '1px solid var(--soft-2)', borderRadius: 8 }}>
+                      <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
+                          <strong style={{ fontSize: 16 }}>{pick.symbol}</strong>
+                          <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 12, backgroundColor: 'var(--soft-2)' }}>
+                              Điểm: {pick.score.toFixed(1)}/100
+                          </span>
+                      </div>
+                      <div className="ab-soft-label" style={{ fontSize: 13, marginBottom: 8 }}>{pick.reason}</div>
+                      
+                      {/* Tối ưu hiển thị các mốc giá */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
+                          <div style={{ backgroundColor: 'var(--soft-1)', padding: '4px 0', borderRadius: 4 }}>
+                              <div className="ab-soft-label" style={{ fontSize: 11 }}>ENTRY</div>
+                              <span style={{ color: 'var(--foreground)' }}>{formatPrice(pick.entry)}</span>
+                          </div>
+                          <div style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', padding: '4px 0', borderRadius: 4 }}>
+                              <div style={{ color: 'var(--green)', fontSize: 11 }}>CHỐT LỜI</div>
+                              <span style={{ color: 'var(--green)' }}>{formatPrice(pick.tp)}</span>
+                          </div>
+                          <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', padding: '4px 0', borderRadius: 4 }}>
+                              <div style={{ color: 'var(--red)', fontSize: 11 }}>CẮT LỖ</div>
+                              <span style={{ color: 'var(--red)' }}>{formatPrice(pick.sl)}</span>
+                          </div>
                       </div>
                     </div>
                   ))}
-                  {aiWatchlist.avoid?.length ? <div className="ab-note">Cẩn trọng: {aiWatchlist.avoid.join(', ')}</div> : null}
+                  
+                  {aiWatchlist.avoid?.length ? (
+                      <div style={{ marginTop: 8, padding: 12, backgroundColor: 'rgba(239, 68, 68, 0.05)', borderRadius: 8, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                          <span style={{ color: 'var(--red)', fontWeight: 600 }}>⚠️ Rủi ro cao, hạn chế mua: </span>
+                          <span className="ab-soft-label">{aiWatchlist.avoid.join(', ')}</span>
+                      </div>
+                  ) : null}
                 </div>
-              ) : <div className="ab-note">Nhấn “Quét AI” để nhận gợi ý cho watchlist.</div>}
+              ) : (
+                  !aiLoading && <div className="ab-soft-label" style={{ textAlign: 'center', padding: '20px 0' }}>Bấm nút "Quét AI" để xem nhận định.</div>
+              )}
             </section>
+
+            <section className="ab-premium-card">
+              <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>Tăng mạnh nhất (Watchlist)</div>
+                <Sparkles size={16} color="var(--yellow)" />
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="ab-row-between align-center" style={{ padding: 8 }}>
+                      <div className="ab-skeleton skeleton-line" style={{ width: 60 }} />
+                      <div className="ab-skeleton skeleton-line" style={{ width: 40 }} />
+                    </div>
+                  ))
+                ) : topPositive.length ? topPositive.map((item) => (
+                  <div key={item.symbol} className="ab-row-between align-center" style={{ padding: '8px 12px', backgroundColor: 'var(--soft-1)', borderRadius: 6 }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{item.symbol}</div>
+                      <div className="ab-soft-label" style={{ fontSize: 13 }}>{formatPrice(item.price)}</div>
+                    </div>
+                    <div style={{ fontWeight: 700, color: 'var(--green)' }}>{formatPct(item.pct)}</div>
+                  </div>
+                )) : <div className="ab-soft-label" style={{ padding: 8 }}>Không có mã tăng giá.</div>}
+              </div>
+            </section>
+
           </aside>
         </section>
       </div>
     </main>
   );
-                                                                                                            }
+}
