@@ -32,6 +32,8 @@ const sortSymbols = (s: string[]) => [...s].sort((a, b) => a.localeCompare(b, 'v
 const colorFor = (v?: number | null) => (!Number.isFinite(v as number) ? 'var(--muted)' : (v as number) > 0 ? 'var(--green)' : (v as number) < 0 ? 'var(--red)' : 'var(--muted)');
 const getWatchlistKey = (email?: string) => `lcta_watchlist_${email ? email.toLowerCase() : 'guest'}`;
 
+const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
+
 function LoadingCard() {
   return (
     <article className="ab-watch-card premium ab-skeleton-card">
