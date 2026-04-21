@@ -94,7 +94,6 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
         const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
 
-        // Tọa độ mặc định: TP. Hồ Chí Minh
         const lat = 10.7769;
         const lon = 106.7009;
 
@@ -128,29 +127,63 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
   const isToolActive = ['system-live', 'backtest', 'gold', 'oil'].includes(currentTab);
 
   return (
-    <section className="ab-hero-premium" style={{ overflow: 'visible', zIndex: 100, position: 'relative' }}>
-      <div className="ab-hero-topline">
-        <div className="ab-brand-mark">LCTA</div>
+    <header 
+      style={{
+        position: 'sticky',
+        top: 12, // Lơ lửng cách mép trên màn hình 12px
+        zIndex: 1000,
+        // Nền kính mờ: Đen 70% ở chế độ Dark, Trắng 75% ở chế độ Light
+        background: theme === 'dark' ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.75)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        border: theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(0, 0, 0, 0.06)',
+        boxShadow: theme === 'dark' ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 40px rgba(0,0,0,0.05)',
+        borderRadius: 24, // Bo cong mềm mại đồng bộ với thẻ tài sản
+        padding: '12px 16px',
+        marginBottom: 16,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        transition: 'background 0.3s ease'
+      }}
+    >
+      {/* --- ROW 1: TÊN APP & THAO TÁC CÁ NHÂN --- */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        
+        {/* LOGO + TITLE (Thu gọn trên 1 dòng) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+          <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: 0.5, background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            LCTA
+          </span>
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--border-strong)' }} />
+          <h1 style={{ fontSize: 17, fontWeight: 800, margin: 0, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {title}
+          </h1>
+        </div>
 
-        <div className="ab-hero-actions">
-          <button type="button" className="ab-icon-glass" onClick={toggleTheme} aria-label="Đổi giao diện">
-            {theme === 'light' ? <Moon size={17} /> : <Sun size={17} />}
+        {/* ACTIONS (Theme + Account) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <button 
+            onClick={toggleTheme} 
+            style={{ background: 'var(--soft)', border: 'none', width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', cursor: 'pointer' }}
+          >
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
 
-          <div className="ab-account-wrap" ref={menuRef}>
+          <div ref={menuRef} style={{ position: 'relative' }}>
             {isLoggedIn ? (
-              <button type="button" className="ab-account-glass" onClick={() => setMenuOpen((prev) => !prev)}>
+              <button type="button" className="ab-account-glass" onClick={() => setMenuOpen((prev) => !prev)} style={{ margin: 0 }}>
                 <span>{getDisplayName(email)}</span>
               </button>
             ) : (
-              <button type="button" className="ab-account-glass" onClick={onAuthOpen}>
+              <button type="button" className="ab-account-glass" onClick={onAuthOpen} style={{ margin: 0 }}>
                 <span>Đăng nhập</span>
                 <ArrowRight size={14} />
               </button>
             )}
 
             {menuOpen && isLoggedIn && (
-              <div className="ab-account-menu premium" style={{ zIndex: 999 }}>
+              <div className="ab-account-menu premium" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, zIndex: 9999 }}>
                 <div className="ab-account-name">{getDisplayName(email)}</div>
                 <div className="ab-account-email">{email}</div>
                 <button type="button" className="ab-menu-btn danger" onClick={onLogout}>
@@ -163,21 +196,16 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         </div>
       </div>
 
-      <div className="ab-hero-main" style={{ overflow: 'visible' }}>
-        <div className="ab-hero-copy">
-          <h1 className="ab-hero-title">{title}</h1>
-          <div className="ab-hero-subline" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--soft)', borderRadius: 100, fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>
-            <WeatherIcon size={14} strokeWidth={2} />
-            <span>{infoLine || 'Đang tải...'}</span>
-          </div>
-        </div>
-
-        <div className="ab-premium-tabs" style={{ display: 'flex', gap: 8, overflow: 'visible' }}>
+      {/* --- ROW 2: TABS ĐIỀU HƯỚNG & THỜI TIẾT --- */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        
+        {/* TABS */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
           <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`}>
-            <House size={15} /><span>Home</span>
+            <House size={14} /><span>Home</span>
           </Link>
           <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`}>
-            <BriefcaseBusiness size={15} /><span>Danh mục</span>
+            <BriefcaseBusiness size={14} /><span>Danh mục</span>
           </Link>
 
           <div ref={toolsRef} style={{ position: 'relative' }}>
@@ -185,9 +213,9 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
               type="button" 
               className={`ab-premium-tab ${isToolActive ? 'active' : ''}`}
               onClick={() => setToolsOpen(!toolsOpen)}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}
             >
-              <LayoutGrid size={15} />
+              <LayoutGrid size={14} />
               <span>Công cụ</span>
               <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
             </button>
@@ -196,20 +224,9 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
               <div 
                 className="ab-tools-dropdown"
                 style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 8,
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 16,
-                  padding: 8,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  minWidth: 180,
-                  zIndex: 9999,
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.2)'
+                  position: 'absolute', top: '100%', left: 0, marginTop: 8, background: 'var(--card)', border: '1px solid var(--border)',
+                  borderRadius: 16, padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180, zIndex: 9999,
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
                 }}
               >
                 <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start' }} onClick={() => setToolsOpen(false)}>
@@ -228,7 +245,14 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
             )}
           </div>
         </div>
+
+        {/* THỜI TIẾT (Bọc gọn gàng) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--soft)', borderRadius: 100, fontSize: 11, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+          <WeatherIcon size={14} strokeWidth={2} />
+          <span>{infoLine || 'Đang tải...'}</span>
+        </div>
+
       </div>
-    </section>
+    </header>
   );
 }
