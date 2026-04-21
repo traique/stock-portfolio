@@ -1,6 +1,5 @@
 import { fetchMarketPrices } from '@/lib/server/market';
 
-// --- CẬP NHẬT TYPES MỚI ĐỂ CHỨA TIN TỨC --- //
 type NewsHeadline = {
   title: string;
   source: string;
@@ -20,10 +19,10 @@ export type TechnicalSignal = {
   trend3mPct: number;
   volatilityPct: number;
   momentum5dPct: number;
-  volumeTrendPct: number; // Trung bình 5 phiên gần nhất vs 3 tháng
+  volumeTrendPct: number;
   suggestedTp: number;
   suggestedSl: number;
-  news: NewsHeadline[]; // THÊM MẢNG TIN TỨC VÀO ĐÂY
+  news: NewsHeadline[];
 };
 
 export type AiInsightResult = {
@@ -39,7 +38,6 @@ export type AiInsightResult = {
   risks: string[];
 };
 
-// --- CÁC HÀM TIỆN ÍCH CŨ --- //
 function roundPrice(value: number) {
   return Math.round(value / 10) * 10;
 }
@@ -53,11 +51,9 @@ function toNumberArray(input: unknown) {
   return input.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0);
 }
 
-// --- BỘ PHẬN 1: CÀO TIN TỨC RSS (GOOGLE NEWS) --- //
-// Phương pháp này nhanh, miễn phí và không bị block IP trên Vercel
+// HÀM CÀO TIN TỨC MỚI: Dùng Regex thay cho DOMParser để chạy được trên Server
 async function fetchNewsRSS(symbol: string): Promise<NewsHeadline[]> {
   const query = encodeURIComponent(`${symbol} VN chứng khoán`);
-  // Google News RSS feed cho khu vực VN, tiếng Việt
   const url = `https://news.google.com/rss/search?q=${query}&hl=vi&gl=VN&ceid=VN:vi`;
 
   try {
@@ -65,29 +61,29 @@ async function fetchNewsRSS(symbol: string): Promise<NewsHeadline[]> {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
       },
-      // Cache tin tức 10 phút để tránh gọi quá nhiều lần
       next: { revalidate: 600 }, 
     });
 
     if (!response.ok) return [];
     
     const text = await response.text();
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(text, "text/xml");
-    const items = xmlDoc.getElementsByTagName("item");
-    
+    const items = text.match(/<item>[\s\S]*?<\/item>/gi) || [];
     const news: NewsHeadline[] = [];
-    // Chỉ lấy 4-5 tin mới nhất để AI đỡ bị quá tải token
-    const limit = Math.min(5, items.length);
     
-    for (let i = 0; i < limit; i += 1) {
-      const title = items[i]?.getElementsByTagName("title")?.[0]?.textContent || "";
-      const source = items[i]?.getElementsByTagName("source")?.[0]?.textContent || "";
-      const pubDate = items[i]?.getElementsByTagName("pubDate")?.[0]?.textContent || "";
+    const extractTag = (xml: string, tag: string) => {
+      const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+      if (!match) return '';
+      // Xử lý cả thẻ CDATA thường gặp trong RSS
+      return match[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
+    };
+    
+    for (let i = 0; i < Math.min(5, items.length); i += 1) {
+      const itemXml = items[i];
+      const title = extractTag(itemXml, 'title');
+      const source = extractTag(itemXml, 'source');
+      const pubDate = extractTag(itemXml, 'pubDate');
       
       if (title) {
-        // Dọn dẹp tiêu đề: thường tiêu đề Google News dính tên nguồn ở cuối như "- CafeF"
-        // Chúng ta cắt nó ra để lưu source riêng cho AI dễ đọc
         const cleanTitle = title.split(' - ')[0] || title;
         news.push({ title: cleanTitle.trim(), source, pubDate });
       }
@@ -99,7 +95,6 @@ async function fetchNewsRSS(symbol: string): Promise<NewsHeadline[]> {
   }
 }
 
-// --- CÁC HÀM LẤY GIÁ & VOLUME CŨ --- //
 async function fetchHistory(symbol: string): Promise<PriceHistory> {
   const ticker = symbol === 'VNINDEX' ? '^VNINDEX' : `${symbol}.VN`;
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
@@ -127,19 +122,6 @@ async function fetchHistory(symbol: string): Promise<PriceHistory> {
   };
 }
 
-function calcVolatilityFromCloses(closes: number[]) {
-  const returns: number[] = [];
-  for (let i = 1; i < closes.length; i += 1) {
-    const prev = closes[i - 1];
-    const curr = closes[i];
-    if (prev > 0 && curr > 0) returns.push((curr - prev) / prev);
-  }
-  if (!returns.length) return 2;
-  const mean = returns.reduce((s, v) => s + v, 0) / returns.length;
-  const variance = returns.length > 1 ? returns.reduce((s, v) => s + (v - mean) ** 2, 0) / (returns.length - 1) : 0;
-  return Math.sqrt(Math.max(variance, 0)) * 100;
-}
-
 function calcSignalsFromHistory(history: PriceHistory, currentPrice: number) {
   const { close: closes, volume: volumes } = history;
   if (!closes.length || currentPrice <= 0) {
@@ -149,20 +131,25 @@ function calcSignalsFromHistory(history: PriceHistory, currentPrice: number) {
   const lastIdx = closes.length - 1;
   const first = closes[0];
   const last = closes[lastIdx];
-  
   const trend3mPct = first > 0 ? ((last - first) / first) * 100 : 0;
   const lookback = Math.min(5, lastIdx);
   const momentumBase = closes[Math.max(0, lastIdx - lookback)] || last;
   const momentum5dPct = momentumBase > 0 ? ((last - momentumBase) / momentumBase) * 100 : 0;
 
-  // Phân tích Dòng tiền
   const avgVolume = volumes.length > 0 ? volumes.reduce((a, b) => a + b, 0) / volumes.length : 0;
   const recentVolume = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
   const volumeTrendPct = avgVolume > 0 ? ((recentVolume - avgVolume) / avgVolume) * 100 : 0;
 
-  const volatilityPct = calcVolatilityFromCloses(closes);
+  const returns: number[] = [];
+  for (let i = 1; i < closes.length; i += 1) {
+    const prev = closes[i - 1];
+    const curr = closes[i];
+    if (prev > 0 && curr > 0) returns.push((curr - prev) / prev);
+  }
+  const mean = returns.length ? returns.reduce((s, v) => s + v, 0) / returns.length : 0;
+  const variance = returns.length > 1 ? returns.reduce((s, v) => s + (v - mean) ** 2, 0) / (returns.length - 1) : 0;
+  const volatilityPct = Math.sqrt(Math.max(variance, 0)) * 100;
   
-  // Logic TP/SL linh hoạt theo độ biến động
   const baseRiskPct = clamp(volatilityPct * 1.5, 3, 10);
   const rewardMultiplier = volumeTrendPct > 20 && momentum5dPct > 0 ? 3 : 2;
 
@@ -176,18 +163,11 @@ function calcSignalsFromHistory(history: PriceHistory, currentPrice: number) {
   };
 }
 
-// --- BỘ PHẬN 2: GHÉP NỐI DỮ LIỆU KỸ THUẬT & TIN TỨC --- //
 export async function buildTechnicalSignals(symbols: string[]): Promise<TechnicalSignal[]> {
   const payload = await fetchMarketPrices(symbols, true);
   return await Promise.all(symbols.map(async (symbol) => {
     const currentPrice = Number(payload.prices[symbol] || 0);
-    
-    // Gọi song song cả lịch sử giá và tin tức để tối ưu tốc độ
-    const [history, news] = await Promise.all([
-      fetchHistory(symbol),
-      fetchNewsRSS(symbol), // Gọi hàm cào tin
-    ]);
-    
+    const [history, news] = await Promise.all([fetchHistory(symbol), fetchNewsRSS(symbol)]);
     const stats = calcSignalsFromHistory(history, currentPrice);
     
     return { 
@@ -199,7 +179,7 @@ export async function buildTechnicalSignals(symbols: string[]): Promise<Technica
       volumeTrendPct: stats.volumeTrendPct,
       suggestedTp: stats.suggestedTp, 
       suggestedSl: stats.suggestedSl,
-      news, // Đưa tin tức vào Signal gửi đi
+      news,
     } satisfies TechnicalSignal;
   }));
 }
@@ -218,28 +198,6 @@ export async function callOpenRouterJson<T>(
 ): Promise<T> {
   if (!apiKey) return fallback;
 
-  // --- BỘ PHẬN 3: PROMPT CHUYÊN GIA TÌNH BÁO THỊ TRƯỜNG --- //
-  const expertSystemPrompt = `${systemPrompt}
-  
-NHẬM VAI: Bạn là một Giám đốc Chiến lược & Tình báo Tự doanh Chứng khoán Việt Nam. Bạn có 20 năm kinh nghiệm kết hợp VSA (Volume Spread Analysis) và tin tức vĩ mô/tin đồn doanh nghiệp.
-
-NHIỆM VỤ QUAN TRỌNG NHẤT: Phân tích danh mục dựa trên tương quan giữa GIÁ, DÒNG TIỀN (Khối lượng) và TIN TỨC.
-
-TƯ DUY PHÂN TÍCH (Lưu ý T+2.5 và Vùng 1300):
-1. Đọc News Sentiment: Nhận diện tin tức là Tích cực (Lãi lớn, M&A...), Tiêu cực (Bắt bớ, Thua lỗ, Margin Call...) hay chỉ là Tin đồn đồn thổi thất thiệt?
-2. Đối chiếu Tin tức vs Dòng tiền (VSA): 
-   - Nếu Tin Tích cực + Volume nổ mạnh (volumeTrendPct dương lớn): Confirm dòng tiền lớn vào, "Tin ra để gom hàng dứt khoát".
-   - Nếu Tin Tích cực + Volume sụt giảm: Cảnh báo "Kéo xả/Bull-trap", "Tin ra để bán ròng".
-   - Nếu Tin Tiêu cực + Volume lớn: "Xả hàng tháo chạy", "Margin Call diện rộng".
-   - Nếu Tin Tiêu cực + Volume cạn kiệt (volumeTrendPct âm): "Rũ bỏ cạn cung", "Dấu hiệu test đáy thành công".
-3. Nhạy bén thị trường: Am hiểu các yếu tố vĩ mô thực tế (áp lực tỷ giá SBV, KRX, phái sinh đáo hạn).
-
-VĂN PHONG VÀ THUẬT NGỮ VN-INDEX:
-- Dùng từ ngữ thực chiến: Cạn cung, test đáy, bùng nổ, phân phối ngầm, rũ bỏ kịch liệt, bẫy tăng giá (bull-trap), gãy nền, tháo chạy, margin call, thoái vốn, 'game'.
-- Lý do (reason) phải ngắn gọn, sắc nét, thể hiện sự am hiểu tương quan Giá/Vol/Tin.
-
-YÊU CẦU TRẢ VỀ JSON DUY NHẤT. KHÔNG CÓ VĂN BẢN THỪA.`;
-
   let retries = 2;
   while (retries >= 0) {
     try {
@@ -253,10 +211,7 @@ YÊU CẦU TRẢ VỀ JSON DUY NHẤT. KHÔNG CÓ VĂN BẢN THỪA.`;
           model: model || 'llama-3.3-70b-versatile',
           temperature: 0.15,
           response_format: { type: "json_object" },
-          messages: [
-            { role: 'system', content: expertSystemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
         }),
         cache: 'no-store',
       });
@@ -274,7 +229,6 @@ YÊU CẦU TRẢ VỀ JSON DUY NHẤT. KHÔNG CÓ VĂN BẢN THỪA.`;
 
       return JSON.parse(extractJsonFromText(text)) as T;
     } catch (err) {
-      console.error("Lỗi AI:", err);
       return fallback;
     }
   }
