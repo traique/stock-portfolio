@@ -23,6 +23,8 @@ type WatchlistScanResponse = {
     sl: number;
   }>;
   avoid: string[];
+  // Cập nhật Type để TypeScript cho phép lưu tin tức
+  newsContext?: Record<string, any>; 
 };
 
 function buildWatchlistCacheKey(riskProfile: string, symbols: string[]) {
@@ -37,6 +39,7 @@ export async function POST(request: NextRequest) {
   const symbols = [...new Set(parsed.data.symbols)].slice(0, 60).sort();
   const cacheKey = buildWatchlistCacheKey(parsed.data.risk_profile, symbols);
 
+  // Đọc từ Cache
   const cached = getAiCache<WatchlistScanResponse>(cacheKey);
   if (cached) {
     return NextResponse.json({ ...cached, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
@@ -50,7 +53,6 @@ export async function POST(request: NextRequest) {
       const momentumScore = Math.max(-15, Math.min(15, s.momentum5dPct * 1.5));
       const volumeScore = Math.max(-15, Math.min(15, (s.volumeTrendPct || 0) * 0.5)); 
       
-      // Bonus điểm độ "Hot": Mã nào đang có nhiều tin tức xuất hiện sẽ được ưu tiên chú ý
       const newsScore = s.news && s.news.length > 0 ? 5 : 0;
       
       const score = Number((50 + trendScore + momentumScore + volumeScore + newsScore - (s.volatilityPct * 0.5)).toFixed(2));
@@ -65,7 +67,7 @@ export async function POST(request: NextRequest) {
           volatilityPct: s.volatilityPct,
           volumeTrendPct: s.volumeTrendPct,
         },
-        news: s.news, // <-- Gửi trực tiếp tin tức nóng hổi cho AI
+        news: s.news, 
         suggestedTp: s.suggestedTp,
         suggestedSl: s.suggestedSl,
       };
@@ -128,11 +130,18 @@ YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
     );
   }
 
-  setAiCache(cacheKey, aiResponse, WATCHLIST_AI_CACHE_TTL_MS);
+  // --- BƯỚC KHẮC PHỤC "CACHE TRAP" CHÍNH LÀ ĐÂY ---
+  // Gộp kết quả của AI và danh sách tin tức lại thành 1 cục duy nhất
+  const finalResponse: WatchlistScanResponse = {
+    ...aiResponse,
+    newsContext: Object.fromEntries(watchlistContext.map(s => [s.symbol, s.news || []]))
+  };
+
+  // Lưu toàn bộ cục này vào Cache. Lần sau bật lên UI sẽ đọc được tin tức ngay lập tức.
+  setAiCache(cacheKey, finalResponse, WATCHLIST_AI_CACHE_TTL_MS);
 
   return NextResponse.json({
-    ...aiResponse,
-    newsContext: Object.fromEntries(watchlistContext.map(s => [s.symbol, s.news])),
+    ...finalResponse,
     ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS),
   });
 }
