@@ -8,6 +8,7 @@ import { buildAiCacheMeta, getAiCache, setAiCache } from '@/lib/server/ai-cache'
 const bodySchema = z.object({
   symbols: z.array(z.string().trim().toUpperCase()).min(1).max(60),
   risk_profile: z.enum(['conservative', 'balanced', 'aggressive']).optional().default('balanced'),
+  force_refresh: z.boolean().optional(), // Lệnh ép buộc hệ thống cào lại dữ liệu mới nhất
 });
 
 const WATCHLIST_AI_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -20,7 +21,6 @@ type WatchlistScanResponse = {
 };
 
 function buildWatchlistCacheKey(riskProfile: string, symbols: string[]) {
-  // Nâng cấp lên v2 để ép Vercel bỏ qua cache cũ bị lỗi
   return `ai:watchlist:v2:${riskProfile}:${symbols.join(',')}`;
 }
 
@@ -32,9 +32,12 @@ export async function POST(request: NextRequest) {
   const symbols = [...new Set(parsed.data.symbols)].slice(0, 60).sort();
   const cacheKey = buildWatchlistCacheKey(parsed.data.risk_profile, symbols);
 
-  const cached = getAiCache<WatchlistScanResponse>(cacheKey);
-  if (cached) {
-    return NextResponse.json({ ...cached, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
+  // Chỉ lấy từ Cache nếu người dùng KHÔNG yêu cầu force_refresh
+  if (!parsed.data.force_refresh) {
+    const cached = getAiCache<WatchlistScanResponse>(cacheKey);
+    if (cached) {
+      return NextResponse.json({ ...cached, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
+    }
   }
 
   const signals = await buildTechnicalSignals(symbols);
@@ -95,7 +98,6 @@ Trình bày lý do ngắn gọn, sắc nét theo trường phái VSA. Trả về
     );
   }
 
-  // Đóng gói đầy đủ kết quả AI và Tin tức vào cache
   const finalResponse: WatchlistScanResponse = {
     ...aiResponse,
     newsContext: Object.fromEntries(watchlistContext.map(s => [s.symbol, s.news || []]))
