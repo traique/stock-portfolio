@@ -7,21 +7,19 @@ import AppShellHeader from '@/components/app-shell-header';
 
 type QuoteItem = { symbol: string; price: number; change: number; pct: number; volume?: number };
 type PricesResponse = { debug?: QuoteItem[]; error?: string };
-
 type NewsItem = { title: string; source: string; pubDate: string };
 
 type AiWatchlistResponse = {
   summary: string;
   picks: Array<{ symbol: string; score: number; reason: string; entry: number; tp: number; sl: number }>;
   avoid: string[];
-  newsContext?: Record<string, NewsItem[]>; // Map chứa tin tức để hiển thị lên UI
+  newsContext?: Record<string, NewsItem[]>;
   cached?: boolean;
   cache_ttl_seconds?: number;
   cached_at?: string;
   error?: string;
 };
 
-// Tối ưu các hàm format
 const priceFormatter = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const formatPrice = (v?: number | null) => (v == null || !Number.isFinite(v) ? 'N/A' : priceFormatter.format(v));
 const formatPct = (v?: number | null) => (v == null || !Number.isFinite(v) ? 'N/A' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`);
@@ -72,7 +70,6 @@ export default function HomePage() {
   const [aiError, setAiError] = useState('');
   const [aiWatchlist, setAiWatchlist] = useState<AiWatchlistResponse | null>(null);
 
-  // State quản lý Popup Tin tức
   const [newsModal, setNewsModal] = useState<{ isOpen: boolean; symbol: string; news: NewsItem[] }>({ isOpen: false, symbol: '', news: [] });
 
   useEffect(() => {
@@ -96,6 +93,21 @@ export default function HomePage() {
     return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
+  // --- LƯU VÀ ĐỌC KẾT QUẢ AI TỪ LOCALSTORAGE ---
+  useEffect(() => {
+    const savedAi = localStorage.getItem('lcta_ai_watchlist_result');
+    if (savedAi) {
+      try { setAiWatchlist(JSON.parse(savedAi)); } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (aiWatchlist) {
+      localStorage.setItem('lcta_ai_watchlist_result', JSON.stringify(aiWatchlist));
+    }
+  }, [aiWatchlist]);
+  // ---------------------------------------------
+
   async function runAiWatchlistScan() {
     if (!watchlist.length) return;
     setAiLoading(true);
@@ -104,24 +116,23 @@ export default function HomePage() {
       const response = await fetch('/api/ai/watchlist-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols: watchlist, risk_profile: 'balanced' }),
+        // Thêm force_refresh: true để ép hệ thống gọi Groq cào tin tức mới nhất
+        body: JSON.stringify({ symbols: watchlist, risk_profile: 'balanced', force_refresh: true }),
       });
       const payload: AiWatchlistResponse = await response.json();
       if (!response.ok) {
         setAiError(payload?.error || 'Không thể phân tích watchlist');
-        setAiWatchlist(null);
+        // Không set null để người dùng vẫn nhìn thấy kết quả cũ nếu lỗi mạng
       } else {
         setAiWatchlist(payload);
       }
     } catch {
       setAiError('Không thể kết nối với dịch vụ AI.');
-      setAiWatchlist(null);
     } finally {
       setAiLoading(false);
     }
   }
 
-  // Khôi phục Watchlist từ DB hoặc LocalStorage
   useEffect(() => {
     (async () => {
       if (!sessionChecked) return;
@@ -158,7 +169,6 @@ export default function HomePage() {
     })();
   }, [sessionChecked, isLoggedIn, userEmail, userId]);
 
-  // Lưu Watchlist mỗi khi có thay đổi
   useEffect(() => {
     if (!sessionChecked || !watchlistReady) return;
     const sorted = sortSymbols(watchlist);
@@ -178,7 +188,6 @@ export default function HomePage() {
     })();
   }, [watchlist, userEmail, userId, isLoggedIn, sessionChecked, watchlistReady]);
 
-  // Load giá thị trường
   useEffect(() => {
     (async () => {
       if (!watchlistReady) return;
@@ -204,7 +213,6 @@ export default function HomePage() {
     })();
   }, [watchlist, watchlistReady]);
 
-  // Load VN-Index
   useEffect(() => {
     (async () => {
       try {
@@ -338,7 +346,6 @@ export default function HomePage() {
 
         <section className="ab-home-grid single-focus" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
           
-          {/* Cột trái: Watchlist */}
           <section className="ab-premium-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="ab-row-between align-center">
               <div style={{ fontWeight: 700, fontSize: 16 }}>Danh sách theo dõi</div>
@@ -366,8 +373,6 @@ export default function HomePage() {
               ) : quotes.length ? (
                 quotes.map((item) => (
                   <article key={item.symbol} className="ab-premium-card" style={{ padding: 12, position: 'relative' }}>
-                    
-                    {/* UI MỚI: CĂN CHỈNH NÚT XOÁ VÀ TIN TỨC TRONG SUỐT */}
                     <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
                       <div style={{ fontWeight: 800, fontSize: 18 }}>{item.symbol}</div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -402,9 +407,7 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* Cột phải: AI & Market Movers */}
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            
             <section className="ab-premium-card">
               <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
                 <div style={{ fontWeight: 700, fontSize: 16 }}>AI Watchlist Scan</div>
@@ -416,7 +419,6 @@ export default function HomePage() {
               <div className="ab-soft-label" style={{ marginBottom: 16 }}>Tự động quét kỹ thuật và gợi ý điểm mua bán an toàn cho các mã trong danh sách.</div>
               
               {aiError ? <div className="ab-error">{aiError}</div> : null}
-              {aiWatchlist?.cached ? <div className="ab-note" style={{ marginBottom: 12 }}>⚡ Kết quả được lấy từ bộ nhớ đệm (làm mới sau {Math.round((aiWatchlist.cache_ttl_seconds || 0) / 60)} phút).</div> : null}
               
               {aiWatchlist ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -463,11 +465,35 @@ export default function HomePage() {
               )}
             </section>
 
+            <section className="ab-premium-card">
+              <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 16 }}>Tăng mạnh nhất (Watchlist)</div>
+                <Sparkles size={16} color="var(--yellow)" />
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="ab-row-between align-center" style={{ padding: 8 }}>
+                      <div className="ab-skeleton skeleton-line" style={{ width: 60 }} />
+                      <div className="ab-skeleton skeleton-line" style={{ width: 40 }} />
+                    </div>
+                  ))
+                ) : topPositive.length ? topPositive.map((item) => (
+                  <div key={item.symbol} className="ab-row-between align-center" style={{ padding: '8px 12px', backgroundColor: 'var(--soft-1)', borderRadius: 6 }}>
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{item.symbol}</div>
+                      <div className="ab-soft-label" style={{ fontSize: 13 }}>{formatPrice(item.price)}</div>
+                    </div>
+                    <div style={{ fontWeight: 700, color: 'var(--green)' }}>{formatPct(item.pct)}</div>
+                  </div>
+                )) : <div className="ab-soft-label" style={{ padding: 8 }}>Không có mã tăng giá.</div>}
+              </div>
+            </section>
           </aside>
         </section>
       </div>
 
-      {/* --- UI TIN TỨC POPUP (MODAL) --- */}
       {newsModal.isOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div className="ab-premium-card" style={{ width: '100%', maxWidth: 450, maxHeight: '80vh', overflowY: 'auto', position: 'relative', margin: 0 }}>
@@ -502,7 +528,6 @@ export default function HomePage() {
           </div>
         </div>
       )}
-
     </main>
   );
 }
