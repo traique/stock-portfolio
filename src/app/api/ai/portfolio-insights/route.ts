@@ -9,6 +9,7 @@ import { buildAiCacheMeta, getAiCache, setAiCache } from '@/lib/server/ai-cache'
 
 const bodySchema = z.object({
   risk_profile: z.enum(['conservative', 'balanced', 'aggressive']).optional().default('balanced'),
+  force_refresh: z.boolean().optional(), // Lệnh ép buộc làm mới
 });
 
 const PORTFOLIO_AI_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -24,6 +25,7 @@ type AiPortfolioResponse = {
     sl?: number;
   }>;
   risks: string[];
+  newsContext?: Record<string, any>; // Lưu trữ tin tức
 };
 
 function buildPortfolioCacheKey(
@@ -36,7 +38,8 @@ function buildPortfolioCacheKey(
     .map((tx) => `${tx.id}:${tx.symbol}:${tx.transaction_type}:${tx.quantity}:${tx.price}:${tx.trade_date}`)
     .join('|');
 
-  return `ai:portfolio:${userId}:${riskProfile}:${txSignature}`;
+  // Nâng cấp lên v3 để né cache cũ
+  return `ai:portfolio:v3:${userId}:${riskProfile}:${txSignature}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -72,9 +75,13 @@ export async function POST(request: NextRequest) {
   }
 
   const cacheKey = buildPortfolioCacheKey(user.id, parsed.data.risk_profile, transactions);
-  const cached = getAiCache<AiPortfolioResponse>(cacheKey);
-  if (cached) {
-    return NextResponse.json({ ...cached, ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS) });
+  
+  // Bỏ qua Cache nếu có lệnh force_refresh
+  if (!parsed.data.force_refresh) {
+    const cached = getAiCache<AiPortfolioResponse>(cacheKey);
+    if (cached) {
+      return NextResponse.json({ ...cached, ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS) });
+    }
   }
 
   const openHoldings = deriveOpenHoldings(transactions);
@@ -99,7 +106,7 @@ export async function POST(request: NextRequest) {
         momentum5dPct: sig?.momentum5dPct,
         volumeTrendPct: (sig as any)?.volumeTrendPct || 0, 
       },
-      news: sig?.news || [], // <-- Đưa thẳng tin tức vào danh mục của khách hàng
+      news: sig?.news || [], 
     };
   });
 
@@ -141,7 +148,7 @@ NHIỆM VỤ QUAN TRỌNG NHẤT BẮT BUỘC TUÂN THỦ:
 3. Lệnh Chốt lời (tp) BẮT BUỘC phải CAO HƠN "currentPrice" VÀ "avgBuyPrice". 
 
 VĂN PHONG VÀ CÁCH PHÂN TÍCH (Lý do):
-- Mở đầu "reason" bằng việc đánh giá vị thế, sau đó đưa ra tác động của Tin Tức lên hành vi giá. (VD: "Đang lỗ nhẹ 2%, tin chủ tịch bán cổ phiếu ra nhưng vol cạn, khả năng rũ bỏ...").
+- Mở đầu "reason" bằng việc đánh giá vị thế, sau đó đưa ra tác động của Tin Tức lên hành vi giá. (VD: "Đang lỗ nhẹ 2%, tin chủ tịch bán cổ phiếu ra nhưng vol cạn...").
 - Kết hợp VSA: cạn cung, rũ bỏ, nổ vol, phân phối ngầm, kéo xả.
 - Quyết đoán: Không nói chung chung. Đang lỗ thì khuyên gồng chờ hồi hay cắt lót luôn.
 
@@ -170,10 +177,16 @@ YÊU CẦU TRẢ VỀ DUY NHẤT MỘT JSON:
     );
   }
 
-  setAiCache(cacheKey, aiResponse, PORTFOLIO_AI_CACHE_TTL_MS);
+  // Đóng gói tin tức vào response cuối cùng
+  const finalResponse: AiPortfolioResponse = {
+    ...aiResponse,
+    newsContext: Object.fromEntries(portfolioContext.map(s => [s.symbol, s.news || []]))
+  };
+
+  setAiCache(cacheKey, finalResponse, PORTFOLIO_AI_CACHE_TTL_MS);
 
   return NextResponse.json({
-    ...aiResponse,
+    ...finalResponse,
     ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS),
   });
 }
