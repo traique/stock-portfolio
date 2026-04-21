@@ -36,10 +36,10 @@ const getWatchlistKey = (email?: string) => `lcta_watchlist_${email ? email.toLo
 
 function LoadingCard() {
   return (
-    <article className="ab-watch-card premium ab-skeleton-card">
-      <div className="ab-skeleton skeleton-title" style={{ width: '40%' }} />
-      <div className="ab-skeleton skeleton-price" style={{ width: '60%' }} />
-      <div className="ab-skeleton skeleton-line" style={{ width: '50%' }} />
+    <article style={{ background: 'var(--soft)', borderRadius: 24, padding: 16, border: '1px solid var(--border)' }}>
+      <div className="ab-skeleton" style={{ width: '40%', height: 20 }} />
+      <div className="ab-skeleton" style={{ width: '60%', height: 32, marginTop: 12 }} />
+      <div className="ab-skeleton" style={{ width: '50%', height: 16, marginTop: 8 }} />
     </article>
   );
 }
@@ -243,7 +243,6 @@ export default function HomePage() {
     setNewsModal({ isOpen: true, symbol, news: newsData });
   }
 
-  // --- HÀM THÊM MÃ CHUẨN ---
   function addWatchSymbol() {
     const symbol = normalizeSymbol(watchInput);
     if (!symbol) return setWatchError('Vui lòng nhập mã cổ phiếu hợp lệ.');
@@ -263,37 +262,37 @@ export default function HomePage() {
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Radar đầu tư" isLoggedIn={isLoggedIn} email={userEmail} currentTab="home" onLogout={async () => await supabase.auth.signOut()} onAuthOpen={() => setShowAuth((p) => !p)} />
 
-        <section className="ab-premium-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), var(--card))' }}>
+        <section className="ab-premium-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between', background: 'var(--card)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span className="ab-card-kicker" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Activity size={14} color="var(--green)" /> VN-INDEX MARKET PULSE
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Activity size={16} color="var(--green)" /> VN-INDEX
             </span>
             <div style={{ 
               fontSize: 'clamp(32px, 5vw, 44px)', 
-              fontWeight: 700, 
+              fontWeight: 800, 
               fontFamily: '"Playfair Display", serif', 
               lineHeight: 1.1,
               color: 'var(--text)'
             }}>
               {vnIndex ? formatPrice(vnIndex.price) : '--'}
             </div>
-            <div style={{ color: colorFor(vnIndex?.pct), fontWeight: 700, fontSize: 15 }}>
+            <div style={{ color: colorFor(vnIndex?.pct), fontWeight: 700, fontSize: 16 }}>
               {vnIndex ? `${formatIndexChange(vnIndex.change)} (${formatPct(vnIndex.pct)})` : 'Đang lấy dữ liệu...'}
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 32 }}>
-            <div style={{ textAlign: 'right' }}>
-              <span className="ab-soft-label">Mã tăng</span>
-              <div style={{ color: 'var(--green)', fontSize: 22, fontWeight: 800 }}>{loading ? '--' : breadth.gainers}</div>
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)' }}>Mã tăng</span>
+              <div style={{ color: 'var(--green)', fontSize: 24, fontWeight: 800, marginTop: 4 }}>{loading ? '--' : breadth.gainers}</div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <span className="ab-soft-label">Mã giảm</span>
-              <div style={{ color: 'var(--red)', fontSize: 22, fontWeight: 800 }}>{loading ? '--' : breadth.losers}</div>
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)' }}>Mã giảm</span>
+              <div style={{ color: 'var(--red)', fontSize: 24, fontWeight: 800, marginTop: 4 }}>{loading ? '--' : breadth.losers}</div>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <span className="ab-soft-label">Biến động TB</span>
-              <div style={{ color: colorFor(breadth.avgPct), fontSize: 22, fontWeight: 800 }}>
+            <div style={{ textAlign: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)' }}>Biến động TB</span>
+              <div style={{ color: colorFor(breadth.avgPct), fontSize: 24, fontWeight: 800, marginTop: 4 }}>
                   {Number.isFinite(breadth.avgPct) ? formatPct(breadth.avgPct) : 'N/A'}
               </div>
             </div>
@@ -302,7 +301,7 @@ export default function HomePage() {
 
         {showAuth && !isLoggedIn && (
           <section id="auth" className="ab-premium-card">
-            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>{authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, fontFamily: '"Playfair Display", serif', marginBottom: 16 }}>{authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</div>
             <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email" required className="ab-input" />
               <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mật khẩu" type="password" required className="ab-input" />
@@ -310,7 +309,7 @@ export default function HomePage() {
                   {loadingAuth ? 'Đang xử lý...' : authMode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
               </button>
             </form>
-            <button type="button" onClick={() => setAuthMode((p) => (p === 'login' ? 'signup' : 'login'))} className="ab-btn ab-btn-subtle" style={{ marginTop: 8, width: '100%' }}>
+            <button type="button" onClick={() => setAuthMode((p) => (p === 'login' ? 'signup' : 'login'))} className="ab-btn" style={{ marginTop: 8, width: '100%', background: 'transparent', color: 'var(--muted)' }}>
                 {authMode === 'login' ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
             </button>
             {authMessage && <div className="ab-error" style={{ marginTop: 12 }}>{authMessage}</div>}
@@ -321,15 +320,13 @@ export default function HomePage() {
           
           <section className="ab-premium-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="ab-row-between align-center">
-              <div>
-                <div className="ab-card-kicker">DANH SÁCH THEO DÕI</div>
-                <div style={{ fontSize: 18, fontWeight: 800 }}>Watchlist</div>
+              <div style={{ fontSize: 26, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)' }}>
+                Danh sách theo dõi
               </div>
-              <span className="ab-watch-count">{watchlist.length} mã</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted)' }}>{watchlist.length} mã</span>
             </div>
 
-            {/* --- ĐÃ KHÔI PHỤC NÚT THÊM NẰM CÙNG HÀNG VÀ BÁO LỖI --- */}
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 10 }}>
               <input 
                 value={watchInput} 
                 onChange={(e) => setWatchInput(e.target.value)} 
@@ -342,22 +339,36 @@ export default function HomePage() {
                 Thêm
               </button>
             </div>
-            {watchError && <div className="ab-error">{watchError}</div>}
-            {marketError && <div className="ab-error">{marketError}</div>}
+            {watchError && <div className="ab-error" style={{ marginLeft: 16 }}>{watchError}</div>}
+            {marketError && <div className="ab-error" style={{ marginLeft: 16 }}>{marketError}</div>}
 
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))' }}>
+            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', marginTop: 8 }}>
               {loading ? Array.from({ length: 4 }).map((_, i) => <LoadingCard key={i} />) : 
                 quotes.map((item) => (
-                  <article key={item.symbol} className="ab-premium-card" style={{ padding: 12 }}>
-                    <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
-                      <div style={{ fontWeight: 800, fontSize: 18 }}>{item.symbol}</div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button type="button" onClick={() => handleOpenNews(item.symbol)} style={{ background: 'transparent', border: 'none', color: 'var(--yellow)', cursor: 'pointer', padding: 0 }} title="Tin tức"><Newspaper size={18} /></button>
-                        <button type="button" onClick={() => setWatchlist(prev => prev.filter(s => s !== item.symbol))} style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 0 }} title="Xóa"><Trash2 size={18} /></button>
+                  <article key={item.symbol} style={{ 
+                    background: 'var(--soft)', 
+                    borderRadius: 22, 
+                    padding: 16, 
+                    border: '1px solid var(--border)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+                  }}>
+                    <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
+                      <div style={{ fontWeight: 800, fontSize: 20 }}>
+                        {item.symbol} 
+                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--muted)', marginLeft: 6, fontFamily: 'var(--font-sans)' }}>CỔ PHIẾU</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {/* ICON ĐƯỢC CHỈNH THEO MOCKUP */}
+                        <button type="button" onClick={() => handleOpenNews(item.symbol)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }} title="Tin tức">
+                          <Newspaper size={18} color="var(--green)" />
+                        </button>
+                        <button type="button" onClick={() => setWatchlist(prev => prev.filter(s => s !== item.symbol))} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }} title="Xóa">
+                          <Trash2 size={18} color="var(--red)" />
+                        </button>
                       </div>
                     </div>
-                    <div style={{ fontSize: 17, fontWeight: 700, fontFamily: '"Playfair Display", serif' }}>{formatPrice(item.price)}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: colorFor(item.change), marginTop: 4 }}>
+                    <div style={{ fontSize: 20, fontWeight: 800 }}>{formatPrice(item.price)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: colorFor(item.change), marginTop: 4 }}>
                         {formatPrice(item.change)} ({formatPct(item.pct)})
                     </div>
                   </article>
@@ -368,10 +379,9 @@ export default function HomePage() {
 
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <section className="ab-premium-card">
-              <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
-                <div>
-                  <div className="ab-card-kicker">AI ASSISTANT</div>
-                  <div style={{ fontSize: 18, fontWeight: 800 }}>Watchlist Scan</div>
+              <div className="ab-row-between align-center" style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: '"Playfair Display", serif' }}>
+                  AI Watchlist Scan
                 </div>
                 <button type="button" className="ab-btn ab-btn-primary" onClick={runAiWatchlistScan} disabled={aiLoading || !watchlist.length}>
                   {aiLoading ? <><RefreshCw size={14} className="spin-animation" /> Đang quét</> : 'Quét AI'}
@@ -382,55 +392,57 @@ export default function HomePage() {
               
               {aiWatchlist ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={{ padding: 12, backgroundColor: 'var(--soft)', borderRadius: 12, fontStyle: 'italic', border: '1px solid var(--border)', fontSize: 14 }}>
-                      "{aiWatchlist.summary}"
+                  <div style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5, marginBottom: 8 }}>
+                    {aiWatchlist.summary}
                   </div>
                   
                   {aiWatchlist.picks.map((pick) => (
-                    <div key={pick.symbol} style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 16, background: 'linear-gradient(180deg, var(--card), var(--soft))' }}>
+                    <div key={pick.symbol} style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 20, background: 'var(--soft)' }}>
                       <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
-                          <strong style={{ fontSize: 16 }}>{pick.symbol}</strong>
-                          <span style={{ fontSize: 11, fontWeight: 800, padding: '3px 8px', borderRadius: 99, background: 'var(--soft-2)', color: 'var(--muted)' }}>
-                              SỨC MẠNH: {pick.score.toFixed(0)}
+                          <strong style={{ fontSize: 18 }}>{pick.symbol}</strong>
+                          <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--text)' }}>
+                              Điểm: {pick.score.toFixed(0)}
                           </span>
                       </div>
-                      <div className="ab-soft-label" style={{ fontSize: 13, marginBottom: 10, lineHeight: 1.4 }}>{pick.reason}</div>
+                      <div style={{ color: 'var(--muted)', fontSize: 13, marginBottom: 12, lineHeight: 1.5 }}>{pick.reason}</div>
                       
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center' }}>
-                          <div style={{ background: 'var(--soft)', padding: '6px 0', borderRadius: 8 }}>
-                              <div className="ab-soft-label" style={{ fontSize: 10 }}>ENTRY</div>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{formatPrice(pick.entry)}</div>
+                          <div style={{ background: 'var(--card)', padding: '8px 0', borderRadius: 12, border: '1px solid var(--border)' }}>
+                              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>ENTRY</div>
+                              <div style={{ fontWeight: 800, fontSize: 14 }}>{formatPrice(pick.entry)}</div>
                           </div>
-                          <div style={{ background: 'rgba(16, 185, 129, 0.08)', padding: '6px 0', borderRadius: 8 }}>
-                              <div style={{ color: 'var(--green)', fontSize: 10, fontWeight: 700 }}>TP</div>
-                              <div style={{ color: 'var(--green)', fontWeight: 700, fontSize: 13 }}>{formatPrice(pick.tp)}</div>
+                          <div style={{ background: 'rgba(5, 150, 105, 0.1)', padding: '8px 0', borderRadius: 12, border: '1px solid rgba(5, 150, 105, 0.2)' }}>
+                              <div style={{ color: 'var(--green)', fontSize: 11, fontWeight: 700 }}>TP</div>
+                              <div style={{ color: 'var(--green)', fontWeight: 800, fontSize: 14 }}>{formatPrice(pick.tp)}</div>
                           </div>
-                          <div style={{ background: 'rgba(251, 113, 133, 0.08)', padding: '6px 0', borderRadius: 8 }}>
-                              <div style={{ color: 'var(--red)', fontSize: 10, fontWeight: 700 }}>SL</div>
-                              <div style={{ color: 'var(--red)', fontWeight: 700, fontSize: 13 }}>{formatPrice(pick.sl)}</div>
+                          <div style={{ background: 'rgba(225, 29, 72, 0.1)', padding: '8px 0', borderRadius: 12, border: '1px solid rgba(225, 29, 72, 0.2)' }}>
+                              <div style={{ color: 'var(--red)', fontSize: 11, fontWeight: 700 }}>SL</div>
+                              <div style={{ color: 'var(--red)', fontWeight: 800, fontSize: 14 }}>{formatPrice(pick.sl)}</div>
                           </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                  !aiLoading && <div className="ab-soft-label" style={{ textAlign: 'center', padding: '30px 0' }}>Bấm nút "Quét AI" để phân tích watchlist.</div>
+                  !aiLoading && <div style={{ color: 'var(--muted)', fontSize: 14, lineHeight: 1.5 }}>Tự động quét kỹ thuật và gợi ý điểm mua bán an toàn cho các mã trong danh sách.</div>
               )}
             </section>
 
             <section className="ab-premium-card">
-              <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 800 }}>Tăng mạnh nhất</div>
-                <Sparkles size={16} color="var(--yellow)" />
+              <div className="ab-row-between align-center" style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: '"Playfair Display", serif' }}>
+                  Tăng mạnh nhất
+                </div>
+                <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>(Watchlist)</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {topPositive.map((item) => (
-                  <div key={item.symbol} className="ab-row-between align-center" style={{ padding: '10px 12px', background: 'var(--soft)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                  <div key={item.symbol} className="ab-row-between align-center" style={{ padding: '12px 16px', background: 'var(--soft)', borderRadius: 16, border: '1px solid var(--border)' }}>
                     <div>
-                      <div style={{ fontWeight: 800 }}>{item.symbol}</div>
-                      <div className="ab-soft-label" style={{ fontSize: 12 }}>{formatPrice(item.price)}</div>
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>{item.symbol}</div>
+                      <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>{formatPrice(item.price)}</div>
                     </div>
-                    <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: 15 }}>{formatPct(item.pct)}</div>
+                    <div style={{ fontWeight: 800, color: 'var(--green)', fontSize: 16 }}>{formatPct(item.pct)}</div>
                   </div>
                 ))}
               </div>
@@ -440,26 +452,26 @@ export default function HomePage() {
       </div>
 
       {newsModal.isOpen && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
-          <div className="ab-premium-card" style={{ width: '100%', maxWidth: 450, maxHeight: '85vh', overflowY: 'auto', position: 'relative', margin: 0, border: '1px solid var(--border-strong)' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(8px)' }}>
+          <div className="ab-premium-card" style={{ width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto', position: 'relative', margin: 0 }}>
             <div className="ab-row-between align-center" style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 19, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Newspaper size={22} color="var(--yellow)" />
+              <div style={{ fontSize: 22, fontWeight: 800, fontFamily: '"Playfair Display", serif', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Newspaper size={24} color="var(--primary)" />
                 Tin tức: {newsModal.symbol}
               </div>
-              <button onClick={() => setNewsModal({ isOpen: false, symbol: '', news: [] })} style={{ background: 'var(--soft)', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: 6, borderRadius: '50%', display: 'flex' }}><X size={20} /></button>
+              <button onClick={() => setNewsModal({ isOpen: false, symbol: '', news: [] })} style={{ background: 'var(--soft)', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: 8, borderRadius: '50%', display: 'flex' }}><X size={20} /></button>
             </div>
             {newsModal.news.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {newsModal.news.map((n, i) => (
-                  <a key={i} href={`https://www.google.com/search?q=${encodeURIComponent(n.title)}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', paddingBottom: 14, borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ color: 'var(--text)', fontWeight: 700, fontSize: 15, marginBottom: 6, lineHeight: 1.4 }}>{n.title}</div>
-                    <div className="ab-soft-label" style={{ fontSize: 12 }}>{n.source} • {new Date(n.pubDate).toLocaleDateString('vi-VN')}</div>
+                  <a key={i} href={`https://www.google.com/search?q=${encodeURIComponent(n.title)}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', padding: 16, background: 'var(--soft)', borderRadius: 16, border: '1px solid var(--border)', transition: 'transform 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                    <div style={{ color: 'var(--text)', fontWeight: 700, fontSize: 15, marginBottom: 8, lineHeight: 1.4 }}>{n.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{n.source} • {new Date(n.pubDate).toLocaleDateString('vi-VN')}</div>
                   </a>
                 ))}
               </div>
             ) : (
-              <div className="ab-soft-label" style={{ textAlign: 'center', padding: '40px 0', lineHeight: 1.6 }}>Chưa có tin tức mới. Hãy bấm <b>"Quét AI"</b> để cập nhật!</div>
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--muted)', lineHeight: 1.6 }}>Chưa có tin tức mới. Hãy bấm <b>"Quét AI"</b> để cập nhật!</div>
             )}
           </div>
         </div>
