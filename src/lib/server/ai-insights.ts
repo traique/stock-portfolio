@@ -4,6 +4,7 @@ type PriceHistory = {
   close: number[];
   high: number[];
   low: number[];
+  volume: number[]; // Thêm dữ liệu khối lượng
 };
 
 export type TechnicalSignal = {
@@ -12,6 +13,7 @@ export type TechnicalSignal = {
   trend3mPct: number;
   volatilityPct: number;
   momentum5dPct: number;
+  volumeTrendPct: number; // Tăng trưởng khối lượng so với trung bình
   suggestedTp: number;
   suggestedSl: number;
 };
@@ -57,7 +59,7 @@ async function fetchHistory(symbol: string): Promise<PriceHistory> {
     cache: 'no-store',
   });
 
-  if (!response.ok) return { close: [], high: [], low: [] };
+  if (!response.ok) return { close: [], high: [], low: [], volume: [] };
 
   const payload = await response.json();
   const quote = payload?.chart?.result?.[0]?.indicators?.quote?.[0] || {};
@@ -66,6 +68,7 @@ async function fetchHistory(symbol: string): Promise<PriceHistory> {
     close: toNumberArray(quote.close),
     high: toNumberArray(quote.high),
     low: toNumberArray(quote.low),
+    volume: toNumberArray(quote.volume), // Lấy dữ liệu Volume
   };
 }
 
@@ -82,40 +85,41 @@ function calcVolatilityFromCloses(closes: number[]) {
   return Math.sqrt(Math.max(variance, 0)) * 100;
 }
 
-function calcAtrPct(highs: number[], lows: number[], closes: number[]) {
-  const length = Math.min(highs.length, lows.length, closes.length);
-  if (length < 2) return 2.5;
-  const trueRanges: number[] = [];
-  for (let i = 1; i < length; i += 1) {
-    const high = highs[i]; const low = lows[i]; const prevClose = closes[i - 1];
-    if (high <= 0 || low <= 0 || prevClose <= 0) continue;
-    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-    trueRanges.push(tr);
-  }
-  if (!trueRanges.length) return 2.5;
-  const lookback = Math.min(14, trueRanges.length);
-  const atr = trueRanges.slice(-lookback).reduce((s, v) => s + v, 0) / lookback;
-  const lastClose = closes[length - 1];
-  return lastClose > 0 ? (atr / lastClose) * 100 : 2.5;
-}
-
 function calcSignalsFromHistory(history: PriceHistory, currentPrice: number) {
-  const closes = history.close;
+  const { close: closes, volume: volumes } = history;
   if (!closes.length || currentPrice <= 0) {
-    return { trend3mPct: 0, volatilityPct: 2, momentum5dPct: 0, suggestedTp: roundPrice(currentPrice * 1.08), suggestedSl: roundPrice(currentPrice * 0.95) };
+    return { trend3mPct: 0, volatilityPct: 2, momentum5dPct: 0, volumeTrendPct: 0, suggestedTp: roundPrice(currentPrice * 1.08), suggestedSl: roundPrice(currentPrice * 0.95) };
   }
-  const first = closes[0]; const last = closes[closes.length - 1];
+
+  const lastIdx = closes.length - 1;
+  const first = closes[0];
+  const last = closes[lastIdx];
+  
+  // 1. Xu hướng giá
   const trend3mPct = first > 0 ? ((last - first) / first) * 100 : 0;
-  const lookback = Math.min(5, closes.length - 1);
-  const momentumBase = closes[Math.max(0, closes.length - 1 - lookback)] || last;
+  const lookback = Math.min(5, lastIdx);
+  const momentumBase = closes[Math.max(0, lastIdx - lookback)] || last;
   const momentum5dPct = momentumBase > 0 ? ((last - momentumBase) / momentumBase) * 100 : 0;
+
+  // 2. Phân tích Dòng tiền (Volume Trend)
+  const avgVolume = volumes.length > 0 ? volumes.reduce((a, b) => a + b, 0) / volumes.length : 0;
+  const recentVolume = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+  const volumeTrendPct = avgVolume > 0 ? ((recentVolume - avgVolume) / avgVolume) * 100 : 0;
+
   const volatilityPct = calcVolatilityFromCloses(closes);
-  const atrPct = calcAtrPct(history.high, history.low, closes);
-  const regimeBoost = trend3mPct > 0 && momentum5dPct > 0 ? 0.9 : trend3mPct < 0 ? 1.15 : 1;
-  const baseRiskPct = clamp(Math.max(atrPct * 1.35, volatilityPct * 1.05, 2.8) * regimeBoost, 2.8, 10.5);
-  const rewardMultiplier = trend3mPct > 6 && momentum5dPct > 1 ? 2.5 : trend3mPct < -4 || momentum5dPct < -2 ? 1.5 : 2.05;
-  const rewardPct = clamp(baseRiskPct * rewardMultiplier, 6.5, 24);
-  return { trend3mPct, volatilityPct, momentum5dPct, suggestedTp: roundPrice(currentPrice * (1 + rewardPct / 100)), suggestedSl: roundPrice(currentPrice * (1 - baseRiskPct / 100)) };
+  
+  // Tính toán TP/SL linh hoạt theo độ biến động (ATR-like)
+  const baseRiskPct = clamp(volatilityPct * 1.5, 3, 10);
+  const rewardMultiplier = volumeTrendPct > 20 && momentum5dPct > 0 ? 3 : 2;
+
+  return {
+    trend3mPct,
+    volatilityPct,
+    momentum5dPct,
+    volumeTrendPct,
+    suggestedTp: roundPrice(currentPrice * (1 + (baseRiskPct * rewardMultiplier) / 100)),
+    suggestedSl: roundPrice(currentPrice * (1 - baseRiskPct / 100)),
+  };
 }
 
 export async function buildTechnicalSignals(symbols: string[]) {
@@ -124,7 +128,16 @@ export async function buildTechnicalSignals(symbols: string[]) {
     const currentPrice = Number(payload.prices[symbol] || 0);
     const history = await fetchHistory(symbol);
     const stats = calcSignalsFromHistory(history, currentPrice);
-    return { symbol, currentPrice, trend3mPct: stats.trend3mPct, volatilityPct: stats.volatilityPct, momentum5dPct: stats.momentum5dPct, suggestedTp: stats.suggestedTp, suggestedSl: stats.suggestedSl } satisfies TechnicalSignal;
+    return { 
+      symbol, 
+      currentPrice, 
+      trend3mPct: stats.trend3mPct, 
+      volatilityPct: stats.volatilityPct, 
+      momentum5dPct: stats.momentum5dPct,
+      volumeTrendPct: stats.volumeTrendPct,
+      suggestedTp: stats.suggestedTp, 
+      suggestedSl: stats.suggestedSl 
+    } satisfies TechnicalSignal;
   }));
 }
 
@@ -142,12 +155,15 @@ export async function callOpenRouterJson<T>(
 ): Promise<T> {
   if (!apiKey) return fallback;
 
-  // Groq hỗ trợ tham số response_format rất tốt, giúp kết quả JSON cực kỳ ổn định
-  const strictSystemPrompt = `${systemPrompt}
+  const expertSystemPrompt = `${systemPrompt}
   
-YÊU CẦU:
-1. TRẢ VỀ JSON DUY NHẤT. KHÔNG CÓ VĂN BẢN THỪA.
-2. Sử dụng tiếng Việt chuẩn chứng khoán (Hỗ trợ, Kháng cự, Tích lũy, Tăng tỷ trọng...). KHÔNG dùng "tăng cân nặng".`;
+NHẬM VAI: Bạn là một Chuyên gia phân tích kỹ thuật theo trường phái VSA (Volume Spread Analysis) kỳ cựu tại TTCK Việt Nam. 
+
+NHIỆM VỤ: Phân tích danh mục dựa trên tương quan giữa GIÁ và DÒNG TIỀN (Khối lượng).
+- Hãy cực kỳ chú trọng vào biến 'volumeTrendPct'. Nếu Volume tăng mạnh kèm giá tăng, đó là dấu ấn Dòng tiền thông minh. Nếu giá tăng nhưng Volume cạn kiệt, cảnh báo bẫy tăng giá (Bull trap).
+- Sử dụng ngôn ngữ thực chiến: "Nổ vol", "Cạn cung", "Dòng tiền lớn vào", "Phân phối ngầm", "Rũ bỏ kịch liệt", "Test cung", "Thủng nền".
+- Đối với TTCK VN, hãy lưu ý yếu tố T+2.5 và áp lực tâm lý tại các ngưỡng kháng cự tâm lý (ví dụ: VN-Index quanh 1200, 1300).
+- Trả về kết quả DUY NHẤT dưới dạng JSON. Không giải thích thêm.`;
 
   let retries = 2;
   while (retries >= 0) {
@@ -159,12 +175,11 @@ YÊU CẦU:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model || 'llama3-70b-8192', // Model mặc định siêu mạnh của Groq
-          temperature: 0.1,
-          stream: false,
-          response_format: { type: "json_object" }, // Ép Groq xuất JSON chuẩn
+          model: model || 'llama-3.3-70b-versatile',
+          temperature: 0.15,
+          response_format: { type: "json_object" },
           messages: [
-            { role: 'system', content: strictSystemPrompt },
+            { role: 'system', content: expertSystemPrompt },
             { role: 'user', content: userPrompt },
           ],
         }),
@@ -172,21 +187,19 @@ YÊU CẦU:
       });
 
       if (response.status === 429) {
-        console.warn("Groq đang bận (429), đợi 2s thử lại...");
         await new Promise(r => setTimeout(r, 2000));
         retries--;
         continue;
       }
 
       if (!response.ok) return fallback;
-
       const payload = await response.json();
       const text = payload?.choices?.[0]?.message?.content;
       if (!text) return fallback;
 
       return JSON.parse(extractJsonFromText(text)) as T;
     } catch (err) {
-      console.error("Lỗi gọi Groq:", err);
+      console.error("Lỗi AI:", err);
       return fallback;
     }
   }
