@@ -44,26 +44,44 @@ export async function POST(request: NextRequest) {
 
   const signals = await buildTechnicalSignals(symbols);
 
-  const scored = signals
+  // BƯỚC QUAN TRỌNG: Gói ghém dữ liệu và Tính điểm có trọng số DÒNG TIỀN
+  const watchlistContext = signals
     .map((s) => {
       const trendScore = Math.max(-20, Math.min(20, s.trend3mPct));
       const momentumScore = Math.max(-15, Math.min(15, s.momentum5dPct * 1.5));
-      const score = Number((50 + trendScore + momentumScore - (s.volatilityPct * 0.5)).toFixed(2));
+      // Trọng số mới: Thưởng điểm nếu volume tăng mạnh, phạt nếu volume teo tóp
+      const volumeScore = Math.max(-15, Math.min(15, (s.volumeTrendPct || 0) * 0.5)); 
+      
+      const score = Number((50 + trendScore + momentumScore + volumeScore - (s.volatilityPct * 0.5)).toFixed(2));
+      
       return {
         symbol: s.symbol,
+        currentPrice: s.currentPrice,
         score,
-        reason: `Trend: ${s.trend3mPct.toFixed(2)}% | Momentum: ${s.momentum5dPct.toFixed(2)}%`,
-        entry: s.currentPrice,
-        tp: s.suggestedTp,
-        sl: s.suggestedSl,
+        technical: {
+          trend3mPct: s.trend3mPct,
+          momentum5dPct: s.momentum5dPct,
+          volatilityPct: s.volatilityPct,
+          volumeTrendPct: s.volumeTrendPct,
+        },
+        suggestedTp: s.suggestedTp,
+        suggestedSl: s.suggestedSl,
       };
     })
     .sort((a, b) => b.score - a.score);
 
+  // Fallback dự phòng
   const fallback: WatchlistScanResponse = {
-    summary: 'Quét kỹ thuật dựa trên Trend, Momentum và độ biến động ATR.',
-    picks: scored.slice(0, 5),
-    avoid: scored.filter((r) => r.score < 45).map((r) => r.symbol),
+    summary: 'Đang dùng dữ liệu dự phòng. Quét kỹ thuật dựa trên Trend, Momentum và sự luân chuyển Dòng tiền.',
+    picks: watchlistContext.slice(0, 5).map(s => ({
+        symbol: s.symbol,
+        score: s.score,
+        reason: `Dòng tiền: ${s.technical.volumeTrendPct > 0 ? 'Vào' : 'Cạn'} | Momentum: ${s.technical.momentum5dPct.toFixed(2)}%`,
+        entry: s.currentPrice,
+        tp: s.suggestedTp,
+        sl: s.suggestedSl,
+    })),
+    avoid: watchlistContext.filter((r) => r.score < 45).map((r) => r.symbol),
   };
 
   const apiKey = envServer.OPENROUTER_API_KEY;
@@ -71,21 +89,41 @@ export async function POST(request: NextRequest) {
   let aiResponse = fallback;
 
   if (apiKey) {
-    const prompt = `Bạn là Chuyên gia Chiến lược Thị trường (Market Strategist) gạo cội. 
-Hãy lọc danh sách theo dõi này để tìm ra những "siêu cổ phiếu" hoặc điểm mua an toàn nhất.
+    const prompt = `Bạn là Giám đốc Tự doanh & Chuyên gia VSA (Volume Spread Analysis) tại TTCK Việt Nam.
+Khách hàng đang nhờ bạn lọc Watchlist (Danh sách theo dõi) để tìm ĐIỂM MUA MỚI. Khẩu vị rủi ro: ${parsed.data.risk_profile}.
 
-YÊU CẦU TRẢ VỀ JSON:
-- summary: Tóm tắt bức tranh dòng tiền nhóm này. Đâu là nhóm hút tiền, đâu là bẫy tăng giá (Bull-trap)?
-- picks: Tối đa 5 mã tiềm năng nhất (symbol, score[0-100], reason[phân tích hành vi giá, nền tích lũy, áp lực cung cầu], entry, tp, sl).
-- avoid: Mảng các mã cần tránh do rủi ro phân phối hoặc kỹ thuật yếu.
+NHIỆM VỤ QUAN TRỌNG NHẤT:
+1. Bạn phải soi kỹ "volumeTrendPct" (Dòng tiền) kết hợp với "momentum5dPct" và "currentPrice". 
+2. Dấu hiệu MUA (Picks): Giá đi ngang/test nền mà Volume nổ mạnh (gom hàng), hoặc giá chỉnh nhưng cạn cung (volume âm).
+3. Dấu hiệu BỎ (Avoid): Giá tăng rướn nhưng Volume suy kiệt (Bull-trap), hoặc giá gãy nền kèm nổ Vol (Phân phối/Xả hàng).
+4. Lệnh Mua (entry) phải sát "currentPrice". Lệnh Cắt lỗ (sl) BẮT BUỘC THẤP HƠN "entry". Lệnh Chốt lời (tp) BẮT BUỘC CAO HƠN "entry".
 
-Văn phong: Lạnh lùng, khách quan, đi thẳng vào vấn đề. Chỉ ưu tiên Risk/Reward hấp dẫn.`;
+VĂN PHONG VÀ CÁCH PHÂN TÍCH:
+- Dùng từ ngữ thực chiến VSA: Cạn cung, test đáy, nổ vol, bùng nổ theo đà, rũ bỏ, gãy nền, kéo xả, dòng tiền lớn tham gia.
+- Lạnh lùng, khách quan. Đưa các mã yếu, cạn dòng tiền hoặc rủi ro phân phối vào mảng "avoid".
 
+YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
+{
+  "summary": "Nhận định chung về sự phân hóa dòng tiền trong Watchlist này...",
+  "picks": [
+    {
+      "symbol": "Mã CP",
+      "score": Điểm số sức mạnh (0-100),
+      "reason": "Lý do VSA (Phải nhắc đến vol và hành vi giá)",
+      "entry": Vùng giá mua kỳ vọng,
+      "tp": Giá chốt lời,
+      "sl": Giá cắt lỗ
+    }
+  ],
+  "avoid": ["Mã 1", "Mã 2"]
+}`;
+
+    // Đẩy toàn bộ Context giàu dữ liệu cho AI
     aiResponse = await callOpenRouterJson<WatchlistScanResponse>(
       apiKey,
       aiModel,
       prompt,
-      JSON.stringify({ scored, risk_profile: parsed.data.risk_profile }),
+      JSON.stringify({ watchlistContext, risk_profile: parsed.data.risk_profile }),
       fallback
     );
   }
