@@ -44,15 +44,16 @@ export async function POST(request: NextRequest) {
 
   const signals = await buildTechnicalSignals(symbols);
 
-  // BƯỚC QUAN TRỌNG: Gói ghém dữ liệu và Tính điểm có trọng số DÒNG TIỀN
   const watchlistContext = signals
     .map((s) => {
       const trendScore = Math.max(-20, Math.min(20, s.trend3mPct));
       const momentumScore = Math.max(-15, Math.min(15, s.momentum5dPct * 1.5));
-      // Trọng số mới: Thưởng điểm nếu volume tăng mạnh, phạt nếu volume teo tóp
       const volumeScore = Math.max(-15, Math.min(15, (s.volumeTrendPct || 0) * 0.5)); 
       
-      const score = Number((50 + trendScore + momentumScore + volumeScore - (s.volatilityPct * 0.5)).toFixed(2));
+      // Bonus điểm độ "Hot": Mã nào đang có nhiều tin tức xuất hiện sẽ được ưu tiên chú ý
+      const newsScore = s.news && s.news.length > 0 ? 5 : 0;
+      
+      const score = Number((50 + trendScore + momentumScore + volumeScore + newsScore - (s.volatilityPct * 0.5)).toFixed(2));
       
       return {
         symbol: s.symbol,
@@ -64,15 +65,15 @@ export async function POST(request: NextRequest) {
           volatilityPct: s.volatilityPct,
           volumeTrendPct: s.volumeTrendPct,
         },
+        news: s.news, // <-- Gửi trực tiếp tin tức nóng hổi cho AI
         suggestedTp: s.suggestedTp,
         suggestedSl: s.suggestedSl,
       };
     })
     .sort((a, b) => b.score - a.score);
 
-  // Fallback dự phòng
   const fallback: WatchlistScanResponse = {
-    summary: 'Đang dùng dữ liệu dự phòng. Quét kỹ thuật dựa trên Trend, Momentum và sự luân chuyển Dòng tiền.',
+    summary: 'Đang dùng dữ liệu dự phòng. Quét kỹ thuật dựa trên Trend, Momentum và Tin tức.',
     picks: watchlistContext.slice(0, 5).map(s => ({
         symbol: s.symbol,
         score: s.score,
@@ -90,26 +91,26 @@ export async function POST(request: NextRequest) {
 
   if (apiKey) {
     const prompt = `Bạn là Giám đốc Tự doanh & Chuyên gia VSA (Volume Spread Analysis) tại TTCK Việt Nam.
-Khách hàng đang nhờ bạn lọc Watchlist (Danh sách theo dõi) để tìm ĐIỂM MUA MỚI. Khẩu vị rủi ro: ${parsed.data.risk_profile}.
+Khách hàng nhờ lọc Watchlist tìm ĐIỂM MUA MỚI. Khẩu vị rủi ro: ${parsed.data.risk_profile}.
 
 NHIỆM VỤ QUAN TRỌNG NHẤT:
-1. Bạn phải soi kỹ "volumeTrendPct" (Dòng tiền) kết hợp với "momentum5dPct" và "currentPrice". 
-2. Dấu hiệu MUA (Picks): Giá đi ngang/test nền mà Volume nổ mạnh (gom hàng), hoặc giá chỉnh nhưng cạn cung (volume âm).
-3. Dấu hiệu BỎ (Avoid): Giá tăng rướn nhưng Volume suy kiệt (Bull-trap), hoặc giá gãy nền kèm nổ Vol (Phân phối/Xả hàng).
-4. Lệnh Mua (entry) phải sát "currentPrice". Lệnh Cắt lỗ (sl) BẮT BUỘC THẤP HƠN "entry". Lệnh Chốt lời (tp) BẮT BUỘC CAO HƠN "entry".
+1. Phân tích điểm mua dựa trên sự kết hợp giữa "volumeTrendPct" (Dòng tiền), "news" (Tin tức) và "currentPrice". 
+2. Dấu hiệu MUA (Picks): Có tin Tích cực + Volume nổ mạnh (Cá mập gom hàng), hoặc giá chỉnh nhưng cạn cung chờ tin.
+3. Dấu hiệu BỎ (Avoid): Có tin Tích cực nhưng Volume suy kiệt (Kéo xả/Bull-trap), hoặc có tin Xấu + Nổ Vol (Bán tháo).
+4. Lệnh Mua (entry) sát "currentPrice". Cắt lỗ (sl) BẮT BUỘC THẤP HƠN "entry". Chốt lời (tp) BẮT BUỘC CAO HƠN "entry".
 
 VĂN PHONG VÀ CÁCH PHÂN TÍCH:
-- Dùng từ ngữ thực chiến VSA: Cạn cung, test đáy, nổ vol, bùng nổ theo đà, rũ bỏ, gãy nền, kéo xả, dòng tiền lớn tham gia.
-- Lạnh lùng, khách quan. Đưa các mã yếu, cạn dòng tiền hoặc rủi ro phân phối vào mảng "avoid".
+- Lý do (reason) BẮT BUỘC phải nhắc đến Tin tức đang ảnh hưởng kết hợp với trạng thái Volume (VD: "Tin đồn chia cổ tức hỗ trợ đà tăng, nổ vol gom hàng...").
+- Dùng từ ngữ thực chiến: Cạn cung, test đáy, nổ vol, bùng nổ theo đà, rũ bỏ, gãy nền, kéo xả, tin ra để bán.
 
 YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
 {
-  "summary": "Nhận định chung về sự phân hóa dòng tiền trong Watchlist này...",
+  "summary": "Nhận định chung về sự luân chuyển dòng tiền và tâm lý tin tức trong Watchlist này...",
   "picks": [
     {
       "symbol": "Mã CP",
       "score": Điểm số sức mạnh (0-100),
-      "reason": "Lý do VSA (Phải nhắc đến vol và hành vi giá)",
+      "reason": "Lý do VSA + Tin tức",
       "entry": Vùng giá mua kỳ vọng,
       "tp": Giá chốt lời,
       "sl": Giá cắt lỗ
@@ -118,7 +119,6 @@ YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
   "avoid": ["Mã 1", "Mã 2"]
 }`;
 
-    // Đẩy toàn bộ Context giàu dữ liệu cho AI
     aiResponse = await callOpenRouterJson<WatchlistScanResponse>(
       apiKey,
       aiModel,
