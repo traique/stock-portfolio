@@ -14,21 +14,14 @@ const WATCHLIST_AI_CACHE_TTL_MS = 10 * 60 * 1000;
 
 type WatchlistScanResponse = {
   summary: string;
-  picks: Array<{
-    symbol: string;
-    score: number;
-    reason: string;
-    entry: number;
-    tp: number;
-    sl: number;
-  }>;
+  picks: Array<{ symbol: string; score: number; reason: string; entry: number; tp: number; sl: number }>;
   avoid: string[];
-  // Cập nhật Type để TypeScript cho phép lưu tin tức
   newsContext?: Record<string, any>; 
 };
 
 function buildWatchlistCacheKey(riskProfile: string, symbols: string[]) {
-  return `ai:watchlist:${riskProfile}:${symbols.join(',')}`;
+  // Nâng cấp lên v2 để ép Vercel bỏ qua cache cũ bị lỗi
+  return `ai:watchlist:v2:${riskProfile}:${symbols.join(',')}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -39,7 +32,6 @@ export async function POST(request: NextRequest) {
   const symbols = [...new Set(parsed.data.symbols)].slice(0, 60).sort();
   const cacheKey = buildWatchlistCacheKey(parsed.data.risk_profile, symbols);
 
-  // Đọc từ Cache
   const cached = getAiCache<WatchlistScanResponse>(cacheKey);
   if (cached) {
     return NextResponse.json({ ...cached, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
@@ -52,7 +44,6 @@ export async function POST(request: NextRequest) {
       const trendScore = Math.max(-20, Math.min(20, s.trend3mPct));
       const momentumScore = Math.max(-15, Math.min(15, s.momentum5dPct * 1.5));
       const volumeScore = Math.max(-15, Math.min(15, (s.volumeTrendPct || 0) * 0.5)); 
-      
       const newsScore = s.news && s.news.length > 0 ? 5 : 0;
       
       const score = Number((50 + trendScore + momentumScore + volumeScore + newsScore - (s.volatilityPct * 0.5)).toFixed(2));
@@ -79,7 +70,7 @@ export async function POST(request: NextRequest) {
     picks: watchlistContext.slice(0, 5).map(s => ({
         symbol: s.symbol,
         score: s.score,
-        reason: `Dòng tiền: ${s.technical.volumeTrendPct > 0 ? 'Vào' : 'Cạn'} | Momentum: ${s.technical.momentum5dPct.toFixed(2)}%`,
+        reason: `Dòng tiền: ${s.technical.volumeTrendPct > 0 ? 'Vào' : 'Cạn'}`,
         entry: s.currentPrice,
         tp: s.suggestedTp,
         sl: s.suggestedSl,
@@ -92,34 +83,8 @@ export async function POST(request: NextRequest) {
   let aiResponse = fallback;
 
   if (apiKey) {
-    const prompt = `Bạn là Giám đốc Tự doanh & Chuyên gia VSA (Volume Spread Analysis) tại TTCK Việt Nam.
-Khách hàng nhờ lọc Watchlist tìm ĐIỂM MUA MỚI. Khẩu vị rủi ro: ${parsed.data.risk_profile}.
-
-NHIỆM VỤ QUAN TRỌNG NHẤT:
-1. Phân tích điểm mua dựa trên sự kết hợp giữa "volumeTrendPct" (Dòng tiền), "news" (Tin tức) và "currentPrice". 
-2. Dấu hiệu MUA (Picks): Có tin Tích cực + Volume nổ mạnh (Cá mập gom hàng), hoặc giá chỉnh nhưng cạn cung chờ tin.
-3. Dấu hiệu BỎ (Avoid): Có tin Tích cực nhưng Volume suy kiệt (Kéo xả/Bull-trap), hoặc có tin Xấu + Nổ Vol (Bán tháo).
-4. Lệnh Mua (entry) sát "currentPrice". Cắt lỗ (sl) BẮT BUỘC THẤP HƠN "entry". Chốt lời (tp) BẮT BUỘC CAO HƠN "entry".
-
-VĂN PHONG VÀ CÁCH PHÂN TÍCH:
-- Lý do (reason) BẮT BUỘC phải nhắc đến Tin tức đang ảnh hưởng kết hợp với trạng thái Volume (VD: "Tin đồn chia cổ tức hỗ trợ đà tăng, nổ vol gom hàng...").
-- Dùng từ ngữ thực chiến: Cạn cung, test đáy, nổ vol, bùng nổ theo đà, rũ bỏ, gãy nền, kéo xả, tin ra để bán.
-
-YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
-{
-  "summary": "Nhận định chung về sự luân chuyển dòng tiền và tâm lý tin tức trong Watchlist này...",
-  "picks": [
-    {
-      "symbol": "Mã CP",
-      "score": Điểm số sức mạnh (0-100),
-      "reason": "Lý do VSA + Tin tức",
-      "entry": Vùng giá mua kỳ vọng,
-      "tp": Giá chốt lời,
-      "sl": Giá cắt lỗ
-    }
-  ],
-  "avoid": ["Mã 1", "Mã 2"]
-}`;
+    const prompt = `Bạn là Giám đốc Tự doanh tại VN. Phân tích điểm mua dựa trên "volumeTrendPct" (Dòng tiền), "news" (Tin tức) và "currentPrice". 
+Trình bày lý do ngắn gọn, sắc nét theo trường phái VSA. Trả về JSON duy nhất.`;
 
     aiResponse = await callOpenRouterJson<WatchlistScanResponse>(
       apiKey,
@@ -130,14 +95,12 @@ YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
     );
   }
 
-  // --- BƯỚC KHẮC PHỤC "CACHE TRAP" CHÍNH LÀ ĐÂY ---
-  // Gộp kết quả của AI và danh sách tin tức lại thành 1 cục duy nhất
+  // Đóng gói đầy đủ kết quả AI và Tin tức vào cache
   const finalResponse: WatchlistScanResponse = {
     ...aiResponse,
     newsContext: Object.fromEntries(watchlistContext.map(s => [s.symbol, s.news || []]))
   };
 
-  // Lưu toàn bộ cục này vào Cache. Lần sau bật lên UI sẽ đọc được tin tức ngay lập tức.
   setAiCache(cacheKey, finalResponse, WATCHLIST_AI_CACHE_TTL_MS);
 
   return NextResponse.json({
