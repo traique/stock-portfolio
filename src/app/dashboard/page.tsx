@@ -11,6 +11,8 @@ import {
   TrendingUp,
   Wallet,
   RefreshCw,
+  Newspaper,
+  X
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShellHeader from '@/components/app-shell-header';
@@ -35,6 +37,10 @@ import { supabase } from '@/lib/supabase';
 type QuoteDebugItem = { symbol: string; price: number; change: number; pct: number };
 type PricesResponse = { prices?: PriceMap; debug?: QuoteDebugItem[]; error?: string; cached?: boolean };
 type TelegramSettings = { chat_id: string; is_enabled: boolean; notify_daily: boolean; daily_hour_vn: number };
+
+// THÊM KIỂU DỮ LIỆU TIN TỨC
+type NewsItem = { title: string; source: string; pubDate: string };
+
 type AiPortfolioResponse = {
   summary: string;
   actions: Array<{
@@ -46,6 +52,7 @@ type AiPortfolioResponse = {
     sl?: number;
   }>;
   risks: string[];
+  newsContext?: Record<string, NewsItem[]>; // Map chứa tin tức
   cached?: boolean;
   cache_ttl_seconds?: number;
   cached_at?: string;
@@ -196,6 +203,9 @@ export default function DashboardPage() {
   const [aiOpen, setAiOpen] = useState(false);
   const [expandedSymbols, setExpandedSymbols] = useState<Record<string, boolean>>({});
   
+  // State quản lý Modal Tin Tức
+  const [newsModal, setNewsModal] = useState<{ isOpen: boolean; symbol: string; news: NewsItem[] }>({ isOpen: false, symbol: '', news: [] });
+
   // Form States
   const [editingTradeId, setEditingTradeId] = useState<string | null>(null);
   const [editingCashId, setEditingCashId] = useState<string | null>(null);
@@ -306,7 +316,6 @@ export default function DashboardPage() {
       const adjustment = Number(settings?.cash_adjustment || 0);
       setPortfolioSettings(settings);
       setAdjustmentSign(adjustment >= 0 ? 1 : -1);
-      // TỐI ƯU 2: Đảm bảo format số ngay từ lúc lấy từ DB lên
       setAdjustmentAmountInput(formatIntegerInput(String(Math.abs(adjustment)))); 
     }
     setLoading(false);
@@ -367,6 +376,20 @@ export default function DashboardPage() {
     if (openHoldings.length > 0) loadPrices(openHoldings);
     else { setPrices({}); setQuotes([]); }
   }, [openHoldings, loadPrices]);
+
+  // --- LƯU LOCALSTORAGE KẾT QUẢ AI ---
+  useEffect(() => {
+    const savedAi = localStorage.getItem('lcta_ai_portfolio_result');
+    if (savedAi) {
+      try { setAiResult(JSON.parse(savedAi)); } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    if (aiResult) {
+      localStorage.setItem('lcta_ai_portfolio_result', JSON.stringify(aiResult));
+    }
+  }, [aiResult]);
 
   // Derived Data
   const positions = useMemo(() => groupHoldingsBySymbol(openHoldings), [openHoldings]);
@@ -595,16 +618,24 @@ export default function DashboardPage() {
       const token = accessToken || (await getAccessToken());
       const response = await fetch('/api/ai/portfolio-insights', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ risk_profile: 'balanced' }),
+        body: JSON.stringify({ risk_profile: 'balanced', force_refresh: true }), // Gắn lệnh ép làm mới AI
       });
       const payload: AiPortfolioResponse = await response.json();
-      if (!response.ok) { setAiError(payload?.error || 'Không thể phân tích danh mục'); setAiResult(null); } 
-      else setAiResult(payload);
+      if (!response.ok) { 
+        setAiError(payload?.error || 'Không thể phân tích danh mục'); 
+      } else {
+        setAiResult(payload);
+      }
     } catch {
-      setAiError('Không thể kết nối AI'); setAiResult(null);
+      setAiError('Không thể kết nối AI'); 
     } finally {
       setAiLoading(false);
     }
+  }
+
+  function handleOpenNews(symbol: string) {
+    const newsData = aiResult?.newsContext?.[symbol] || [];
+    setNewsModal({ isOpen: true, symbol, news: newsData });
   }
 
   async function handleLogout() {
@@ -722,18 +753,41 @@ export default function DashboardPage() {
 
                 return (
                   <article key={position.symbol} style={{ ...strongCardStyle, padding: 14, borderRadius: 20, display: 'grid', gap: 12, boxShadow: 'none' }}>
+                    
+                    {/* UI MỚI: TÍCH HỢP NÚT TỜ BÁO VÀ THÙNG RÁC */}
                     <div className="ab-row-between align-start" style={{ gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 900, color: fg(), letterSpacing: 0.3 }}>{position.symbol}</div>
                         <div style={{ fontSize: 12, color: muted(), marginTop: 6 }}>{position.holdings.length} lot mở · SL {position.quantity}</div>
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-end' }}>
-                        <button type="button" className="ab-delete ghost" onClick={() => setExpandedSymbols((prev) => ({ ...prev, [position.symbol]: !prev[position.symbol] }))} style={pillStyle}>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <button 
+                          type="button" 
+                          onClick={() => setExpandedSymbols((prev) => ({ ...prev, [position.symbol]: !prev[position.symbol] }))} 
+                          style={{ ...pillStyle, background: 'transparent', padding: '4px 8px', cursor: 'pointer' }}
+                        >
                           {isExpanded ? 'Ẩn lệnh' : 'Xem lệnh'}
                         </button>
-                        <button type="button" className="ab-delete ghost" onClick={() => deleteSymbol(position.symbol)} title={`Xóa mã ${position.symbol}`}>
-                          <Trash2 size={14} /> Xóa mã
-                        </button>
+                        
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button 
+                            type="button" 
+                            onClick={() => handleOpenNews(position.symbol)} 
+                            style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--yellow)', display: 'flex' }}
+                            title="Xem tin tức"
+                          >
+                            <Newspaper size={20} />
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => deleteSymbol(position.symbol)} 
+                            style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}
+                            title={`Xóa mã ${position.symbol}`}
+                          >
+                            <Trash2 size={20} />
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -882,7 +936,6 @@ export default function DashboardPage() {
             </button>
           </div>
           {aiError && <div className="ab-error" style={{ marginTop: 10 }}>{aiError}</div>}
-          {aiResult?.cached && <div className="ab-note" style={{ marginTop: 8 }}>⚡ Kết quả cache ~{Math.round((aiResult.cache_ttl_seconds || 0) / 60)} phút để tránh spam API.</div>}
           
           {aiResult ? (
             <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -897,7 +950,6 @@ export default function DashboardPage() {
                   </div>
                   <div className="ab-soft-label" style={{ fontSize: 13, marginBottom: 8 }}>{item.reason}</div>
                   
-                  {/* TỐI ƯU UI 1: Layout Entry/TP/SL mượt mà giống trang chủ */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
                     <div style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', padding: '4px 0', borderRadius: 4 }}>
                         <div style={{ color: 'var(--green)', fontSize: 11 }}>CHỐT LỜI (TP)</div>
@@ -957,6 +1009,42 @@ export default function DashboardPage() {
         </section>
 
       </div>
+
+      {/* --- UI TIN TỨC POPUP (MODAL) ĐỒNG BỘ TỪ TRANG CHỦ --- */}
+      {newsModal.isOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="ab-premium-card" style={{ width: '100%', maxWidth: 450, maxHeight: '80vh', overflowY: 'auto', position: 'relative', margin: 0 }}>
+            <div className="ab-row-between align-center" style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Newspaper size={20} color="var(--yellow)" />
+                Tin tức nóng: {newsModal.symbol}
+              </div>
+              <button 
+                onClick={() => setNewsModal({ isOpen: false, symbol: '', news: [] })} 
+                style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4, display: 'flex' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {newsModal.news.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {newsModal.news.map((n, i) => (
+                  <a key={i} href={`https://www.google.com/search?q=${encodeURIComponent(n.title)}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', paddingBottom: 12, borderBottom: '1px solid var(--soft-2)' }}>
+                    <div style={{ color: 'var(--foreground)', fontWeight: 600, fontSize: 14, marginBottom: 6, lineHeight: 1.4 }}>{n.title}</div>
+                    <div className="ab-soft-label" style={{ fontSize: 12 }}>{n.source} • {new Date(n.pubDate).toLocaleDateString('vi-VN')}</div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="ab-soft-label" style={{ textAlign: 'center', padding: '30px 0', lineHeight: 1.5 }}>
+                Chưa có dữ liệu tin tức. <br/>
+                Vui lòng bấm nút <b>"Phân tích danh mục"</b> ở bên dưới để hệ thống AI cào tin tức mới nhất về nhé!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }
