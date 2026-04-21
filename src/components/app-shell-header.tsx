@@ -126,19 +126,38 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
 
   const isToolActive = ['system-live', 'backtest', 'gold', 'oil'].includes(currentTab);
 
+  // --- HÀM TẠO STYLE CHUẨN CHO TAB TRÁNH LỖI CLASS ---
+  const getTabStyle = (isActive: boolean) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 14px',
+    borderRadius: 100,
+    fontSize: 13,
+    fontWeight: 600,
+    textDecoration: 'none',
+    // Nền mờ cực kỳ sang trọng thay vì trắng bóc
+    background: isActive ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.06)') : 'transparent',
+    color: isActive ? 'var(--text)' : 'var(--muted)',
+    transition: 'all 0.2s ease',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: 'inherit'
+  });
+
   return (
     <header 
       style={{
         position: 'sticky',
-        top: 2, // Đẩy sát lên mép trên
+        top: 2, 
         zIndex: 1000,
-        background: theme === 'dark' ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.65)', 
+        background: theme === 'dark' ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.75)', 
         backdropFilter: 'blur(20px) saturate(180%)',
         WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         border: theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(0, 0, 0, 0.06)',
         boxShadow: theme === 'dark' ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.04)',
         borderRadius: 20, 
-        padding: '10px 14px', // Thu nhỏ đệm trên dưới để thanh mỏng lại
+        padding: '10px 14px',
         marginBottom: 16,
         display: 'flex',
         flexDirection: 'column',
@@ -160,30 +179,47 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <button 
             onClick={toggleTheme} 
-            style={{ background: 'var(--soft)', border: 'none', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', cursor: 'pointer' }}
+            style={{ background: 'var(--soft)', border: 'none', width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', cursor: 'pointer' }}
           >
-            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
           </button>
 
           <div ref={menuRef} style={{ position: 'relative' }}>
             {isLoggedIn ? (
-              <button type="button" className="ab-account-glass" onClick={() => setMenuOpen((prev) => !prev)} style={{ margin: 0 }}>
+              // Nút tài khoản đã được ép style cứng để chống tàng hình
+              <button 
+                type="button" 
+                onClick={() => setMenuOpen((prev) => !prev)} 
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 100, 
+                  background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)', 
+                  color: 'var(--text)', fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', margin: 0 
+                }}
+              >
                 <span>{getDisplayName(email)}</span>
               </button>
             ) : (
-              <button type="button" className="ab-account-glass" onClick={onAuthOpen} style={{ margin: 0 }}>
+              <button 
+                type="button" 
+                onClick={onAuthOpen} 
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 100, 
+                  background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)', 
+                  color: 'var(--text)', fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', margin: 0 
+                }}
+              >
                 <span>Đăng nhập</span>
                 <ArrowRight size={14} />
               </button>
             )}
 
             {menuOpen && isLoggedIn && (
-              <div className="ab-account-menu premium" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, zIndex: 9999 }}>
-                <div className="ab-account-name">{getDisplayName(email)}</div>
-                <div className="ab-account-email">{email}</div>
-                <button type="button" className="ab-menu-btn danger" onClick={onLogout}>
+              <div className="ab-account-menu premium" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, zIndex: 9999, minWidth: 160, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 8, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                <div className="ab-account-name" style={{ padding: '4px 8px', fontWeight: 700 }}>{getDisplayName(email)}</div>
+                <div className="ab-account-email" style={{ padding: '0 8px 8px 8px', fontSize: 12, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>{email}</div>
+                <button type="button" className="ab-menu-btn danger" onClick={onLogout} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--red)', background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', padding: '8px', textAlign: 'left', borderRadius: 8 }}>
                   <LogOut size={16} />
-                  <span>Đăng xuất</span>
+                  <span style={{ fontWeight: 600 }}>Đăng xuất</span>
                 </button>
               </div>
             )}
@@ -193,26 +229,24 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         
-        {/* Đã sửa lỗi cắt Menu: Bỏ overflowX, dùng flexWrap */}
+        {/* Đã xóa hẳn class "ab-premium-tab", dùng inline style mượt mà */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingBottom: 2 }}>
-          {/* Đã sửa lỗi Giao diện sáng: Ép màu chữ theo Theme hiện tại để chống "tàng hình" */}
-          <Link href="/" className={`ab-premium-tab ${currentTab === 'home' ? 'active' : ''}`} style={{ color: currentTab === 'home' ? 'var(--text)' : 'var(--muted)' }}>
+          <Link href="/" style={getTabStyle(currentTab === 'home')}>
             <House size={14} /><span>Home</span>
           </Link>
-          <Link href="/dashboard" className={`ab-premium-tab ${currentTab === 'dashboard' ? 'active' : ''}`} style={{ color: currentTab === 'dashboard' ? 'var(--text)' : 'var(--muted)' }}>
+          <Link href="/dashboard" style={getTabStyle(currentTab === 'dashboard')}>
             <BriefcaseBusiness size={14} /><span>Danh mục</span>
           </Link>
 
           <div ref={toolsRef} style={{ position: 'relative' }}>
             <button 
               type="button" 
-              className={`ab-premium-tab ${isToolActive ? 'active' : ''}`}
               onClick={() => setToolsOpen(!toolsOpen)}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, color: isToolActive ? 'var(--text)' : 'var(--muted)' }}
+              style={{ ...getTabStyle(isToolActive), paddingRight: 10 }}
             >
               <LayoutGrid size={14} />
               <span>Công cụ</span>
-              <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+              <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: 2 }} />
             </button>
 
             {toolsOpen && (
@@ -221,21 +255,20 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
                 style={{
                   position: 'absolute', top: '100%', left: 0, marginTop: 8, background: 'var(--card)', border: '1px solid var(--border)',
                   borderRadius: 16, padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180, 
-                  zIndex: 99999, // Ép layer cao nhất để không bị đè
+                  zIndex: 99999, 
                   boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
                 }}
               >
-                {/* Ép màu text Menu dropdown */}
-                <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)' }} onClick={() => setToolsOpen(false)}>
+                <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
                   <Activity size={15} /> <span>TOP BUY SELL</span>
                 </Link>
-                <Link href="/backtest" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)' }} onClick={() => setToolsOpen(false)}>
+                <Link href="/backtest" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
                   <LineChart size={15} /> <span>Backtest</span>
                 </Link>
-                <Link href="/gold" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)' }} onClick={() => setToolsOpen(false)}>
+                <Link href="/gold" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
                   <Gem size={15} /> <span>Giá vàng</span>
                 </Link>
-                <Link href="/oil" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)' }} onClick={() => setToolsOpen(false)}>
+                <Link href="/oil" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
                   <Droplets size={15} /> <span>Giá xăng</span>
                 </Link>
               </div>
@@ -243,8 +276,9 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--soft)', borderRadius: 100, fontSize: 11, fontWeight: 600, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
-          <WeatherIcon size={14} strokeWidth={2} />
+        {/* Nút thời tiết đồng bộ hiệu ứng kính mờ */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 100, fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>
+          <WeatherIcon size={14} strokeWidth={2} color="var(--muted)" />
           <span>{infoLine || 'Đang tải...'}</span>
         </div>
 
