@@ -132,6 +132,7 @@ YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
 
   return NextResponse.json({
     ...aiResponse,
+    newsContext: Object.fromEntries(watchlistContext.map(s => [s.symbol, s.news])),
     ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS),
   });
 }
