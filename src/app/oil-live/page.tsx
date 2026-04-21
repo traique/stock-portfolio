@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Droplets } from 'lucide-react';
+import { Droplets, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 
@@ -28,9 +28,39 @@ function fmtChange(value?: number | null) {
   return `${sign}${fmt(value)}`;
 }
 
-function tone(value?: number | null) {
+// Hàm lấy màu chữ
+function toneColor(value?: number | null) {
   if (!Number.isFinite(value as number) || value === 0) return 'var(--muted)';
   return (value as number) > 0 ? 'var(--green)' : 'var(--red)';
+}
+
+// Hàm lấy màu nền (Pill Background)
+function toneBg(value?: number | null) {
+  if (!Number.isFinite(value as number) || value === 0) return 'var(--soft-2)';
+  return (value as number) > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)';
+}
+
+function fmtUpdated(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(date);
+}
+
+function LoadingCard() {
+  return (
+    <article className="ab-premium-card" style={{ padding: 24 }}>
+      <div className="ab-skeleton" style={{ width: '50%', height: 28 }} />
+      <div className="ab-skeleton" style={{ width: '30%', height: 16, marginTop: 8 }} />
+      <div className="ab-skeleton" style={{ width: '100%', height: 100, marginTop: 24, borderRadius: 20 }} />
+    </article>
+  );
 }
 
 export default function OilLivePage() {
@@ -68,26 +98,60 @@ export default function OilLivePage() {
   return (
     <main className="ab-page">
       <div className="ab-shell premium-gap">
-        <AppShellHeader title="Giá xăng" isLoggedIn={Boolean(email)} email={email} currentTab="oil" onLogout={handleLogout} />
-        {message ? <section className="ab-premium-card"><div className="ab-error">{message}</div></section> : null}
-        <section className="ab-position-grid">
-          {(loading ? Array.from({ length: 7 }).map((_, index) => ({ code: String(index) })) : cards).map((card: OilCard | { code: string }) => {
-            if (loading) {
-              return <article key={card.code} className="ab-premium-card ab-position-card ab-skeleton-card"><div className="ab-skeleton skeleton-title" /><div className="ab-skeleton skeleton-price" /><div className="ab-skeleton skeleton-line short" /></article>;
-            }
+        <AppShellHeader title="Giá xăng dầu" isLoggedIn={Boolean(email)} email={email} currentTab="oil" onLogout={handleLogout} />
+        
+        {message && (
+          <section className="ab-premium-card" style={{ padding: 16 }}>
+            <div className="ab-error">{message}</div>
+          </section>
+        )}
+
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+          {(loading ? Array.from({ length: 4 }).map((_, index) => ({ code: String(index) })) : cards).map((card: OilCard | { code: string }) => {
+            if (loading) return <LoadingCard key={card.code} />;
+            
             const item = card as OilCard;
+
             return (
-              <article key={item.code} className="ab-premium-card ab-position-card">
-                <div className="ab-row-between align-start">
+              <article key={item.code} className="ab-premium-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* --- HEADER KHỐI --- */}
+                <div className="ab-row-between align-center">
                   <div>
-                    <div className="ab-symbol premium">{item.name}</div>
-                    <div className="ab-soft-label" style={{ marginTop: 8 }}>{item.source}</div>
+                    <div style={{ fontSize: 26, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)' }}>
+                      {item.name}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.05em', marginTop: 4, textTransform: 'uppercase' }}>
+                      {item.source}
+                    </div>
                   </div>
-                  <div className="ab-stat-chip"><Droplets size={16} /></div>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--soft)', display: 'grid', placeItems: 'center', color: '#3b82f6', border: '1px solid var(--border)' }}>
+                    <Droplets size={22} />
+                  </div>
                 </div>
-                <div className="ab-price premium" style={{ fontSize: 34 }}>{fmt(item.price)}</div>
-                <div className="ab-soft-label" style={{ marginTop: 10 }}>{item.unit}</div>
-                <div className="ab-soft-change under-price" style={{ color: tone(item.change) }}>{fmtChange(item.change)}</div>
+
+                {/* --- KHỐI GIÁ --- */}
+                <div style={{ background: 'var(--soft)', borderRadius: 20, padding: 20, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                    GIÁ BÁN ({item.unit})
+                  </div>
+                  <div style={{ fontSize: 38, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 6 }}>
+                    {fmt(item.price)}
+                  </div>
+                  <div style={{ 
+                    display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '6px 12px', 
+                    borderRadius: 999, background: toneBg(item.change), color: toneColor(item.change), fontSize: 14, fontWeight: 800 
+                  }}>
+                    {fmtChange(item.change)}
+                  </div>
+                </div>
+
+                {/* --- FOOTER CẬP NHẬT --- */}
+                {item.updatedAt && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginTop: 'auto' }}>
+                    <Clock size={14} />
+                    <span>{fmtUpdated(item.updatedAt)}</span>
+                  </div>
+                )}
               </article>
             );
           })}
@@ -95,4 +159,4 @@ export default function OilLivePage() {
       </div>
     </main>
   );
-                }
+}
