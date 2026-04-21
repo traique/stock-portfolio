@@ -8,7 +8,7 @@ import { buildAiCacheMeta, getAiCache, setAiCache } from '@/lib/server/ai-cache'
 const bodySchema = z.object({
   symbols: z.array(z.string().trim().toUpperCase()).min(1).max(60),
   risk_profile: z.enum(['conservative', 'balanced', 'aggressive']).optional().default('balanced'),
-  force_refresh: z.boolean().optional(), // Lệnh ép buộc hệ thống cào lại dữ liệu mới nhất
+  force_refresh: z.boolean().optional(),
 });
 
 const WATCHLIST_AI_CACHE_TTL_MS = 10 * 60 * 1000;
@@ -21,7 +21,7 @@ type WatchlistScanResponse = {
 };
 
 function buildWatchlistCacheKey(riskProfile: string, symbols: string[]) {
-  return `ai:watchlist:v2:${riskProfile}:${symbols.join(',')}`;
+  return `ai:watchlist:v3:${riskProfile}:${symbols.join(',')}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -32,7 +32,6 @@ export async function POST(request: NextRequest) {
   const symbols = [...new Set(parsed.data.symbols)].slice(0, 60).sort();
   const cacheKey = buildWatchlistCacheKey(parsed.data.risk_profile, symbols);
 
-  // Chỉ lấy từ Cache nếu người dùng KHÔNG yêu cầu force_refresh
   if (!parsed.data.force_refresh) {
     const cached = getAiCache<WatchlistScanResponse>(cacheKey);
     if (cached) {
@@ -86,8 +85,35 @@ export async function POST(request: NextRequest) {
   let aiResponse = fallback;
 
   if (apiKey) {
-    const prompt = `Bạn là Giám đốc Tự doanh tại VN. Phân tích điểm mua dựa trên "volumeTrendPct" (Dòng tiền), "news" (Tin tức) và "currentPrice". 
-Trình bày lý do ngắn gọn, sắc nét theo trường phái VSA. Trả về JSON duy nhất.`;
+    // TRẢ LẠI PROMPT ĐẦY ĐỦ CẤU TRÚC JSON CHO AI
+    const prompt = `Bạn là Giám đốc Tự doanh & Chuyên gia VSA (Volume Spread Analysis) tại TTCK Việt Nam.
+Khách hàng nhờ lọc Watchlist tìm ĐIỂM MUA MỚI. Khẩu vị rủi ro: ${parsed.data.risk_profile}.
+
+NHIỆM VỤ QUAN TRỌNG NHẤT:
+1. Phân tích điểm mua dựa trên sự kết hợp giữa "volumeTrendPct" (Dòng tiền), "news" (Tin tức) và "currentPrice". 
+2. Dấu hiệu MUA (Picks): Có tin Tích cực + Volume nổ mạnh (Cá mập gom hàng), hoặc giá chỉnh nhưng cạn cung chờ tin.
+3. Dấu hiệu BỎ (Avoid): Có tin Tích cực nhưng Volume suy kiệt (Kéo xả/Bull-trap), hoặc có tin Xấu + Nổ Vol (Bán tháo).
+4. Lệnh Mua (entry) sát "currentPrice". Cắt lỗ (sl) BẮT BUỘC THẤP HƠN "entry". Chốt lời (tp) BẮT BUỘC CAO HƠN "entry".
+
+VĂN PHONG VÀ CÁCH PHÂN TÍCH:
+- Lý do (reason) BẮT BUỘC phải nhắc đến Tin tức đang ảnh hưởng kết hợp với trạng thái Volume (VD: "Tin đồn chia cổ tức hỗ trợ đà tăng, nổ vol gom hàng...").
+- Dùng từ ngữ thực chiến: Cạn cung, test đáy, nổ vol, bùng nổ theo đà, rũ bỏ, gãy nền, kéo xả, tin ra để bán.
+
+YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
+{
+  "summary": "Nhận định chung về sự luân chuyển dòng tiền và tâm lý tin tức trong Watchlist này...",
+  "picks": [
+    {
+      "symbol": "Mã CP",
+      "score": Điểm số sức mạnh (0-100),
+      "reason": "Lý do VSA + Tin tức",
+      "entry": Vùng giá mua kỳ vọng,
+      "tp": Giá chốt lời,
+      "sl": Giá cắt lỗ
+    }
+  ],
+  "avoid": ["Mã 1", "Mã 2"]
+}`;
 
     aiResponse = await callOpenRouterJson<WatchlistScanResponse>(
       apiKey,
