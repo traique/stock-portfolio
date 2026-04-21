@@ -74,7 +74,6 @@ export default function HomePage() {
 
   const [newsModal, setNewsModal] = useState<{ isOpen: boolean; symbol: string; news: NewsItem[] }>({ isOpen: false, symbol: '', news: [] });
 
-  // 1. Quản lý Session
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -96,7 +95,6 @@ export default function HomePage() {
     return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
-  // 2. LocalStorage Persistence cho AI
   useEffect(() => {
     const savedAi = localStorage.getItem('lcta_ai_watchlist_result');
     if (savedAi) {
@@ -110,7 +108,6 @@ export default function HomePage() {
     }
   }, [aiWatchlist]);
 
-  // 3. Chạy quét AI (Force Refresh)
   async function runAiWatchlistScan() {
     if (!watchlist.length) return;
     setAiLoading(true);
@@ -134,7 +131,6 @@ export default function HomePage() {
     }
   }
 
-  // 4. Khôi phục & Lưu Watchlist
   useEffect(() => {
     (async () => {
       if (!sessionChecked) return;
@@ -188,7 +184,6 @@ export default function HomePage() {
     })();
   }, [watchlist, userEmail, userId, isLoggedIn, sessionChecked, watchlistReady]);
 
-  // 5. Load giá thị trường
   useEffect(() => {
     (async () => {
       if (!watchlistReady) return;
@@ -248,6 +243,19 @@ export default function HomePage() {
     setNewsModal({ isOpen: true, symbol, news: newsData });
   }
 
+  // --- HÀM THÊM MÃ CHUẨN ---
+  function addWatchSymbol() {
+    const symbol = normalizeSymbol(watchInput);
+    if (!symbol) return setWatchError('Vui lòng nhập mã cổ phiếu hợp lệ.');
+    if (watchlist.includes(symbol)) {
+        setWatchInput(''); 
+        return setWatchError(`Mã ${symbol} đã có trong danh sách.`);
+    }
+    setWatchlist((prev) => sortSymbols([...prev, symbol]));
+    setWatchInput('');
+    setWatchError('');
+  }
+
   if (!sessionChecked) return <main className="ab-page"><div className="ab-shell"><div className="ab-soft-label" style={{textAlign: 'center', padding: 40}}>Đang đồng bộ dữ liệu...</div></div></main>;
 
   return (
@@ -255,7 +263,6 @@ export default function HomePage() {
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Radar đầu tư" isLoggedIn={isLoggedIn} email={userEmail} currentTab="home" onLogout={async () => await supabase.auth.signOut()} onAuthOpen={() => setShowAuth((p) => !p)} />
 
-        {/* --- VN-INDEX SECTION (NÂNG CẤP FONT QUYỀN LỰC) --- */}
         <section className="ab-premium-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05), var(--card))' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <span className="ab-card-kicker" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -312,7 +319,6 @@ export default function HomePage() {
 
         <section className="ab-home-grid single-focus" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
           
-          {/* Cột trái: Watchlist */}
           <section className="ab-premium-card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div className="ab-row-between align-center">
               <div>
@@ -322,10 +328,22 @@ export default function HomePage() {
               <span className="ab-watch-count">{watchlist.length} mã</span>
             </div>
 
-            <div className="ab-add-row">
-              <input value={watchInput} onChange={(e) => setWatchInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (watchlist.includes(normalizeSymbol(watchInput)) ? setWatchError('Đã có mã này') : (setWatchlist(s => sortSymbols([...s, normalizeSymbol(watchInput)])), setWatchInput('')))} placeholder="Thêm mã (VD: SSI)" className="ab-input" />
-              <button type="button" onClick={() => (setWatchlist(s => sortSymbols([...s, normalizeSymbol(watchInput)])), setWatchInput(''))} className="ab-btn ab-btn-primary">Thêm</button>
+            {/* --- ĐÃ KHÔI PHỤC NÚT THÊM NẰM CÙNG HÀNG VÀ BÁO LỖI --- */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input 
+                value={watchInput} 
+                onChange={(e) => setWatchInput(e.target.value)} 
+                onKeyDown={(e) => e.key === 'Enter' && addWatchSymbol()} 
+                placeholder="Thêm mã (VD: SSI)" 
+                className="ab-input" 
+                style={{ flex: 1 }}
+              />
+              <button type="button" onClick={addWatchSymbol} className="ab-btn ab-btn-primary">
+                Thêm
+              </button>
             </div>
+            {watchError && <div className="ab-error">{watchError}</div>}
+            {marketError && <div className="ab-error">{marketError}</div>}
 
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))' }}>
               {loading ? Array.from({ length: 4 }).map((_, i) => <LoadingCard key={i} />) : 
@@ -348,7 +366,6 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* Cột phải: AI Assistant */}
           <aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <section className="ab-premium-card">
               <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
@@ -401,7 +418,6 @@ export default function HomePage() {
               )}
             </section>
 
-            {/* Top Gainers */}
             <section className="ab-premium-card">
               <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
                 <div style={{ fontWeight: 800 }}>Tăng mạnh nhất</div>
@@ -423,7 +439,6 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* --- POPUP TIN TỨC --- */}
       {newsModal.isOpen && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, backdropFilter: 'blur(4px)' }}>
           <div className="ab-premium-card" style={{ width: '100%', maxWidth: 450, maxHeight: '85vh', overflowY: 'auto', position: 'relative', margin: 0, border: '1px solid var(--border-strong)' }}>
