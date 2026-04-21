@@ -1,23 +1,25 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Sparkles, TrendingDown, TrendingUp, Trash2, RefreshCw } from 'lucide-react';
+import { Activity, Sparkles, TrendingDown, TrendingUp, Trash2, RefreshCw, Newspaper, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 
 type QuoteItem = { symbol: string; price: number; change: number; pct: number; volume?: number };
 type PricesResponse = { debug?: QuoteItem[]; error?: string };
+
+type NewsItem = { title: string; source: string; pubDate: string };
+
 type AiWatchlistResponse = {
   summary: string;
   picks: Array<{ symbol: string; score: number; reason: string; entry: number; tp: number; sl: number }>;
   avoid: string[];
+  newsContext?: Record<string, NewsItem[]>; // Map chứa tin tức để hiển thị lên UI
   cached?: boolean;
   cache_ttl_seconds?: number;
   cached_at?: string;
   error?: string;
 };
-
-const DEFAULT_WATCHLIST = ['BID', 'FPT', 'HPG', 'VCB'];
 
 // Tối ưu các hàm format
 const priceFormatter = new Intl.NumberFormat('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -67,6 +69,9 @@ export default function HomePage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState('');
   const [aiWatchlist, setAiWatchlist] = useState<AiWatchlistResponse | null>(null);
+
+  // State quản lý Popup Tin tức
+  const [newsModal, setNewsModal] = useState<{ isOpen: boolean; symbol: string; news: NewsItem[] }>({ isOpen: false, symbol: '', news: [] });
 
   useEffect(() => {
     let mounted = true;
@@ -246,7 +251,7 @@ export default function HomePage() {
     const symbol = normalizeSymbol(watchInput);
     if (!symbol) return setWatchError('Vui lòng nhập mã cổ phiếu hợp lệ.');
     if (watchlist.includes(symbol)) {
-        setWatchInput(''); // Clear input nếu đã có
+        setWatchInput(''); 
         return setWatchError(`Mã ${symbol} đã có trong danh sách.`);
     }
     setWatchlist((prev) => sortSymbols([...prev, symbol]));
@@ -258,13 +263,17 @@ export default function HomePage() {
     setWatchlist((prev) => sortSymbols(prev.filter((i) => i !== symbol)));
   }
 
-  // Lắng nghe sự kiện Enter khi nhập mã
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       addWatchSymbol();
     }
   };
+
+  function handleOpenNews(symbol: string) {
+    const newsData = aiWatchlist?.newsContext?.[symbol] || [];
+    setNewsModal({ isOpen: true, symbol, news: newsData });
+  }
 
   if (!sessionChecked) {
       return (
@@ -279,7 +288,6 @@ export default function HomePage() {
       <div className="ab-shell premium-gap">
         <AppShellHeader title="Radar đầu tư" isLoggedIn={isLoggedIn} email={userEmail} currentTab="home" onLogout={handleLogout} onAuthOpen={() => setShowAuth((p) => !p)} />
 
-        {/* Tối ưu UI cho phần hiển thị điểm số chung */}
         <section className="ab-premium-card" style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span className="ab-soft-label" style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
@@ -356,12 +364,30 @@ export default function HomePage() {
               ) : quotes.length ? (
                 quotes.map((item) => (
                   <article key={item.symbol} className="ab-premium-card" style={{ padding: 12, position: 'relative' }}>
-                    <div className="ab-row-between align-start" style={{ marginBottom: 8 }}>
+                    
+                    {/* UI MỚI: CĂN CHỈNH NÚT XOÁ VÀ TIN TỨC TRONG SUỐT */}
+                    <div className="ab-row-between align-center" style={{ marginBottom: 8 }}>
                       <div style={{ fontWeight: 800, fontSize: 18 }}>{item.symbol}</div>
-                      <button type="button" className="ab-btn ab-btn-ghost" style={{ padding: 4 }} onClick={() => removeWatchSymbol(item.symbol)} aria-label={`Xóa ${item.symbol}`}>
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button 
+                          type="button" 
+                          onClick={() => handleOpenNews(item.symbol)} 
+                          style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--yellow)', display: 'flex' }}
+                          title="Xem tin tức"
+                        >
+                          <Newspaper size={18} />
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => removeWatchSymbol(item.symbol)} 
+                          style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--muted)', display: 'flex' }}
+                          title="Xóa mã"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
+
                     <div style={{ fontSize: 16, fontWeight: 600 }}>{formatPrice(item.price)}</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: colorFor(item.change), marginTop: 4 }}>
                         {formatPrice(item.change)} ({formatPct(item.pct)})
@@ -406,7 +432,6 @@ export default function HomePage() {
                       </div>
                       <div className="ab-soft-label" style={{ fontSize: 13, marginBottom: 8 }}>{pick.reason}</div>
                       
-                      {/* Tối ưu hiển thị các mốc giá */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
                           <div style={{ backgroundColor: 'var(--soft-1)', padding: '4px 0', borderRadius: 4 }}>
                               <div className="ab-soft-label" style={{ fontSize: 11 }}>ENTRY</div>
@@ -436,35 +461,46 @@ export default function HomePage() {
               )}
             </section>
 
-            <section className="ab-premium-card">
-              <div className="ab-row-between align-center" style={{ marginBottom: 12 }}>
-                <div style={{ fontWeight: 700, fontSize: 16 }}>Tăng mạnh nhất (Watchlist)</div>
-                <Sparkles size={16} color="var(--yellow)" />
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {loading ? (
-                  Array.from({ length: 3 }).map((_, index) => (
-                    <div key={index} className="ab-row-between align-center" style={{ padding: 8 }}>
-                      <div className="ab-skeleton skeleton-line" style={{ width: 60 }} />
-                      <div className="ab-skeleton skeleton-line" style={{ width: 40 }} />
-                    </div>
-                  ))
-                ) : topPositive.length ? topPositive.map((item) => (
-                  <div key={item.symbol} className="ab-row-between align-center" style={{ padding: '8px 12px', backgroundColor: 'var(--soft-1)', borderRadius: 6 }}>
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{item.symbol}</div>
-                      <div className="ab-soft-label" style={{ fontSize: 13 }}>{formatPrice(item.price)}</div>
-                    </div>
-                    <div style={{ fontWeight: 700, color: 'var(--green)' }}>{formatPct(item.pct)}</div>
-                  </div>
-                )) : <div className="ab-soft-label" style={{ padding: 8 }}>Không có mã tăng giá.</div>}
-              </div>
-            </section>
-
           </aside>
         </section>
       </div>
+
+      {/* --- UI TIN TỨC POPUP (MODAL) --- */}
+      {newsModal.isOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div className="ab-premium-card" style={{ width: '100%', maxWidth: 450, maxHeight: '80vh', overflowY: 'auto', position: 'relative', margin: 0 }}>
+            <div className="ab-row-between align-center" style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Newspaper size={20} color="var(--yellow)" />
+                Tin tức nóng: {newsModal.symbol}
+              </div>
+              <button 
+                onClick={() => setNewsModal({ isOpen: false, symbol: '', news: [] })} 
+                style={{ background: 'transparent', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: 4, display: 'flex' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            {newsModal.news.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {newsModal.news.map((n, i) => (
+                  <a key={i} href={`https://www.google.com/search?q=${encodeURIComponent(n.title)}`} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', display: 'block', paddingBottom: 12, borderBottom: '1px solid var(--soft-2)' }}>
+                    <div style={{ color: 'var(--foreground)', fontWeight: 600, fontSize: 14, marginBottom: 6, lineHeight: 1.4 }}>{n.title}</div>
+                    <div className="ab-soft-label" style={{ fontSize: 12 }}>{n.source} • {new Date(n.pubDate).toLocaleDateString('vi-VN')}</div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="ab-soft-label" style={{ textAlign: 'center', padding: '30px 0', lineHeight: 1.5 }}>
+                Chưa có dữ liệu tin tức. <br/>
+                Vui lòng bấm nút <b>"Quét AI"</b> ở bên phải để hệ thống cào tin tức mới nhất!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
