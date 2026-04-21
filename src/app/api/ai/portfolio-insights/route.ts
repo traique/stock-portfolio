@@ -82,29 +82,55 @@ export async function POST(request: NextRequest) {
   const symbols = positions.map((p) => p.symbol);
   const signals = await buildTechnicalSignals(symbols);
 
-  const baseActions = signals.map((signal) => {
-    const position = positions.find((p) => p.symbol === signal.symbol);
-    const avgBuy = Number(position?.avgBuyPrice || 0);
-    const pnlPct = avgBuy > 0 ? ((signal.currentPrice - avgBuy) / avgBuy) * 100 : 0;
-
-    let action: 'BUY' | 'HOLD' | 'REDUCE' | 'SELL' | 'WATCH' = 'HOLD';
-    if (pnlPct < -7 || signal.momentum5dPct < -5) action = 'SELL';
-    else if (pnlPct > 12 && signal.momentum5dPct < 0) action = 'REDUCE';
+  // BƯỚC QUAN TRỌNG: Nặn ra một Context (Bối cảnh) hoàn hảo cho AI
+  // Gắn trực tiếp Giá vốn, Giá hiện tại và Lỗ/Lãi thực tế vào để AI soi
+  const portfolioContext = positions.map((pos) => {
+    const sig = signals.find((s) => s.symbol === pos.symbol);
+    const currentPrice = sig?.currentPrice || 0;
+    const avgBuyPrice = Number(pos.avgBuyPrice || 0);
+    // Tính % Lãi lỗ thực tế của người dùng
+    const pnlPct = avgBuyPrice > 0 ? ((currentPrice - avgBuyPrice) / avgBuyPrice) * 100 : 0;
 
     return {
-      symbol: signal.symbol,
+      symbol: pos.symbol,
+      quantity: pos.quantity,
+      avgBuyPrice: avgBuyPrice,
+      currentPrice: currentPrice,
+      realPnLPct: Number(pnlPct.toFixed(2)), // AI sẽ nhìn vào biến này để đưa ra quyết định
+      technical: {
+        trend3mPct: sig?.trend3mPct,
+        momentum5dPct: sig?.momentum5dPct,
+        // Ép kiểu any để tránh lỗi TypeScript nếu bạn chưa update type ở hàm khác,
+        // nhưng dữ liệu thật vẫn sẽ được truyền qua nhờ logic ở file ai-insights.ts
+        volumeTrendPct: (sig as any)?.volumeTrendPct || 0, 
+      }
+    };
+  });
+
+  // Fallback (Dự phòng khi rớt mạng AI)
+  const baseActions = portfolioContext.map((item) => {
+    let action: 'BUY' | 'HOLD' | 'REDUCE' | 'SELL' | 'WATCH' = 'HOLD';
+    if (item.realPnLPct < -7 || (item.technical.momentum5dPct || 0) < -5) action = 'SELL';
+    else if (item.realPnLPct > 12 && (item.technical.momentum5dPct || 0) < 0) action = 'REDUCE';
+
+    // SL/TP dự phòng tính dựa trên giá hiện tại
+    const tpFallback = item.currentPrice * 1.08;
+    const slFallback = item.currentPrice * 0.95;
+
+    return {
+      symbol: item.symbol,
       action,
-      reason: `P/L: ${pnlPct.toFixed(2)}% | Momentum 5D: ${signal.momentum5dPct.toFixed(2)}%`,
+      reason: `Giá vốn: ${item.avgBuyPrice} | P/L: ${item.realPnLPct}% | Dòng tiền: ${item.technical.volumeTrendPct > 0 ? 'Vào' : 'Ra'}`,
       confidence: 'MEDIUM',
-      tp: signal.suggestedTp,
-      sl: signal.suggestedSl,
+      tp: Math.round(tpFallback / 10) * 10,
+      sl: Math.round(slFallback / 10) * 10,
     } as const;
   });
 
   const fallback: AiPortfolioResponse = {
-    summary: 'Phân tích kỹ thuật dựa trên dữ liệu giá và momentum hiện tại.',
+    summary: 'Đang dùng dữ liệu dự phòng. Hệ thống AI đánh giá dựa trên giá vốn hiện tại.',
     actions: baseActions as any,
-    risks: ['Thị trường biến động, cần tuân thủ SL kỷ luật.'],
+    risks: ['Quản trị rủi ro T+2.5', 'Thị trường phân hóa'],
   };
 
   const apiKey = envServer.OPENROUTER_API_KEY;
@@ -112,21 +138,42 @@ export async function POST(request: NextRequest) {
   let aiResponse = fallback;
 
   if (apiKey) {
-    const prompt = `Bạn là Giám đốc Đầu tư (CIO) chứng khoán lão luyện tại VN với 20 năm kinh nghiệm. 
-Hãy đánh giá danh mục này dưới góc nhìn "Dòng tiền thông minh" và quản trị rủi ro chuyên nghiệp.
+    // PROMPT THỰC CHIẾN CẤP ĐỘ GIÁM ĐỐC TỰ DOANH
+    const prompt = `Bạn là Giám đốc Đầu tư (CIO) chứng khoán tại VN với 20 năm kinh nghiệm VSA và đọc vị dòng tiền.
+Khách hàng đang đưa cho bạn danh mục THỰC TẾ của họ. Khẩu vị rủi ro: ${parsed.data.risk_profile}.
 
-YÊU CẦU TRẢ VỀ JSON:
-- summary: Nhận định sắc sảo, thực chiến về trạng thái danh mục và xu hướng dòng tiền.
-- actions: Mảng object (symbol, action[BUY|HOLD|REDUCE|SELL|WATCH], reason[dùng ngôn ngữ trader: cạn cung, bùng nổ, phân kỳ...], confidence, tp, sl).
-- risks: Các rủi ro hệ thống hoặc nhóm ngành cần lưu tâm.
+NHIỆM VỤ QUAN TRỌNG NHẤT BẮT BUỘC TUÂN THỦ:
+1. Bạn phải tư vấn dựa vào "realPnLPct" (Lãi/Lỗ thực tế) và "avgBuyPrice" (Giá vốn) của khách hàng!
+2. Lệnh Cắt lỗ (sl) BẮT BUỘC phải THẤP HƠN "currentPrice" (Giá hiện tại).
+3. Lệnh Chốt lời (tp) BẮT BUỘC phải CAO HƠN "currentPrice" VÀ "avgBuyPrice". (Tuyệt đối không đưa tp thấp hơn sl hoặc thấp hơn giá vốn).
 
-Khẩu vị rủi ro: ${parsed.data.risk_profile}.`;
+VĂN PHONG VÀ CÁCH PHÂN TÍCH (Lý do):
+- Mở đầu "reason" bằng việc đánh giá ngay vị thế (VD: "Đang lỗ nhẹ 2%, vol cạn..." hoặc "Lãi mỏng 1%, dòng tiền đang vào...").
+- Kết hợp VSA: Dùng các từ như cạn cung, rũ bỏ, nổ vol, phân phối ngầm, dòng tiền lớn.
+- Quyết đoán: Không nói chung chung. Đang lỗ thì khuyên gồng chờ hồi hay cắt lót luôn.
 
+YÊU CẦU TRẢ VỀ DUY NHẤT MỘT JSON:
+{
+  "summary": "Đánh giá chung dòng tiền và trạng thái danh mục...",
+  "actions": [
+    {
+      "symbol": "Mã CP",
+      "action": "BUY|HOLD|REDUCE|SELL|WATCH",
+      "reason": "Lý do (Dựa trên PnL và VSA)",
+      "confidence": "LOW|MEDIUM|HIGH",
+      "tp": Giá chốt lời kỳ vọng hợp lý,
+      "sl": Giá cắt lỗ hợp lý
+    }
+  ],
+  "risks": ["Rủi ro vĩ mô hoặc ngành"]
+}`;
+
+    // Ép AI phân tích khối dữ liệu mới đã được gọt dũa (portfolioContext)
     aiResponse = await callOpenRouterJson<AiPortfolioResponse>(
       apiKey,
       aiModel,
       prompt,
-      JSON.stringify({ positions, signals, risk_profile: parsed.data.risk_profile }),
+      JSON.stringify(portfolioContext),
       fallback
     );
   }
