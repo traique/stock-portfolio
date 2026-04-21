@@ -30,13 +30,11 @@ function fmtChange(value?: number | null, decimal = 0) {
   return `${sign}${fmt(value, decimal)}`;
 }
 
-// Hàm lấy màu chữ
 function toneColor(value?: number | null) {
   if (!Number.isFinite(value as number) || value === 0) return 'var(--muted)';
   return (value as number) > 0 ? 'var(--green)' : 'var(--red)';
 }
 
-// Hàm lấy màu nền (Pill Background)
 function toneBg(value?: number | null) {
   if (!Number.isFinite(value as number) || value === 0) return 'var(--soft-2)';
   return (value as number) > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)';
@@ -44,32 +42,32 @@ function toneBg(value?: number | null) {
 
 function fmtSourceDate(value?: string | null) {
   if (!value) return '';
-  const [year, month, day] = value.split('-');
-  if (!year || !month || !day) return value;
-  return `${day}/${month}/${year}`;
+  if (value.includes('-')) {
+    const [year, month, day] = value.split('-');
+    if (year && month && day) return `${day}/${month}/${year}`;
+  }
+  return value;
 }
 
 function fmtUpdated(value?: string | null, sourceDate?: string | null, sourceTime?: string | null) {
+  // Lấy thời gian từ hệ thống API trả về làm ưu tiên số 1
   if (sourceDate && sourceTime) return `${sourceTime} · ${fmtSourceDate(sourceDate)}`;
-  if (!value) return 'Đang cập nhật';
+  if (!value) return '';
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'Đang cập nhật';
+  if (!Number.isFinite(date.getTime())) return '';
   return new Intl.DateTimeFormat('vi-VN', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: '2-digit',
+    hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
   }).format(date);
 }
 
 function LoadingCard() {
   return (
-    <article className="ab-premium-card" style={{ padding: 24 }}>
-      <div className="ab-skeleton" style={{ width: '50%', height: 28 }} />
-      <div className="ab-skeleton" style={{ width: '30%', height: 16, marginTop: 8 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 24 }}>
-        <div className="ab-skeleton" style={{ width: '100%', height: 80, borderRadius: 20 }} />
-        <div className="ab-skeleton" style={{ width: '100%', height: 80, borderRadius: 20 }} />
+    <article className="ab-premium-card" style={{ padding: 'clamp(14px, 4vw, 20px)' }}>
+      <div className="ab-skeleton" style={{ width: '40%', height: 24 }} />
+      <div className="ab-skeleton" style={{ width: '20%', height: 14, marginTop: 8 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
+        <div className="ab-skeleton" style={{ width: '100%', height: 70, borderRadius: 16 }} />
+        <div className="ab-skeleton" style={{ width: '100%', height: 70, borderRadius: 16 }} />
       </div>
     </article>
   );
@@ -119,12 +117,12 @@ export default function GoldLivePage() {
         <AppShellHeader title="Giá vàng trực tuyến" isLoggedIn={Boolean(email)} email={email} currentTab="gold" onLogout={handleLogout} />
         
         {message && (
-          <section className="ab-premium-card" style={{ padding: 16 }}>
+          <section className="ab-premium-card" style={{ padding: 14 }}>
             <div className="ab-error">{message}</div>
           </section>
         )}
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
           {(loading ? Array.from({ length: 3 }).map((_, index) => ({ code: String(index) })) : cards).map((card: GoldCard | { code: string }) => {
             if (loading) return <LoadingCard key={card.code} />;
             
@@ -132,61 +130,57 @@ export default function GoldLivePage() {
             const isWorld = item.code === 'XAUUSD';
 
             return (
-              <article key={item.code} className="ab-premium-card" style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {/* --- HEADER KHỐI --- */}
+              <article key={item.code} className="ab-premium-card" style={{ padding: 'clamp(16px, 4vw, 20px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div className="ab-row-between align-center">
                   <div>
-                    <div style={{ fontSize: 26, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)' }}>
+                    <div style={{ fontSize: 'clamp(22px, 5vw, 26px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)' }}>
                       {item.name}
                     </div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.05em', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.05em', marginTop: 2 }}>
                       {item.symbol}
                     </div>
                   </div>
-                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--soft)', display: 'grid', placeItems: 'center', color: 'var(--yellow)', border: '1px solid var(--border)' }}>
-                    <Gem size={22} />
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--soft)', display: 'grid', placeItems: 'center', color: 'var(--yellow)', border: '1px solid var(--border)' }}>
+                    <Gem size={18} />
                   </div>
                 </div>
 
-                {/* --- LƯỚI GIÁ --- */}
                 {isWorld ? (
-                  <div style={{ background: 'var(--soft)', borderRadius: 20, padding: 20, border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>GIÁ HIỆN TẠI (USD/oz)</div>
-                    <div style={{ fontSize: 36, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 6 }}>
+                  <div style={{ background: 'var(--soft)', borderRadius: 18, padding: '16px', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.04em' }}>GIÁ HIỆN TẠI (USD/oz)</div>
+                    <div style={{ fontSize: 'clamp(30px, 7vw, 36px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 4, whiteSpace: 'nowrap' }}>
                       {fmt(item.sell, 2)}
                     </div>
                     <div style={{ 
-                      display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '6px 12px', 
-                      borderRadius: 999, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 14, fontWeight: 800 
+                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, padding: '4px 10px', 
+                      borderRadius: 999, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 13, fontWeight: 800 
                     }}>
                       {fmtChange(item.changeSell, 2)}
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    {/* Cột Mua Vào */}
-                    <div style={{ background: 'var(--soft)', borderRadius: 20, padding: 16, border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>MUA VÀO</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 6, wordBreak: 'break-word' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ background: 'var(--soft)', borderRadius: 16, padding: '12px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>MUA VÀO</div>
+                      <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 4, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
                         {fmt(item.buy)}
                       </div>
                       <div style={{ 
-                        display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '4px 10px', 
-                        borderRadius: 999, background: toneBg(item.changeBuy), color: toneColor(item.changeBuy), fontSize: 13, fontWeight: 800 
+                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, padding: '4px 10px', 
+                        borderRadius: 999, background: toneBg(item.changeBuy), color: toneColor(item.changeBuy), fontSize: 12, fontWeight: 800 
                       }}>
                         {fmtChange(item.changeBuy)}
                       </div>
                     </div>
 
-                    {/* Cột Bán Ra */}
-                    <div style={{ background: 'var(--soft)', borderRadius: 20, padding: 16, border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>BÁN RA</div>
-                      <div style={{ fontSize: 24, fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 6, wordBreak: 'break-word' }}>
+                    <div style={{ background: 'var(--soft)', borderRadius: 16, padding: '12px', border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>BÁN RA</div>
+                      <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 4, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
                         {fmt(item.sell)}
                       </div>
                       <div style={{ 
-                        display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, padding: '4px 10px', 
-                        borderRadius: 999, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 13, fontWeight: 800 
+                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, padding: '4px 10px', 
+                        borderRadius: 999, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 12, fontWeight: 800 
                       }}>
                         {fmtChange(item.changeSell)}
                       </div>
@@ -194,9 +188,8 @@ export default function GoldLivePage() {
                   </div>
                 )}
 
-                {/* --- FOOTER CẬP NHẬT --- */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, color: 'var(--muted)', fontSize: 12, fontWeight: 600, marginTop: 'auto' }}>
-                  <Clock size={14} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 'auto' }}>
+                  <Clock size={12} />
                   <span>{fmtUpdated(item.updatedAt, sourceDate, sourceTime)}</span>
                 </div>
               </article>
