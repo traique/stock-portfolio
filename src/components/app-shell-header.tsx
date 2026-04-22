@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Moon, Sun, ChevronDown } from 'lucide-react';
 
 type Props = {
+  title?: string;
   email?: string;
   isLoggedIn: boolean;
   currentTab: 'home' | 'dashboard' | 'gold' | 'oil' | 'system-live' | 'backtest';
