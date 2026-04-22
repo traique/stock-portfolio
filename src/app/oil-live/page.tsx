@@ -44,22 +44,25 @@ export default function OilLivePage() {
   return (
     <main className="ab-page">
       <div className="ab-shell premium-gap">
-        <AppShellHeader title="Giá xăng" isLoggedIn={Boolean(email)} email={email} currentTab="oil" onLogout={() => supabase.auth.signOut().then(() => window.location.href = '/')} />
+        {/* Đã gỡ bỏ title="Giá xăng" để tránh lỗi TypeScript lúc Build Vercel */}
+        <AppShellHeader isLoggedIn={Boolean(email)} email={email} currentTab="oil" onLogout={() => supabase.auth.signOut().then(() => window.location.href = '/')} />
         
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 10 }}>
           {loading ? Array.from({ length: 6 }).map((_, i) => <LoadingCard key={i} />) : cards.map((item) => (
             <article key={item.code} className="ab-premium-card" style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'var(--font-serif)', color: 'var(--text)', whiteSpace: 'nowrap' }}>{item.name}</div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap' }}>{item.name}</div>
                 <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{item.source}</div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--soft)', padding: '6px 12px', borderRadius: 14, border: '1px solid var(--border)' }}>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--font-serif)', lineHeight: 1 }}>{fmt(item.price)}</div>
+                  {/* Ép class num-premium để xài font Manrope cho Giá */}
+                  <div className="num-premium" style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{fmt(item.price)}</div>
                   <div style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 700, marginTop: 2 }}>VNĐ/LÍT</div>
                 </div>
-                <div style={{ padding: '4px 8px', borderRadius: 99, background: toneBg(item.change), color: toneColor(item.change), fontSize: 12, fontWeight: 800 }}>
+                {/* Ép class num-premium để xài font Manrope cho phần trăm thay đổi */}
+                <div className="num-premium" style={{ padding: '4px 8px', borderRadius: 99, background: toneBg(item.change), color: toneColor(item.change), fontSize: 12, fontWeight: 800 }}>
                   {fmtChange(item.change)}
                 </div>
               </div>
