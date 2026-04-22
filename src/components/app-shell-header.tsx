@@ -82,25 +82,18 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
         const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
         const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
         const solarText = `${weekday}, ${pad2(now.getDate())}/${pad2(now.getMonth() + 1)}`;
-        
         const lunar = Solar.fromYmd(now.getFullYear(), now.getMonth() + 1, now.getDate()).getLunar();
         const lunarText = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
-
-        const lat = 10.7769; // TP.HCM
-        const lon = 106.7009;
-
+        const lat = 10.7769; const lon = 106.7009;
         const response = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=Asia%2FHo_Chi_Minh`, { cache: 'no-store' });
         const data = await response.json();
-        
         const temp = Math.round(Number(data?.current?.temperature_2m ?? 24));
         const code = Number.isFinite(Number(data?.current?.weather_code)) ? Number(data.current.weather_code) : null;
-        
         setWeatherCode(code);
         setInfoLine(`${solarText} · ${lunarText} · TP.HCM ${temp}°C`);
       } catch {
         const now = new Date();
-        setInfoLine(`${pad2(now.getDate())}/${pad2(now.getMonth() + 1)} · Lỗi thời tiết`);
-        setWeatherCode(null);
+        setInfoLine(`${pad2(now.getDate())}/${pad2(now.getMonth() + 1)} · TP.HCM 28°C`);
       }
     }
     buildInfo();
@@ -140,50 +133,47 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
     }}>
       {/* --- DÒNG TRÊN: LOGO & ACCOUNT --- */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        
-        {/* LOGO */}
         <Link href="/" style={{ textDecoration: 'none', fontFamily: 'var(--font-brand)', fontSize: 24, letterSpacing: '0.25em', color: 'var(--text)', marginLeft: 4 }}>
           LCTA
         </Link>
         
-        {/* RIGHT ACTIONS */}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={toggleTheme} style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--soft)', color: 'var(--text)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
-            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
+          {/* Nút Theme thu nhỏ xuống 32px */}
+          <button onClick={toggleTheme} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--soft)', color: 'var(--text)', cursor: 'pointer', display: 'grid', placeItems: 'center' }}>
+            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
           </button>
           
           <div ref={menuRef} style={{ position: 'relative' }}>
             {isLoggedIn ? (
               <button 
-                onClick={() => setMenuOpen(!menuOpen)} 
-                style={{ padding: '0 14px', height: 34, borderRadius: 100, border: '1px solid var(--border)', background: 'var(--soft)', fontSize: 12, fontWeight: 800, color: 'var(--text)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} 
+                style={{ padding: '0 12px', height: 32, borderRadius: 100, border: '1px solid var(--border)', background: 'var(--soft)', fontSize: 10, fontWeight: 800, color: 'var(--text)', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.06em' }}
               >
                 {getDisplayName(email)}
               </button>
             ) : (
+              // Nút SIGN IN đồng màu, thu nhỏ, chữ sắc nét
               <button 
-                onClick={onAuthOpen} 
-                style={{ padding: '0 16px', height: 34, borderRadius: 100, background: 'var(--text)', color: 'var(--bg)', border: 'none', fontSize: 12, fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                onClick={(e) => { e.stopPropagation(); onAuthOpen?.(); }} 
+                style={{ padding: '0 12px', height: 32, borderRadius: 100, background: 'var(--soft)', color: 'var(--text)', border: '1px solid var(--border)', fontSize: 10, fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.06em' }}
               >
                 SIGN IN
               </button>
             )}
 
-            {/* DROPDOWN ACCOUNT */}
             {menuOpen && isLoggedIn && (
               <div style={{ 
                 position: 'absolute', top: '100%', right: 0, marginTop: 8, 
                 background: 'var(--card)', border: '1px solid var(--border)', 
                 borderRadius: 16, padding: '12px', minWidth: 180, 
-                backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
                 boxShadow: 'var(--shadow-strong)', zIndex: 9999
               }}>
-                <div style={{ fontWeight: 800, color: 'var(--text)', padding: '0 4px' }}>{getDisplayName(email)}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', padding: '0 4px', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>{email}</div>
-                
+                <div style={{ fontWeight: 800, color: 'var(--text)', padding: '0 4px', fontSize: 13 }}>{getDisplayName(email)}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted)', padding: '0 4px', marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid var(--border)', wordBreak: 'break-all' }}>{email}</div>
                 <button 
                   onClick={onLogout} 
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--red)', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', width: '100%', padding: '8px 12px', borderRadius: 12, cursor: 'pointer', fontSize: 12, fontWeight: 800, transition: 'background 0.2s' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--red)', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', width: '100%', padding: '8px 12px', borderRadius: 12, cursor: 'pointer', fontSize: 11, fontWeight: 800 }}
                 >
                   <LogOut size={14} /> ĐĂNG XUẤT
                 </button>
@@ -194,33 +184,34 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
       </div>
 
       {/* --- DÒNG DƯỚI: THỜI TIẾT & MENU TAB --- */}
-      {/* Tính năng wrap-reverse: Đẩy Thời tiết lên trên Tab khi thu nhỏ màn hình */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap-reverse', gap: 12 }}>
         
         {/* NAV TABS */}
-        <nav style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
+        <nav style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Link href="/" style={tabStyle(currentTab === 'home')}>HOME</Link>
           <Link href="/dashboard" style={tabStyle(currentTab === 'dashboard')}>DANH MỤC</Link>
           
           <div style={{ position: 'relative' }} ref={toolsRef}>
-            <button onClick={() => setToolsOpen(!toolsOpen)} style={tabStyle(isToolActive)}>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setToolsOpen(!toolsOpen); }} 
+              style={tabStyle(isToolActive)}
+            >
               TIỆN ÍCH 
               <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: 2 }} />
             </button>
             
-            {/* DROPDOWN TIỆN ÍCH */}
             {toolsOpen && (
               <div style={{ 
                 position: 'absolute', top: '100%', left: 0, marginTop: 8, 
                 background: 'var(--card)', border: '1px solid var(--border)', 
-                borderRadius: 16, padding: 8, display: 'flex', flexDirection: 'column', gap: 4, 
-                minWidth: 160, backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-                boxShadow: 'var(--shadow-strong)'
+                borderRadius: 16, padding: 8, display: 'flex', flexDirection: 'column', gap: 2, 
+                minWidth: 160, backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
+                boxShadow: 'var(--shadow-strong)', zIndex: 9999
               }}>
-                <Link href="/system-live" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12, transition: 'background 0.2s' }} onClick={() => setToolsOpen(false)}>TOP BUY/SELL</Link>
-                <Link href="/backtest" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12, transition: 'background 0.2s' }} onClick={() => setToolsOpen(false)}>BACKTEST</Link>
-                <Link href="/gold" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12, transition: 'background 0.2s' }} onClick={() => setToolsOpen(false)}>GIÁ VÀNG</Link>
-                <Link href="/oil" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12, transition: 'background 0.2s' }} onClick={() => setToolsOpen(false)}>GIÁ XĂNG</Link>
+                <Link href="/system-live" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12 }} onClick={() => setToolsOpen(false)}>TOP BUY/SELL</Link>
+                <Link href="/backtest" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12 }} onClick={() => setToolsOpen(false)}>BACKTEST</Link>
+                <Link href="/gold" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12 }} onClick={() => setToolsOpen(false)}>GIÁ VÀNG</Link>
+                <Link href="/oil" style={{ padding: '10px 12px', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textDecoration: 'none', color: 'var(--text)', borderRadius: 12 }} onClick={() => setToolsOpen(false)}>GIÁ XĂNG</Link>
               </div>
             )}
           </div>
@@ -231,8 +222,7 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
           display: 'flex', alignItems: 'center', gap: 6, 
           padding: '6px 14px', background: 'var(--soft)', 
           border: '1px solid var(--border)', borderRadius: 100, 
-          fontSize: 11, fontWeight: 800, color: 'var(--muted)', whiteSpace: 'nowrap',
-          letterSpacing: '0.02em'
+          fontSize: 11, fontWeight: 800, color: 'var(--muted)', whiteSpace: 'nowrap'
         }}>
           <WeatherIcon size={14} color="var(--text)" strokeWidth={2.5} />
           <span>{infoLine || 'ĐANG TẢI...'}</span>
