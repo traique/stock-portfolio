@@ -6,7 +6,6 @@ import { Solar } from 'lunar-javascript';
 import {
   Activity,
   ArrowRight,
-  BriefcaseBusiness,
   Cloud,
   CloudFog,
   CloudLightning,
@@ -14,19 +13,17 @@ import {
   CloudSun,
   Droplets,
   Gem,
-  House,
   LineChart,
   LogOut,
   Moon,
   Sun,
-  LayoutGrid,
   ChevronDown
 } from 'lucide-react';
 
 type ThemeMode = 'light' | 'dark';
 
 type Props = {
-  title: string;
+  title: string; // Vẫn giữ prop này để code cũ không bị lỗi, nhưng ta sẽ giấu nó đi
   email?: string;
   isLoggedIn: boolean;
   currentTab: 'home' | 'dashboard' | 'gold' | 'oil' | 'system-live' | 'backtest';
@@ -54,7 +51,7 @@ function getWeatherIcon(code: number | null) {
   return CloudSun;
 }
 
-export default function AppShellHeader({ title, email, isLoggedIn, currentTab, onLogout, onAuthOpen }: Props) {
+export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout, onAuthOpen }: Props) {
   const [theme, setTheme] = useState<ThemeMode>('light');
   const [menuOpen, setMenuOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -126,21 +123,25 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
 
   const isToolActive = ['system-live', 'backtest', 'gold', 'oil'].includes(currentTab);
 
-  // --- HÀM TẠO STYLE CHUẨN CHO TAB TRÁNH LỖI CLASS ---
+  // Style chuẩn Minimalism cho Tab: Không icon, chữ in hoa, giãn cách
   const getTabStyle = (isActive: boolean) => ({
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     padding: '6px 14px',
     borderRadius: 100,
-    fontSize: 13,
-    fontWeight: 600,
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase' as const,
     textDecoration: 'none',
-    // Nền mờ cực kỳ sang trọng thay vì trắng bóc
-    background: isActive ? (theme === 'dark' ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.06)') : 'transparent',
+    background: isActive ? 'var(--tab-active-bg)' : 'transparent',
     color: isActive ? 'var(--text)' : 'var(--muted)',
-    transition: 'all 0.2s ease',
-    border: 'none',
+    border: `1px solid ${isActive ? 'var(--tab-active-border)' : 'transparent'}`,
+    boxShadow: isActive ? 'var(--tab-active-shadow)' : 'none',
+    backdropFilter: isActive ? 'blur(10px)' : 'none',
+    WebkitBackdropFilter: isActive ? 'blur(10px)' : 'none',
+    transition: 'all 0.3s ease',
     cursor: 'pointer',
     fontFamily: 'inherit'
   });
@@ -151,48 +152,54 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
         position: 'sticky',
         top: 2, 
         zIndex: 1000,
-        background: theme === 'dark' ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.75)', 
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: theme === 'dark' ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid rgba(0, 0, 0, 0.06)',
-        boxShadow: theme === 'dark' ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 30px rgba(0,0,0,0.04)',
-        borderRadius: 20, 
+        background: theme === 'dark' ? 'rgba(11, 17, 33, 0.7)' : 'rgba(255, 255, 255, 0.65)', 
+        backdropFilter: 'blur(24px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+        border: '1px solid var(--border)',
+        boxShadow: theme === 'dark' ? '0 10px 40px rgba(0,0,0,0.5)' : '0 10px 30px rgba(31, 38, 135, 0.04)',
+        borderRadius: 24, 
         padding: '10px 14px',
         marginBottom: 16,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
+        gap: 12,
         transition: 'background 0.3s ease'
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
-          <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: 0.5, background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+        
+        {/* LOGO LUXURY MONOGRAM CÓ LINK VỀ HOME */}
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}>
+          <span style={{ 
+            fontSize: 20, 
+            fontWeight: 900, 
+            fontFamily: '"Playfair Display", serif',
+            letterSpacing: '0.25em', 
+            color: 'var(--text)',
+            marginLeft: 4
+          }}>
             LCTA
           </span>
-          <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--border-strong)' }} />
-          <h1 style={{ fontSize: 16, fontWeight: 800, margin: 0, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {title}
-          </h1>
-        </div>
+        </Link>
+
+        {/* BỎ HẲN CÁC TIÊU ĐỀ RƯỜM RÀ NHƯ "RADAR ĐẦU TƯ" Ở ĐÂY */}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <button 
             onClick={toggleTheme} 
-            style={{ background: 'var(--soft)', border: 'none', width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', cursor: 'pointer' }}
+            style={{ background: 'var(--soft)', border: '1px solid var(--border)', width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', cursor: 'pointer' }}
           >
-            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            {theme === 'light' ? <Moon size={15} /> : <Sun size={15} />}
           </button>
 
           <div ref={menuRef} style={{ position: 'relative' }}>
             {isLoggedIn ? (
-              // Nút tài khoản đã được ép style cứng để chống tàng hình
               <button 
                 type="button" 
                 onClick={() => setMenuOpen((prev) => !prev)} 
                 style={{ 
                   display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 100, 
-                  background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)', 
+                  background: 'var(--soft)', 
                   color: 'var(--text)', fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', margin: 0 
                 }}
               >
@@ -204,7 +211,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
                 onClick={onAuthOpen} 
                 style={{ 
                   display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 100, 
-                  background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.04)', 
+                  background: 'var(--soft)', 
                   color: 'var(--text)', fontSize: 13, fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', margin: 0 
                 }}
               >
@@ -214,7 +221,7 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
             )}
 
             {menuOpen && isLoggedIn && (
-              <div className="ab-account-menu premium" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, zIndex: 9999, minWidth: 160, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 8, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+              <div className="ab-account-menu premium" style={{ position: 'absolute', top: '100%', right: 0, marginTop: 8, zIndex: 9999, minWidth: 160, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, padding: 8, boxShadow: '0 20px 40px rgba(0,0,0,0.2)', backdropFilter: 'blur(20px)' }}>
                 <div className="ab-account-name" style={{ padding: '4px 8px', fontWeight: 700 }}>{getDisplayName(email)}</div>
                 <div className="ab-account-email" style={{ padding: '0 8px 8px 8px', fontSize: 12, color: 'var(--muted)', borderBottom: '1px solid var(--border)' }}>{email}</div>
                 <button type="button" className="ab-menu-btn danger" onClick={onLogout} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: 'var(--red)', background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', padding: '8px', textAlign: 'left', borderRadius: 8 }}>
@@ -229,13 +236,13 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         
-        {/* Đã xóa hẳn class "ab-premium-tab", dùng inline style mượt mà */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingBottom: 2 }}>
+        {/* MENU TỐI GIẢN */}
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <Link href="/" style={getTabStyle(currentTab === 'home')}>
-            <House size={14} /><span>Home</span>
+            <span>HOME</span>
           </Link>
           <Link href="/dashboard" style={getTabStyle(currentTab === 'dashboard')}>
-            <BriefcaseBusiness size={14} /><span>Danh mục</span>
+            <span>DANH MỤC</span>
           </Link>
 
           <div ref={toolsRef} style={{ position: 'relative' }}>
@@ -244,9 +251,8 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
               onClick={() => setToolsOpen(!toolsOpen)}
               style={{ ...getTabStyle(isToolActive), paddingRight: 10 }}
             >
-              <LayoutGrid size={14} />
-              <span>Công cụ</span>
-              <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: 2 }} />
+              <span>TIỆN ÍCH</span>
+              <ChevronDown size={14} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s', marginLeft: 2, color: 'var(--muted)' }} />
             </button>
 
             {toolsOpen && (
@@ -256,29 +262,29 @@ export default function AppShellHeader({ title, email, isLoggedIn, currentTab, o
                   position: 'absolute', top: '100%', left: 0, marginTop: 8, background: 'var(--card)', border: '1px solid var(--border)',
                   borderRadius: 16, padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 180, 
                   zIndex: 99999, 
-                  boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+                  boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+                  backdropFilter: 'blur(20px)'
                 }}
               >
-                <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
-                  <Activity size={15} /> <span>TOP BUY SELL</span>
+                <Link href="/system-live" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none', background: 'transparent', border: 'none' }} onClick={() => setToolsOpen(false)}>
+                  <Activity size={15} color="var(--muted)" /> <span style={{ fontWeight: 600 }}>Top Buy/Sell</span>
                 </Link>
-                <Link href="/backtest" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
-                  <LineChart size={15} /> <span>Backtest</span>
+                <Link href="/backtest" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none', background: 'transparent', border: 'none' }} onClick={() => setToolsOpen(false)}>
+                  <LineChart size={15} color="var(--muted)" /> <span style={{ fontWeight: 600 }}>Backtest</span>
                 </Link>
-                <Link href="/gold" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
-                  <Gem size={15} /> <span>Giá vàng</span>
+                <Link href="/gold" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none', background: 'transparent', border: 'none' }} onClick={() => setToolsOpen(false)}>
+                  <Gem size={15} color="var(--muted)" /> <span style={{ fontWeight: 600 }}>Giá Vàng</span>
                 </Link>
-                <Link href="/oil" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none' }} onClick={() => setToolsOpen(false)}>
-                  <Droplets size={15} /> <span>Giá xăng</span>
+                <Link href="/oil" className="ab-menu-btn" style={{ justifyContent: 'flex-start', color: 'var(--text)', textDecoration: 'none', background: 'transparent', border: 'none' }} onClick={() => setToolsOpen(false)}>
+                  <Droplets size={15} color="var(--muted)" /> <span style={{ fontWeight: 600 }}>Giá Xăng</span>
                 </Link>
               </div>
             )}
           </div>
         </div>
 
-        {/* Nút thời tiết đồng bộ hiệu ứng kính mờ */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 100, fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap' }}>
-          <WeatherIcon size={14} strokeWidth={2} color="var(--muted)" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', background: 'var(--soft)', border: '1px solid var(--border)', borderRadius: 100, fontSize: 11, fontWeight: 700, color: 'var(--muted)', whiteSpace: 'nowrap' }}>
+          <WeatherIcon size={13} strokeWidth={2.5} />
           <span>{infoLine || 'Đang tải...'}</span>
         </div>
 
