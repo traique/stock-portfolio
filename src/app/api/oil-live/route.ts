@@ -126,6 +126,31 @@ function rowMatches(name: string, aliases: string[]) {
   return aliases.some((alias) => normalized.includes(normalizeText(alias)));
 }
 
+// Hàm mới: Quét và bóc tách thời gian cập nhật bằng Regex
+function extractUpdateTime($: cheerio.CheerioAPI): { time: string | null, date: string | null } {
+  // Gộp toàn bộ text của trang và xóa bớt khoảng trắng thừa
+  const text = $('body').text().replace(/\s+/g, ' ').toLowerCase();
+  
+  let time: string | null = null;
+  let date: string | null = null;
+
+  // Regex bắt các cụm từ "cập nhật (lúc) 15:00 ngày 21/04/2026" hoặc "điều chỉnh ngày 21/04/2026"
+  const match = text.match(/(?:cập nhật|điều chỉnh|kỳ điều hành).*?(?:lúc\s*)?(\d{1,2}:\d{2})?\s*(?:ngày\s*)?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})/);
+  
+  if (match) {
+    if (match[1]) time = match[1];
+    if (match[2]) {
+      // Đảo ngược ngày từ DD/MM/YYYY sang YYYY-MM-DD
+      const parts = match[2].split(/[\/\-]/);
+      if (parts.length === 3) {
+        date = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+  }
+
+  return { time, date };
+}
+
 export async function GET() {
   try {
     const response = await fetch('https://giaxanghomnay.com/', {
@@ -153,13 +178,16 @@ export async function GET() {
       .toArray()
       .map((tr) => extractCells($, tr));
 
+    // Gọi hàm bóc tách thời gian
+    const updateInfo = extractUpdateTime($);
+
     const cards: OilCard[] = TARGETS.map((target) => {
       const matchedRow = rows.find((cells) => {
         if (!cells.length) return false;
         return rowMatches(cells[0], target.aliases);
       });
 
-      // 0 tên | 1 tăng giảm hiện tại | 2 tăng giảm kỳ trước | 3 giá vùng 1 | 4 giá vùng 2
+      // Cột 0: Tên | Cột 1: Thay đổi hiện tại | Cột 2: Thay đổi kỳ trước | Cột 3: Giá vùng 1 | Cột 4: Giá vùng 2
       const change = matchedRow?.[2] ? parseViInt(matchedRow[2]) : 0;
       const price = matchedRow?.[3] ? parseViInt(matchedRow[3]) : null;
 
@@ -177,6 +205,8 @@ export async function GET() {
     return NextResponse.json({
       provider: 'giaxanghomnay',
       updatedAt: new Date().toISOString(),
+      sourceTime: updateInfo.time, // Trả về giờ (VD: "17:00")
+      sourceDate: updateInfo.date, // Trả về ngày (VD: "2026-04-18")
       cards,
     });
   } catch (error) {
@@ -186,4 +216,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-      }
+}
