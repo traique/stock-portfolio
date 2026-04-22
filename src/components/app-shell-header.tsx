@@ -124,7 +124,8 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
     display: 'flex',
     alignItems: 'center',
     gap: 4,
-    cursor: 'pointer'
+    cursor: 'pointer',
+    whiteSpace: 'nowrap' as const
   });
 
   const isToolActive = ['gold', 'oil', 'system-live', 'backtest'].includes(currentTab);
@@ -192,11 +193,12 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
         </div>
       </div>
 
-      {/* --- DÒNG DƯỚI: MENU TAB & THỜI TIẾT --- */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+      {/* --- DÒNG DƯỚI: THỜI TIẾT & MENU TAB --- */}
+      {/* Tính năng wrap-reverse: Đẩy Thời tiết lên trên Tab khi thu nhỏ màn hình */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap-reverse', gap: 12 }}>
         
         {/* NAV TABS */}
-        <nav style={{ display: 'flex', gap: 4 }}>
+        <nav style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
           <Link href="/" style={tabStyle(currentTab === 'home')}>HOME</Link>
           <Link href="/dashboard" style={tabStyle(currentTab === 'dashboard')}>DANH MỤC</Link>
           
@@ -224,7 +226,7 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
           </div>
         </nav>
 
-        {/* WEATHER PILL (DÙNG FONT MANROPE CHO CON SỐ) */}
+        {/* WEATHER PILL */}
         <div className="num-premium" style={{ 
           display: 'flex', alignItems: 'center', gap: 6, 
           padding: '6px 14px', background: 'var(--soft)', 
