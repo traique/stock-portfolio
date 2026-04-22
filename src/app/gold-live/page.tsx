@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Gem, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import AppShellHeader from '@/components/app-shell-header';
 
@@ -19,55 +19,24 @@ type GoldCard = {
 
 type GoldResponse = { cards?: GoldCard[]; sourceTime?: string | null; sourceDate?: string | null; error?: string };
 
-function fmt(value?: number | null, decimal = 0) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return 'N/A';
-  return new Intl.NumberFormat('vi-VN', { minimumFractionDigits: decimal, maximumFractionDigits: decimal }).format(value);
-}
+const fmt = (v?: number | null, d = 0) => v == null || !Number.isFinite(v) ? 'N/A' : new Intl.NumberFormat('vi-VN', { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
+const fmtChange = (v?: number | null, d = 0) => v == null || !Number.isFinite(v) || v === 0 ? '0' : `${v > 0 ? '+' : ''}${fmt(v, d)}`;
+const toneColor = (v?: number | null) => !Number.isFinite(v as number) || v === 0 ? 'var(--muted)' : (v as number) > 0 ? 'var(--green)' : 'var(--red)';
+const toneBg = (v?: number | null) => !Number.isFinite(v as number) || v === 0 ? 'var(--soft-2)' : (v as number) > 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(225, 29, 72, 0.12)';
 
-function fmtChange(value?: number | null, decimal = 0) {
-  if (value === null || value === undefined || !Number.isFinite(value) || value === 0) return '0';
-  const sign = value > 0 ? '+' : '';
-  return `${sign}${fmt(value, decimal)}`;
-}
-
-function toneColor(value?: number | null) {
-  if (!Number.isFinite(value as number) || value === 0) return 'var(--muted)';
-  return (value as number) > 0 ? 'var(--green)' : 'var(--red)';
-}
-
-function toneBg(value?: number | null) {
-  if (!Number.isFinite(value as number) || value === 0) return 'var(--soft-2)';
-  return (value as number) > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(225, 29, 72, 0.1)';
-}
-
-function fmtSourceDate(value?: string | null) {
-  if (!value) return '';
-  if (value.includes('-')) {
-    const [year, month, day] = value.split('-');
-    if (year && month && day) return `${day}/${month}/${year}`;
-  }
-  return value;
-}
-
-function fmtUpdated(value?: string | null, sourceDate?: string | null, sourceTime?: string | null) {
-  // Lấy thời gian từ hệ thống API trả về làm ưu tiên số 1
-  if (sourceDate && sourceTime) return `${sourceTime} · ${fmtSourceDate(sourceDate)}`;
-  if (!value) return '';
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '';
-  return new Intl.DateTimeFormat('vi-VN', {
-    hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'
-  }).format(date);
+function fmtSourceDate(v?: string | null) {
+  if (!v || !v.includes('-')) return v || '';
+  const [y, m, d] = v.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 function LoadingCard() {
   return (
-    <article className="ab-premium-card" style={{ padding: 'clamp(14px, 4vw, 20px)' }}>
-      <div className="ab-skeleton" style={{ width: '40%', height: 24 }} />
-      <div className="ab-skeleton" style={{ width: '20%', height: 14, marginTop: 8 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
-        <div className="ab-skeleton" style={{ width: '100%', height: 70, borderRadius: 16 }} />
-        <div className="ab-skeleton" style={{ width: '100%', height: 70, borderRadius: 16 }} />
+    <article className="ab-premium-card" style={{ padding: 14 }}>
+      <div className="ab-skeleton" style={{ width: '40%', height: 20 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 12 }}>
+        <div className="ab-skeleton" style={{ height: 60, borderRadius: 14 }} />
+        <div className="ab-skeleton" style={{ height: 60, borderRadius: 14 }} />
       </div>
     </article>
   );
@@ -88,114 +57,62 @@ export default function GoldLivePage() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      setMessage('');
       try {
         const response = await fetch('/api/gold-live', { cache: 'no-store' });
         const data: GoldResponse = await response.json();
-        if (!response.ok) setMessage(data?.error || 'Không lấy được dữ liệu giá vàng');
+        if (!response.ok) setMessage(data?.error || 'Lỗi dữ liệu');
         else {
           setCards(data.cards || []);
           setSourceTime(data.sourceTime || null);
           setSourceDate(data.sourceDate || null);
         }
-      } catch {
-        setMessage('Lỗi kết nối dữ liệu giá vàng');
-      } finally {
-        setLoading(false);
-      }
+      } finally { setLoading(false); }
     })();
   }, []);
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    window.location.href = '/';
-  }
 
   return (
     <main className="ab-page">
       <div className="ab-shell premium-gap">
-        <AppShellHeader title="Giá vàng trực tuyến" isLoggedIn={Boolean(email)} email={email} currentTab="gold" onLogout={handleLogout} />
+        <AppShellHeader title="Giá vàng" isLoggedIn={Boolean(email)} email={email} currentTab="gold" onLogout={() => supabase.auth.signOut().then(() => window.location.href = '/')} />
         
-        {message && (
-          <section className="ab-premium-card" style={{ padding: 14 }}>
-            <div className="ab-error">{message}</div>
-          </section>
-        )}
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+          {loading ? Array.from({ length: 3 }).map((_, i) => <LoadingCard key={i} />) : cards.map((item) => (
+            <article key={item.code} className="ab-premium-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 800, fontFamily: 'var(--font-serif)', color: 'var(--text)' }}>{item.name}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.05em' }}>{item.symbol}</div>
+              </div>
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
-          {(loading ? Array.from({ length: 3 }).map((_, index) => ({ code: String(index) })) : cards).map((card: GoldCard | { code: string }) => {
-            if (loading) return <LoadingCard key={card.code} />;
-            
-            const item = card as GoldCard;
-            const isWorld = item.code === 'XAUUSD';
-
-            return (
-              <article key={item.code} className="ab-premium-card" style={{ padding: 'clamp(16px, 4vw, 20px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div className="ab-row-between align-center">
-                  <div>
-                    <div style={{ fontSize: 'clamp(22px, 5vw, 26px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)' }}>
-                      {item.name}
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.05em', marginTop: 2 }}>
-                      {item.symbol}
-                    </div>
-                  </div>
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--soft)', display: 'grid', placeItems: 'center', color: 'var(--yellow)', border: '1px solid var(--border)' }}>
-                    <Gem size={18} />
+              {item.code === 'XAUUSD' ? (
+                <div style={{ background: 'var(--soft)', borderRadius: 14, padding: '12px 14px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 800 }}>THẾ GIỚI (USD/oz)</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 24, fontWeight: 800, fontFamily: 'var(--font-serif)', whiteSpace: 'nowrap' }}>{fmt(item.sell, 2)}</span>
+                    <span style={{ padding: '3px 8px', borderRadius: 99, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 12, fontWeight: 800 }}>{fmtChange(item.changeSell, 2)}</span>
                   </div>
                 </div>
-
-                {isWorld ? (
-                  <div style={{ background: 'var(--soft)', borderRadius: 18, padding: '16px', border: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.04em' }}>GIÁ HIỆN TẠI (USD/oz)</div>
-                    <div style={{ fontSize: 'clamp(30px, 7vw, 36px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 4, whiteSpace: 'nowrap' }}>
-                      {fmt(item.sell, 2)}
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[ { l: 'MUA VÀO', v: item.buy, c: item.changeBuy }, { l: 'BÁN RA', v: item.sell, c: item.changeSell } ].map((g, idx) => (
+                    <div key={idx} style={{ background: 'var(--soft)', borderRadius: 14, padding: 10, border: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>{g.l}</div>
+                      <div style={{ fontSize: 19, fontWeight: 800, fontFamily: 'var(--font-serif)', marginTop: 2, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>{fmt(g.v)}</div>
+                      <div style={{ display: 'inline-block', marginTop: 6, padding: '2px 8px', borderRadius: 99, background: toneBg(g.c), color: toneColor(g.c), fontSize: 11, fontWeight: 800 }}>{fmtChange(g.c)}</div>
                     </div>
-                    <div style={{ 
-                      display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, padding: '4px 10px', 
-                      borderRadius: 999, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 13, fontWeight: 800 
-                    }}>
-                      {fmtChange(item.changeSell, 2)}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ background: 'var(--soft)', borderRadius: 16, padding: '12px', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>MUA VÀO</div>
-                      <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 4, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
-                        {fmt(item.buy)}
-                      </div>
-                      <div style={{ 
-                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, padding: '4px 10px', 
-                        borderRadius: 999, background: toneBg(item.changeBuy), color: toneColor(item.changeBuy), fontSize: 12, fontWeight: 800 
-                      }}>
-                        {fmtChange(item.changeBuy)}
-                      </div>
-                    </div>
-
-                    <div style={{ background: 'var(--soft)', borderRadius: 16, padding: '12px', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 700, letterSpacing: '0.02em' }}>BÁN RA</div>
-                      <div style={{ fontSize: 'clamp(18px, 5vw, 22px)', fontWeight: 800, fontFamily: '"Playfair Display", serif', color: 'var(--text)', marginTop: 4, whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>
-                        {fmt(item.sell)}
-                      </div>
-                      <div style={{ 
-                        display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, padding: '4px 10px', 
-                        borderRadius: 999, background: toneBg(item.changeSell), color: toneColor(item.changeSell), fontSize: 12, fontWeight: 800 
-                      }}>
-                        {fmtChange(item.changeSell)}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 'auto' }}>
-                  <Clock size={12} />
-                  <span>{fmtUpdated(item.updatedAt, sourceDate, sourceTime)}</span>
+                  ))}
                 </div>
-              </article>
-            );
-          })}
+              )}
+            </article>
+          ))}
         </section>
+
+        {/* CẬP NHẬT DƯỚI CÙNG TRANG */}
+        {!loading && (sourceTime || sourceDate) && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: 'var(--muted)', fontSize: 12, fontWeight: 600, padding: '10px 0' }}>
+            <Clock size={13} />
+            <span>Cập nhật hệ thống: {sourceTime} · {fmtSourceDate(sourceDate)}</span>
+          </div>
+        )}
       </div>
     </main>
   );
