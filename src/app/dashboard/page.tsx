@@ -193,9 +193,9 @@ export default function DashboardPage() {
   // UI States
   const [tradeOpen, setTradeOpen] = useState(false);
   const [tradeMode, setTradeMode] = useState<TradeMode>('BUY');
-  const [cashOpen, setCashOpen] = useState(false);
+  const [cashOpen, setCashOpen] = useState(false); // TRẠNG THÁI MENU TIỀN MẶT
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [telegramOpen, setTelegramOpen] = useState(false);
+  const [telegramOpen, setTelegramOpen] = useState(false); // TRẠNG THÁI MENU TELEGRAM
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [expandedSymbols, setExpandedSymbols] = useState<Record<string, boolean>>({});
@@ -213,6 +213,7 @@ export default function DashboardPage() {
   const [adjustmentAmountInput, setAdjustmentAmountInput] = useState('0');
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   
+  // Telegram States
   const [telegram, setTelegram] = useState<TelegramSettings>(DEFAULT_TELEGRAM);
   const [telegramLoading, setTelegramLoading] = useState(true);
   const [telegramSaving, setTelegramSaving] = useState(false);
@@ -452,7 +453,7 @@ export default function DashboardPage() {
 
   async function resetPortfolio() {
     if (!userId) return;
-    if (!window.confirm('Xóa toàn bộ danh mục hiện tại để tạo danh mục mới?')) return;
+    if (!window.confirm('CẢNH BÁO: Bạn có chắc chắn muốn xóa toàn bộ danh mục hiện tại để khởi tạo lại từ đầu?')) return;
 
     setResettingPortfolio(true); setMessage('');
     try {
@@ -519,7 +520,7 @@ export default function DashboardPage() {
   return (
     <main className="ab-page">
       <div className="ab-shell premium-gap" style={{ gap: 12 }}>
-        <AppShellHeader title="Danh mục" isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
+        <AppShellHeader isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
 
         {message && <section style={{ ...cardStyle, padding: 12 }}><div className="ab-error">{message}</div></section>}
 
@@ -619,7 +620,6 @@ export default function DashboardPage() {
                 return (
                   <article key={position.symbol} style={{ ...strongCardStyle, padding: 16, borderRadius: 20, display: 'flex', flexDirection: 'column', gap: 14, boxShadow: 'none' }}>
                     
-                    {/* HÀNG 1: TÊN MÃ & NÚT XÓA (Tách biệt hoàn toàn) */}
                     <div className="ab-row-between align-start" style={{ gap: 10 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 800, color: fg() }}>{position.symbol}</div>
@@ -629,25 +629,15 @@ export default function DashboardPage() {
                       </div>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button 
-                          type="button" 
-                          onClick={() => setExpandedSymbols((prev) => ({ ...prev, [position.symbol]: !prev[position.symbol] }))} 
-                          style={{ ...pillStyle, background: 'var(--soft)', cursor: 'pointer' }}
-                        >
+                        <button type="button" onClick={() => setExpandedSymbols((prev) => ({ ...prev, [position.symbol]: !prev[position.symbol] }))} style={{ ...pillStyle, background: 'var(--soft)', cursor: 'pointer' }}>
                           {isExpanded ? 'ẨN LỆNH' : 'XEM LỆNH'}
                         </button>
-                        <button 
-                          type="button" 
-                          onClick={() => deleteSymbol(position.symbol)} 
-                          style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '50%', width: 34, height: 34, display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--muted)', transition: '0.2s' }}
-                          title={`Xóa mã ${position.symbol}`}
-                        >
+                        <button type="button" onClick={() => deleteSymbol(position.symbol)} style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '50%', width: 34, height: 34, display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--muted)', transition: '0.2s' }} title={`Xóa mã ${position.symbol}`}>
                           <Trash2 size={15} />
                         </button>
                       </div>
                     </div>
 
-                    {/* HÀNG 2: GIÁ & PNL */}
                     <div style={{ display: 'grid', gap: 10, gridTemplateColumns: '1fr auto', alignItems: 'end' }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 11, color: muted(), fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Giá hiện tại</div>
@@ -665,7 +655,6 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* HÀNG 3: VỐN & THỐNG KÊ */}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       <div className="num-premium" style={pillStyle}>SL {position.quantity}</div>
                       <div className="num-premium" style={pillStyle}>VỐN TB {formatCurrency(position.avgBuyPrice)}</div>
@@ -682,18 +671,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
 
-                    {/* HÀNG 4: NÚT TIN TỨC (Dễ bấm, nằm dưới cùng) */}
-                    <button 
-                      type="button" 
-                      onClick={() => handleOpenNews(position.symbol)} 
-                      style={{ 
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, 
-                        background: 'var(--card)', border: '1px solid var(--border)', 
-                        borderRadius: 14, padding: '12px', marginTop: 'auto', cursor: 'pointer', 
-                        color: 'var(--text)', fontSize: 12, fontWeight: 800, letterSpacing: '0.04em',
-                        transition: 'background 0.2s', width: '100%' 
-                      }}
-                    >
+                    <button type="button" onClick={() => handleOpenNews(position.symbol)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px', marginTop: 'auto', cursor: 'pointer', color: 'var(--text)', fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', transition: 'background 0.2s', width: '100%' }}>
                       <Newspaper size={16} color="var(--primary)" /> ĐỌC TIN TỨC
                     </button>
 
@@ -716,7 +694,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        {/* --- CÁC SECTION KHÁC BÊN DƯỚI GIỮ NGUYÊN HOẶC ÉP NUM-PREMIUM --- */}
+        {/* --- NHẬP LỆNH GIAO DỊCH CHỨNG KHOÁN --- */}
         <Section kicker="Giao dịch" title={editingTradeId ? `SỬA LỆNH ${tradeMode === 'BUY' ? 'MUA' : 'BÁN'}` : 'THÊM GIAO DỊCH'} open={tradeOpen} onToggle={() => setTradeOpen((v) => !v)}>
           <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', marginBottom: 12 }}>
             <button type="button" className={`ab-btn ${tradeMode === 'BUY' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setTradeMode('BUY')} style={btnStyle}>LỆNH MUA</button>
@@ -768,6 +746,43 @@ export default function DashboardPage() {
           </div>
         </Section>
 
+        {/* --- KHÔI PHỤC: QUẢN LÝ TIỀN MẶT --- */}
+        <Section kicker="Tiền mặt" title="NẠP / RÚT / ĐIỀU CHỈNH" open={cashOpen} onToggle={() => setCashOpen((v) => !v)}>
+          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', marginBottom: 12 }}>
+            <button type="button" className={`ab-btn ${cashMode === 'CASH' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setCashMode('CASH')} style={btnStyle}>NẠP / RÚT</button>
+            <button type="button" className={`ab-btn ${cashMode === 'ADJUSTMENT' ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setCashMode('ADJUSTMENT')} style={btnStyle}>ĐIỀU CHỈNH</button>
+          </div>
+          {cashMode === 'CASH' ? (
+            <form onSubmit={handleCashSubmit} style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <select value={cashForm.transaction_type} onChange={(e) => setCashForm({ ...cashForm, transaction_type: e.target.value as 'DEPOSIT' | 'WITHDRAW' })} className="ab-input" style={inputStyle}>
+                <option value="DEPOSIT">Nạp tiền</option><option value="WITHDRAW">Rút tiền</option>
+              </select>
+              <input value={cashForm.amount} onChange={(e) => setCashForm({ ...cashForm, amount: formatIntegerInput(e.target.value) })} type="text" inputMode="numeric" placeholder="Số tiền" className="ab-input num-premium" style={inputStyle} />
+              <input value={cashForm.transaction_date} onChange={(e) => setCashForm({ ...cashForm, transaction_date: e.target.value })} type="date" className="ab-input num-premium" style={inputStyle} />
+              <input value={cashForm.note} onChange={(e) => setCashForm({ ...cashForm, note: e.target.value })} placeholder="Ghi chú" className="ab-input" style={{ ...inputStyle, gridColumn: '1 / -1' }} />
+              <div className="ab-row-gap" style={{ gridColumn: '1 / -1' }}>
+                <button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>LƯU GIAO DỊCH TIỀN</button>
+                {editingCashId && <button type="button" className="ab-btn ab-btn-subtle" onClick={() => { setEditingCashId(null); setCashForm(DEFAULT_CASH_FORM); }} style={btnStyle}>HỦY</button>}
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSaveCashAdjustment} style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gridColumn: '1 / -1' }}>
+                <button type="button" className={`ab-btn ${adjustmentSign === 1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setAdjustmentSign(1)} style={btnStyle}>DƯƠNG (+)</button>
+                <button type="button" className={`ab-btn ${adjustmentSign === -1 ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setAdjustmentSign(-1)} style={btnStyle}>ÂM (-)</button>
+              </div>
+              <input value={adjustmentAmountInput} onChange={(e) => setAdjustmentAmountInput(formatIntegerInput(e.target.value))} type="text" inputMode="numeric" className="ab-input num-premium" placeholder="Nhập số điều chỉnh" style={{ ...inputStyle, gridColumn: '1 / -1' }} />
+              <div style={{ ...cardStyle, padding: 14, borderRadius: 18, boxShadow: 'none', gridColumn: '1 / -1' }}>
+                <div className="ab-note" style={{ color: muted(), fontSize: 13 }}>Tiền mặt hệ thống: <strong className="num-premium" style={{ color: fg() }}>{formatCurrency(cashSummary.calculatedCash)}</strong></div>
+                <div className="ab-note" style={{ color: muted(), marginTop: 8, fontSize: 13 }}>Điều chỉnh hiện tại: <strong className="num-premium" style={{ color: fg() }}>{cashSummary.cashAdjustment >= 0 ? '+' : ''}{formatCurrency(cashSummary.cashAdjustment)}</strong></div>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{savingAdjustment ? 'ĐANG LƯU...' : 'LƯU ĐIỀU CHỈNH'}</button>
+              </div>
+            </form>
+          )}
+        </Section>
+
         {/* --- AI ASSISTANT --- */}
         <Section kicker="AI Assistant" title="NHẬN XÉT & CHIẾN LƯỢC" open={aiOpen} onToggle={() => setAiOpen((v) => !v)}>
           <div className="ab-row-gap">
@@ -811,6 +826,49 @@ export default function DashboardPage() {
             </div>
           ) : !aiLoading && <div className="ab-note" style={{ marginTop: 10 }}>Nhấn “Phân tích danh mục” để AI đưa gợi ý xử lý và thiết lập TP/SL.</div>}
         </Section>
+
+        {/* --- KHÔI PHỤC: CẤU HÌNH TELEGRAM --- */}
+        <Section kicker="Telegram" title="BÁO CÁO CUỐI NGÀY" open={telegramOpen} onToggle={() => setTelegramOpen((v) => !v)}>
+          <form onSubmit={handleSaveTelegram} style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+            <input value={telegram.chat_id} onChange={(e) => setTelegram({ ...telegram, chat_id: e.target.value })} placeholder="Nhập Chat ID Telegram" className="ab-input num-premium" style={{ ...inputStyle, gridColumn: '1 / -1' }} />
+            
+            <label className="ab-toggle-row" style={{ color: muted(), fontSize: 13, fontWeight: 700 }}>
+              <input type="checkbox" checked={telegram.is_enabled} onChange={(e) => setTelegram({ ...telegram, is_enabled: e.target.checked })} />
+              <span>Bật báo cáo qua Telegram</span>
+            </label>
+            <label className="ab-toggle-row" style={{ color: muted(), fontSize: 13, fontWeight: 700 }}>
+              <input type="checkbox" checked={telegram.notify_daily} onChange={(e) => setTelegram({ ...telegram, notify_daily: e.target.checked })} />
+              <span>Gửi tự động hàng ngày</span>
+            </label>
+            
+            <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: muted(), textTransform: 'uppercase', marginBottom: 6 }}>Giờ gửi báo cáo (Giờ VN)</div>
+              <input value={telegram.daily_hour_vn} onChange={(e) => setTelegram({ ...telegram, daily_hour_vn: clampHour(Number(e.target.value || 15)) })} type="number" min={0} max={23} className="ab-input num-premium" style={{ ...inputStyle, width: '100%' }} placeholder="Ví dụ: 15" />
+            </div>
+
+            <div className="ab-row-gap" style={{ gridColumn: '1 / -1', marginTop: 8 }}>
+              <button type="submit" className="ab-btn ab-btn-primary" style={btnStyle}>{telegramSaving ? 'ĐANG LƯU...' : 'LƯU CẤU HÌNH'}</button>
+              <button type="button" className="ab-btn ab-btn-subtle" onClick={handleTelegramTest} disabled={telegramTesting || telegramLoading} style={btnStyle}>
+                <Send size={14} />{telegramTesting ? 'ĐANG GỬI...' : 'GỬI THỬ NGAY'}
+              </button>
+            </div>
+          </form>
+          {telegramMessage && <div className="ab-error" style={{ marginTop: 12 }}>{telegramMessage}</div>}
+        </Section>
+
+        {/* --- KHÔI PHỤC: RESET DANH MỤC --- */}
+        <section style={{ ...cardStyle, padding: 16 }}>
+          <div className="ab-row-between align-center" style={{ gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div className="ab-card-kicker" style={{ color: muted() }}>Quản trị hệ thống</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: fg(), marginTop: 4 }}>RESET DANH MỤC</div>
+              <div style={{ fontSize: 12, color: muted(), marginTop: 6, lineHeight: 1.4 }}>Xóa toàn bộ dữ liệu hiện tại để khởi tạo lại từ đầu. Hành động này không thể hoàn tác.</div>
+            </div>
+            <button type="button" className="ab-btn" style={{ background: 'rgba(244, 63, 94, 0.1)', color: 'var(--red)', border: '1px solid rgba(244, 63, 94, 0.2)', borderRadius: 999, padding: '10px 16px', fontSize: 12, fontWeight: 800 }} onClick={resetPortfolio} disabled={resettingPortfolio}>
+              <Trash2 size={16} />{resettingPortfolio ? 'ĐANG XÓA...' : 'XÓA TOÀN BỘ'}
+            </button>
+          </div>
+        </section>
 
       </div>
 
