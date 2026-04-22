@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;0,900&display=swap');
+/* =========================================================
+   LCTA - HỆ THỐNG QUẢN LÝ GIA SẢN CAO CẤP (DESIGN SYSTEM)
+   Phong cách: Quiet Luxury | Kính mờ (Glassmorphism)
+========================================================= */
 
 * {
   box-sizing: border-box;
@@ -16,70 +19,101 @@ html {
   text-rendering: optimizeLegibility;
 }
 
+/* --- QUẢN LÝ TYPOGRAPHY --- */
+:root {
+  /* Biến font được truyền từ layout.tsx */
+  --font-main: var(--font-sans), system-ui, sans-serif;
+  --font-number: var(--font-num), sans-serif;
+  --font-brand: var(--font-logo), serif;
+}
+
 body {
-  font-family: var(--font-sans), 'Be Vietnam Pro', Inter, Arial, Helvetica, sans-serif;
+  font-family: var(--font-main);
   background: var(--bg);
   color: var(--text);
+  line-height: 1.5;
 }
 
 a { color: inherit; text-decoration: none; }
 button, input, textarea { font: inherit; }
 
-/* --- LIGHT MODE: ICE BLUE GLASSMORPHISM --- */
+/* --- BẢNG MÀU SÁNG (LIGHT MODE) : ICE BLUE --- */
 :root {
-  --bg: #e6f0f9; /* Nền xanh lơ trong trẻo */
-  --card: rgba(255, 255, 255, 0.45); /* Thẻ kính mờ trong suốt */
-  --soft: rgba(255, 255, 255, 0.6);
-  --soft-2: rgba(255, 255, 255, 0.8);
-  --text: #1a293b; /* Xanh Navy cực tối */
+  --bg: #f4f7fb; 
+  --card: rgba(255, 255, 255, 0.65); /* Kính mờ sáng */
+  --soft: rgba(255, 255, 255, 0.8);
+  --soft-2: rgba(255, 255, 255, 0.95);
+  --text: #0f172a; /* Xanh navy tối - Cực kỳ sang trọng */
   --muted: #64748b;
-  --border: rgba(255, 255, 255, 0.9); /* Viền trắng hắt sáng */
-  --border-strong: rgba(255, 255, 255, 1);
+  --border: rgba(15, 23, 42, 0.06);
+  --border-strong: rgba(15, 23, 42, 0.12);
   --primary: #1e293b;
-  --green: #059669;
-  --red: #e11d48;
+  --green: #059669; /* Xanh lá tài chính */
+  --red: #e11d48;   /* Đỏ cảnh báo */
   --yellow: #b45309;
-  --shadow: 0 18px 40px rgba(31, 38, 135, 0.1);
-  --shadow-soft: 0 8px 32px rgba(31, 38, 135, 0.05); /* Bóng đổ cực êm */
-  --skeleton: linear-gradient(90deg, rgba(255,255,255,0.2), rgba(255,255,255,0.5), rgba(255,255,255,0.2));
   
-  --tab-active-bg: rgba(255, 255, 255, 0.9);
-  --tab-active-border: rgba(255, 255, 255, 1);
-  --tab-active-shadow: 0 4px 12px rgba(31, 38, 135, 0.08);
+  --shadow-soft: 0 8px 32px rgba(31, 38, 135, 0.04);
+  --shadow-strong: 0 16px 48px rgba(31, 38, 135, 0.08);
+  
+  --skeleton: linear-gradient(90deg, rgba(15,23,42,0.03), rgba(15,23,42,0.08), rgba(15,23,42,0.03));
+  
+  --tab-active-bg: rgba(255, 255, 255, 0.95);
+  --tab-active-border: rgba(15, 23, 42, 0.08);
+  --tab-active-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
-/* --- DARK MODE: MIDNIGHT SLATE GLASSMORPHISM --- */
+/* --- BẢNG MÀU TỐI (DARK MODE) : MIDNIGHT SLATE --- */
 :root[data-theme='dark'] {
-  --bg: #0b1121; 
-  --card: rgba(17, 25, 40, 0.6);
+  --bg: #0b1121; /* Bầu trời đêm sâu thẳm */
+  --card: rgba(17, 25, 40, 0.65); /* Kính mờ tối */
   --soft: rgba(30, 41, 59, 0.7);
   --soft-2: rgba(51, 65, 85, 0.8);
   --text: #f8fafc;
   --muted: #94a3b8;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.2);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
   --primary: #f8fafc;
   --green: #10b981;
   --red: #f43f5e;
   --yellow: #f59e0b;
-  --shadow: 0 22px 48px rgba(0, 0, 0, 0.5);
+  
   --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.3);
+  --shadow-strong: 0 22px 48px rgba(0, 0, 0, 0.5);
+  
   --skeleton: linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.08), rgba(255,255,255,0.03));
 
-  --tab-active-bg: rgba(255, 255, 255, 0.15);
-  --tab-active-border: rgba(255, 255, 255, 0.25);
-  --tab-active-shadow: 0 0 15px rgba(255, 255, 255, 0.05);
+  --tab-active-bg: rgba(255, 255, 255, 0.12);
+  --tab-active-border: rgba(255, 255, 255, 0.2);
+  --tab-active-shadow: 0 0 16px rgba(255, 255, 255, 0.04);
 }
 
+/* --- LỚP TIỆN ÍCH FONT SỐ TÀI CHÍNH (MANROPE) --- */
+/* Mọi con số cần dùng class này để kích hoạt font Manrope */
+.num-premium, 
+.ab-price, 
+.ab-big-number, 
+.ab-mini-value, 
+.ab-commodity-value, 
+.ab-fuel-value,
+[class*="price"], 
+[class*="amount"],
+[class*="change"] {
+  font-family: var(--font-number) !important;
+  font-variant-numeric: tabular-nums; /* Định dạng số thẳng cột */
+  letter-spacing: -0.02em; /* Ép số đứng chặt chẽ hơn */
+}
+
+/* --- NỀN VÀ BỐ CỤC CHÍNH --- */
 .ab-page {
   min-height: 100vh;
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.6), transparent 40%), var(--bg);
+  /* Hiệu ứng ánh sáng chiếu từ trên xuống */
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 40%), var(--bg);
   color: var(--text);
   transition: background 0.3s ease, color 0.3s ease;
 }
 
 :root[data-theme='dark'] .ab-page {
-  background: radial-gradient(circle at top, rgba(59, 130, 246, 0.15), transparent 40%), linear-gradient(180deg, #0b1121 0%, #050811 100%);
+  background: radial-gradient(circle at top, rgba(59, 130, 246, 0.12), transparent 35%), var(--bg);
 }
 
 .ab-shell {
@@ -91,78 +125,95 @@ button, input, textarea { font: inherit; }
   gap: 16px;
 }
 
-/* THIẾT KẾ BO GÓC MẠNH (PILL & HEAVY ROUNDED) */
+/* Gọt khoảng trống mặc định của các thẻ heading */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* --- THẺ KÍNH MỜ (FROSTED GLASS CARD) --- */
 .ab-premium-card, .ab-card {
-  border-radius: 28px; /* Bo góc cực mạnh như bản thiết kế */
-  padding: 20px;
+  border-radius: 24px;
+  padding: clamp(14px, 4vw, 20px); /* Tự động co giãn theo màn hình */
   background: var(--card);
-  backdrop-filter: blur(24px); /* Tăng độ mờ kính */
+  backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-soft);
-}
-
-.ab-premium-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 100px; /* Pill shape */
-  background: transparent;
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
-}
-
-.ab-premium-tab.active {
-  background: var(--tab-active-bg);
-  color: var(--text);
-  border: 1px solid var(--tab-active-border);
-  box-shadow: var(--tab-active-shadow);
-  backdrop-filter: blur(10px);
-}
-
-/* NÚT BẤM & INPUT CHUẨN MOCKUP */
-.ab-btn-primary {
-  background: linear-gradient(135deg, #60a5fa, #3b82f6); /* Gradient xanh navy/blue sáng */
-  color: #ffffff;
-  border: none;
-  border-radius: 999px; /* Pill shape tuyệt đối */
-  padding: 12px 24px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.25);
+  position: relative;
+  overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+/* Hiệu ứng ánh sáng nội tại (Glow) */
+.ab-premium-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at top left, rgba(255,255,255,0.4), transparent 50%);
+  opacity: 0.5;
+}
+
+:root[data-theme='dark'] .ab-premium-card::before {
+  background: radial-gradient(circle at top left, rgba(255,255,255,0.06), transparent 50%);
+}
+
+/* --- NÚT BẤM & INPUT CHUẨN HIỆN ĐẠI --- */
+.ab-btn-primary {
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+  border-radius: 999px; /* Bo góc tuyệt đối (Pill shape) */
+  padding: 12px 24px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transition: transform 0.2s ease;
+}
+
 :root[data-theme='dark'] .ab-btn-primary {
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
 .ab-btn-primary:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
 .ab-input {
   background: var(--soft);
-  border: 1px solid var(--border);
-  border-radius: 999px; /* Pill shape cho input */
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
   padding: 12px 20px;
   color: var(--text);
   outline: none;
   font-weight: 500;
-  box-shadow: inset 0 2px 6px rgba(0,0,0,0.02);
+  transition: border-color 0.2s ease;
 }
 
 .ab-input:focus {
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.15);
+  border-color: var(--text);
 }
 
+/* --- LƯỚI & FLEX UTILITIES --- */
+.ab-row-between {
+  display: flex;
+  justify-content: space-between;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.align-start {
+  align-items: flex-start;
+}
+
+/* --- HIỆU ỨNG LOADING (SKELETON) --- */
 .ab-skeleton {
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--skeleton);
   background-size: 200% 100%;
   animation: abShimmer 1.5s linear infinite;
@@ -171,4 +222,15 @@ button, input, textarea { font: inherit; }
 @keyframes abShimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* --- THÔNG BÁO LỖI CHUYÊN NGHIỆP --- */
+.ab-error {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(225, 29, 72, 0.08);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(225, 29, 72, 0.15);
 }
