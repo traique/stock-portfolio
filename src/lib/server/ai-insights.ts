@@ -29,7 +29,7 @@ export type TechnicalSignal = {
   news: NewsHeadline[];
 };
 
-// ================= CORE UTILS =================
+// ================= UTILS =================
 
 function clamp(v: number, min: number, max: number) {
   return Math.min(max, Math.max(min, v));
@@ -44,7 +44,7 @@ function toNumberArray(input: unknown) {
   return input.map(Number).filter(v => Number.isFinite(v) && v > 0);
 }
 
-// ================= FETCH LAYER (PRODUCTION SAFE) =================
+// ================= FETCH WITH TIMEOUT =================
 
 async function fetchWithTimeout(
   url: string,
@@ -60,13 +60,12 @@ async function fetchWithTimeout(
       const res = await fetch(url, {
         ...options,
         signal: controller.signal,
+        cache: 'no-store',
       });
 
       clearTimeout(id);
 
       if (res.ok) return res;
-
-      // retry on server error
       if (res.status >= 500) continue;
 
       return null;
@@ -99,7 +98,7 @@ async function fetchHistory(symbol: string): Promise<PriceHistory> {
   };
 }
 
-// ================= MOMENTUM (UPGRADED) =================
+// ================= MOMENTUM =================
 
 function calcMomentumSlope(closes: number[], period = 10) {
   const slice = closes.slice(-period);
@@ -209,7 +208,6 @@ function calcSignals(
   const last = closes[closes.length - 1];
 
   const trend3mPct = ((last - first) / first) * 100;
-
   const momentumPct = calcMomentumSlope(closes, 10);
 
   const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
@@ -224,12 +222,9 @@ function calcSignals(
     returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length;
 
   const dailyVol = Math.sqrt(variance) * 100;
-
-  // scale to swing (5 ngày)
   const volatilityPct = dailyVol * Math.sqrt(5);
 
   const baseRisk = clamp(volatilityPct * 1.2, 3, 12);
-
   const newsBoost = clamp(newsImpact, -1, 1);
 
   let trendBoost = 1;
@@ -250,20 +245,16 @@ function calcSignals(
   };
 }
 
-// ================= MAIN =================
+// ================= NEWS FETCH =================
 
 async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
-  // production: có thể cache layer ngoài
+  const res = await fetchWithTimeout(
+    `https://news.google.com/rss/search?q=${symbol}%20chung%20khoan`
+  );
 
-  const [rss] = await Promise.all([
-    fetchWithTimeout(
-      `https://news.google.com/rss/search?q=${symbol}%20chung%20khoan`
-    ),
-  ]);
+  if (!res) return [];
 
-  if (!rss) return [];
-
-  const text = await rss.text();
+  const text = await res.text();
   const items = text.match(/<item>[\s\S]*?<\/item>/gi) || [];
 
   let news = items.slice(0, 10).map(item => ({
@@ -282,6 +273,8 @@ async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
     sentiment: sentimentScore(n.title),
   }));
 }
+
+// ================= MAIN =================
 
 export async function buildTechnicalSignals(
   symbols: string[]
@@ -309,4 +302,47 @@ export async function buildTechnicalSignals(
       };
     })
   );
+}
+
+// ================= AI CALL (RESTORED FIX) =================
+
+export async function callOpenRouterJson<T>(
+  apiKey: string | undefined,
+  model: string,
+  systemPrompt: string,
+  userPrompt: string,
+  fallback: T
+): Promise<T> {
+  if (!apiKey) return fallback;
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model || 'llama-3.3-70b-versatile',
+        temperature: 0.2,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+      cache: 'no-store',
+    });
+
+    if (!res.ok) return fallback;
+
+    const json = await res.json();
+    const text = json?.choices?.[0]?.message?.content;
+
+    if (!text) return fallback;
+
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
 }
