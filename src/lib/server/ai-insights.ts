@@ -6,11 +6,11 @@ type NewsHeadline = {
   title: string;
   source: string;
   pubDate: string;
+  url?: string;
   sentiment?: number;
 };
 
 export type DecisionAction = 'BUY' | 'HOLD' | 'SELL' | 'WATCH';
-
 export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type TechnicalSignal = {
@@ -18,18 +18,13 @@ export type TechnicalSignal = {
   currentPrice: number;
   trend3mPct: number;
   volatilityPct: number;
-
   momentumPct: number;
   momentum5dPct: number;
-
   volumeTrendPct: number;
-
   suggestedTp: number;
   suggestedSl: number;
-
   newsImpact: number;
   news: NewsHeadline[];
-
   action: DecisionAction;
   confidence: ConfidenceLevel;
   reason: string;
@@ -42,25 +37,128 @@ const clamp = (v: number, min: number, max: number) =>
 
 const roundPrice = (v: number) => Math.round(v / 10) * 10;
 
-// ================= FETCH =================
+function normalizeDate(input: string): number {
+  const t = new Date(input).getTime();
+  return isNaN(t) ? 0 : t;
+}
 
-async function fetchWithTimeout(
-  url: string,
-  timeoutMs = 5000
-): Promise<Response | null> {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeoutMs);
+function filterRecent(news: NewsHeadline[], days = 30) {
+  const cutoff = Date.now() - days * 86400000;
+  return news.filter(n => normalizeDate(n.pubDate) >= cutoff);
+}
 
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-    clearTimeout(id);
-    return res.ok ? res : null;
-  } catch {
-    return null;
+function dedupe(news: NewsHeadline[]) {
+  const map = new Map<string, NewsHeadline>();
+  for (const n of news) {
+    const key = n.title.toLowerCase();
+    if (!map.has(key)) map.set(key, n);
   }
+  return Array.from(map.values());
+}
+
+// ================= NEWS FILTER =================
+
+function isValidNews(title: string) {
+  const t = title.toLowerCase();
+  if (t.includes('cw')) return false;
+  if (t.includes('chứng quyền')) return false;
+  if (t.includes('cmw')) return false;
+  return true;
+}
+
+function isRelevant(symbol: string, title: string) {
+  return title.toLowerCase().includes(symbol.toLowerCase());
+}
+
+// ================= SENTIMENT =================
+
+function sentimentScore(title: string) {
+  const pos = ['tăng', 'lãi', 'mua', 'tích cực', 'kỷ lục'];
+  const neg = ['giảm', 'lỗ', 'bán', 'rủi ro', 'phạt'];
+
+  let score = 0;
+  for (const p of pos) if (title.includes(p)) score++;
+  for (const n of neg) if (title.includes(n)) score--;
+
+  return clamp(score / 3, -1, 1);
+}
+
+function calcNewsImpact(news: NewsHeadline[]) {
+  if (!news.length) return 0;
+  const avg =
+    news.reduce((s, n) => s + (n.sentiment || 0), 0) / news.length;
+  return avg * Math.log(news.length + 1);
+}
+
+// ================= FETCH NEWS =================
+
+async function fetchCafeF(symbol: string): Promise<NewsHeadline[]> {
+  try {
+    const res = await fetch(
+      `https://cafef.vn/tim-kiem.chn?keywords=${symbol}`,
+      { cache: 'no-store' }
+    );
+
+    const html = await res.text();
+
+    const items =
+      html.match(/<li class="tlitem">[\s\S]*?<\/li>/g) || [];
+
+    return items.slice(0, 10).map(item => ({
+      title: item.match(/title="([^"]+)"/)?.[1] || '',
+      source: 'CafeF',
+      pubDate: item.match(/class="time">([^<]+)</)?.[1] || '',
+      url: `https://cafef.vn${
+        item.match(/href="([^"]+)"/)?.[1] || ''
+      }`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchVietstock(symbol: string): Promise<NewsHeadline[]> {
+  try {
+    const res = await fetch(
+      `https://vietstock.vn/tim-kiem.htm?keyword=${symbol}`,
+      { cache: 'no-store' }
+    );
+
+    const html = await res.text();
+
+    const items =
+      html.match(/article-item[\s\S]*?<\/div>/g) || [];
+
+    return items.slice(0, 10).map(item => ({
+      title: item.match(/title="([^"]+)"/)?.[1] || '',
+      source: 'Vietstock',
+      pubDate: item.match(/time[^>]*>([^<]+)</)?.[1] || '',
+      url: `https://vietstock.vn${
+        item.match(/href="([^"]+)"/)?.[1] || ''
+      }`,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
+  const [cafef, vietstock] = await Promise.all([
+    fetchCafeF(symbol),
+    fetchVietstock(symbol),
+  ]);
+
+  let news = [...cafef, ...vietstock];
+
+  news = news.filter(n => isValidNews(n.title));
+  news = news.filter(n => isRelevant(symbol, n.title));
+  news = filterRecent(news, 30);
+  news = dedupe(news);
+
+  return news.map(n => ({
+    ...n,
+    sentiment: sentimentScore(n.title),
+  }));
 }
 
 // ================= HISTORY =================
@@ -68,11 +166,12 @@ async function fetchWithTimeout(
 async function fetchHistory(symbol: string) {
   const ticker = symbol === 'VNINDEX' ? '^VNINDEX' : `${symbol}.VN`;
 
-  const res = await fetchWithTimeout(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo`
+  const res = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo`,
+    { cache: 'no-store' }
   );
 
-  if (!res) return { close: [], volume: [] };
+  if (!res.ok) return { close: [], volume: [] };
 
   const json = await res.json();
   const q = json?.chart?.result?.[0]?.indicators?.quote?.[0] || {};
@@ -102,61 +201,6 @@ function calcMomentumSlope(closes: number[], period = 10) {
   }
 
   return den ? (num / den / yMean) * 100 : 0;
-}
-
-// ================= NEWS =================
-
-function isValidNews(title: string) {
-  const t = title.toLowerCase();
-  return !(
-    t.includes('cw ') ||
-    t.includes('cmw') ||
-    t.includes('chứng quyền')
-  );
-}
-
-function sentimentScore(title: string) {
-  const pos = ['tăng', 'lãi', 'mua', 'tích cực'];
-  const neg = ['giảm', 'lỗ', 'bán', 'rủi ro'];
-
-  let s = 0;
-  for (const p of pos) if (title.includes(p)) s++;
-  for (const n of neg) if (title.includes(n)) s--;
-
-  return clamp(s / 3, -1, 1);
-}
-
-function calcNewsImpact(news: NewsHeadline[]) {
-  if (!news.length) return 0;
-  const avg =
-    news.reduce((s, n) => s + (n.sentiment || 0), 0) / news.length;
-  return avg * Math.log(news.length + 1);
-}
-
-async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
-  const res = await fetchWithTimeout(
-    `https://news.google.com/rss/search?q=${symbol}%20chung%20khoan`
-  );
-
-  if (!res) return [];
-
-  const text = await res.text();
-  const items = text.match(/<item>[\s\S]*?<\/item>/gi) || [];
-
-  let news = items.slice(0, 10).map(item => ({
-    title:
-      item.match(/<title>(.*?)<\/title>/)?.[1]
-        ?.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1') || '',
-    source: 'Google',
-    pubDate: item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '',
-  }));
-
-  news = news.filter(n => isValidNews(n.title));
-
-  return news.map(n => ({
-    ...n,
-    sentiment: sentimentScore(n.title),
-  }));
 }
 
 // ================= SIGNAL =================
@@ -220,16 +264,10 @@ function calcSignals(history: any, price: number, newsImpact: number) {
   };
 }
 
-// ================= DECISION ENGINE =================
+// ================= DECISION =================
 
-function decideAction(
-  sig: Omit<TechnicalSignal, 'action' | 'confidence' | 'reason'>
-): {
-  action: DecisionAction;
-  confidence: ConfidenceLevel;
-  reason: string;
-} {
-  const { trend3mPct, momentumPct, volumeTrendPct, newsImpact } = sig;
+function decideAction(base: any) {
+  const { trend3mPct, momentumPct, volumeTrendPct, newsImpact } = base;
 
   let score = 0;
 
@@ -256,7 +294,7 @@ function decideAction(
   if (score <= -2)
     return { action: 'SELL', confidence: 'MEDIUM', reason: 'Weak trend' };
 
-  return { action: 'WATCH', confidence: 'LOW', reason: 'No clear signal' };
+  return { action: 'WATCH', confidence: 'LOW', reason: 'No signal' };
 }
 
 // ================= MAIN =================
@@ -291,46 +329,7 @@ export async function buildTechnicalSignals(
       return {
         ...base,
         ...decision,
-      };
+      } as TechnicalSignal;
     })
   );
-}
-
-// ================= AI =================
-
-export async function callOpenRouterJson<T>(
-  apiKey: string | undefined,
-  model: string,
-  systemPrompt: string,
-  userPrompt: string,
-  fallback: T
-): Promise<T> {
-  if (!apiKey) return fallback;
-
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: model || 'llama-3.3-70b-versatile',
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-      }),
-      cache: 'no-store',
-    });
-
-    if (!res.ok) return fallback;
-
-    const json = await res.json();
-    return JSON.parse(json?.choices?.[0]?.message?.content || '{}');
-  } catch {
-    return fallback;
-  }
-}
+     }
