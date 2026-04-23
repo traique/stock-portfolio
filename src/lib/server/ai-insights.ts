@@ -9,12 +9,7 @@ type NewsHeadline = {
   sentiment?: number;
 };
 
-type PriceHistory = {
-  close: number[];
-  high: number[];
-  low: number[];
-  volume: number[];
-};
+export type DecisionAction = 'BUY' | 'HOLD' | 'SELL' | 'WATCH';
 
 export type TechnicalSignal = {
   symbol: string;
@@ -22,17 +17,21 @@ export type TechnicalSignal = {
   trend3mPct: number;
   volatilityPct: number;
 
-  // NEW
   momentumPct: number;
-
-  // BACKWARD COMPAT (fix build lỗi)
   momentum5dPct: number;
 
   volumeTrendPct: number;
+
   suggestedTp: number;
   suggestedSl: number;
+
   newsImpact: number;
   news: NewsHeadline[];
+
+  // 🔥 NEW
+  action: DecisionAction;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  reason: string;
 };
 
 // ================= UTILS =================
@@ -45,64 +44,48 @@ function roundPrice(v: number) {
   return Math.round(v / 10) * 10;
 }
 
-function toNumberArray(input: unknown) {
-  if (!Array.isArray(input)) return [];
-  return input.map(Number).filter(v => Number.isFinite(v) && v > 0);
-}
-
 // ================= FETCH =================
 
 async function fetchWithTimeout(
   url: string,
-  timeoutMs = 5000,
-  retries = 2
+  timeoutMs = 5000
 ): Promise<Response | null> {
-  for (let i = 0; i <= retries; i++) {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
 
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        cache: 'no-store',
-      });
-
-      clearTimeout(id);
-
-      if (res.ok) return res;
-      if (res.status >= 500) continue;
-
-      return null;
-    } catch {
-      if (i === retries) return null;
-    }
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    clearTimeout(id);
+    return res.ok ? res : null;
+  } catch {
+    return null;
   }
-  return null;
 }
 
 // ================= HISTORY =================
 
-async function fetchHistory(symbol: string): Promise<PriceHistory> {
+async function fetchHistory(symbol: string) {
   const ticker = symbol === 'VNINDEX' ? '^VNINDEX' : `${symbol}.VN`;
 
   const res = await fetchWithTimeout(
     `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=3mo`
   );
 
-  if (!res) return { close: [], high: [], low: [], volume: [] };
+  if (!res) return { close: [], volume: [] };
 
   const json = await res.json();
   const quote = json?.chart?.result?.[0]?.indicators?.quote?.[0] || {};
 
   return {
-    close: toNumberArray(quote.close),
-    high: toNumberArray(quote.high),
-    low: toNumberArray(quote.low),
-    volume: toNumberArray(quote.volume),
+    close: (quote.close || []).filter((v: number) => v > 0),
+    volume: (quote.volume || []).filter((v: number) => v > 0),
   };
 }
 
-// ================= MOMENTUM (SLOPE) =================
+// ================= MOMENTUM =================
 
 function calcMomentumSlope(closes: number[], period = 10) {
   const slice = closes.slice(-period);
@@ -125,6 +108,14 @@ function calcMomentumSlope(closes: number[], period = 10) {
 
 // ================= NEWS =================
 
+function isValidNews(title: string) {
+  const t = title.toLowerCase();
+  if (t.includes('cw ')) return false;
+  if (t.includes('cmw')) return false;
+  if (t.includes('chứng quyền')) return false;
+  return true;
+}
+
 function sentimentScore(title: string) {
   const pos = ['tăng', 'lãi', 'mua', 'tích cực'];
   const neg = ['giảm', 'lỗ', 'bán', 'rủi ro'];
@@ -136,123 +127,14 @@ function sentimentScore(title: string) {
   return clamp(score / 3, -1, 1);
 }
 
-function normalizeDate(s: string) {
-  const t = new Date(s).getTime();
-  return isNaN(t) ? 0 : t;
-}
-
-function filterRecent(news: NewsHeadline[], days = 30) {
-  const cutoff = Date.now() - days * 86400000;
-  return news.filter(n => normalizeDate(n.pubDate) >= cutoff);
-}
-
-function dedupe(news: NewsHeadline[]) {
-  const map = new Map<string, NewsHeadline>();
-  for (const n of news) {
-    const key = n.title.toLowerCase();
-    if (!map.has(key)) map.set(key, n);
-  }
-  return Array.from(map.values());
-}
-
-function extractKeyword(title: string) {
-  const keys = ['lợi nhuận', 'lỗ', 'nợ', 'trái phiếu', 'dự án'];
-  return keys.find(k => title.includes(k)) || 'other';
-}
-
 function calcNewsImpact(news: NewsHeadline[]) {
-  const clusters: Record<string, NewsHeadline[]> = {};
+  if (!news.length) return 0;
 
-  for (const n of news) {
-    const key = extractKeyword(n.title);
-    if (!clusters[key]) clusters[key] = [];
-    clusters[key].push(n);
-  }
+  const sentiment =
+    news.reduce((s, n) => s + (n.sentiment || 0), 0) / news.length;
 
-  let total = 0;
-
-  for (const group of Object.values(clusters)) {
-    const sentiment =
-      group.reduce((s, n) => s + (n.sentiment || 0), 0) / group.length;
-
-    const recency =
-      group.reduce((s, n) => {
-        const d = (Date.now() - normalizeDate(n.pubDate)) / 86400000;
-        return s + Math.max(0, 1 - d / 30);
-      }, 0) / group.length;
-
-    total += sentiment * recency * Math.log(group.length + 1);
-  }
-
-  return total;
+  return sentiment * Math.log(news.length + 1);
 }
-
-// ================= SIGNAL =================
-
-function calcSignals(
-  history: PriceHistory,
-  price: number,
-  newsImpact: number
-) {
-  const closes = history.close;
-  const volumes = history.volume;
-
-  if (!closes.length) {
-    return {
-      trend3mPct: 0,
-      volatilityPct: 2,
-      momentumPct: 0,
-      momentum5dPct: 0,
-      volumeTrendPct: 0,
-      suggestedTp: roundPrice(price * 1.08),
-      suggestedSl: roundPrice(price * 0.95),
-    };
-  }
-
-  const first = closes[0];
-  const last = closes[closes.length - 1];
-
-  const trend3mPct = ((last - first) / first) * 100;
-
-  const momentumPct = calcMomentumSlope(closes, 10);
-
-  const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
-  const recentVol = volumes.slice(-5).reduce((a, b) => a + b, 0) / 5;
-
-  const volumeTrendPct = ((recentVol - avgVol) / avgVol) * 100;
-
-  const returns = closes.slice(1).map((c, i) => (c - closes[i]) / closes[i]);
-  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-
-  const variance =
-    returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length;
-
-  const dailyVol = Math.sqrt(variance) * 100;
-  const volatilityPct = dailyVol * Math.sqrt(5);
-
-  const baseRisk = clamp(volatilityPct * 1.2, 3, 12);
-  const newsBoost = clamp(newsImpact, -1, 1);
-
-  let trendBoost = 1;
-  if (trend3mPct > 10) trendBoost = 1.2;
-  if (trend3mPct < -10) trendBoost = 0.8;
-
-  return {
-    trend3mPct,
-    volatilityPct,
-    momentumPct,
-    momentum5dPct: momentumPct, // 🔥 FIX COMPAT
-    volumeTrendPct,
-    suggestedTp: roundPrice(
-      price * (1 + baseRisk * trendBoost * (2 + newsBoost) / 100)
-    ),
-    suggestedSl: roundPrice(
-      price * (1 - baseRisk * (1.2 - newsBoost * 0.5) / 100)
-    ),
-  };
-}
-
-// ================= NEWS FETCH =================
 
 async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
   const res = await fetchWithTimeout(
@@ -272,13 +154,101 @@ async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
     pubDate: item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '',
   }));
 
-  news = filterRecent(news, 30);
-  news = dedupe(news);
+  news = news.filter(n => isValidNews(n.title));
 
   return news.map(n => ({
     ...n,
     sentiment: sentimentScore(n.title),
   }));
+}
+
+// ================= SIGNAL =================
+
+function calcSignals(history: any, price: number, newsImpact: number) {
+  const closes = history.close;
+  const volumes = history.volume;
+
+  if (!closes.length) {
+    return {
+      trend3mPct: 0,
+      volatilityPct: 2,
+      momentumPct: 0,
+      momentum5dPct: 0,
+      volumeTrendPct: 0,
+      suggestedTp: roundPrice(price * 1.05),
+      suggestedSl: roundPrice(price * 0.97),
+    };
+  }
+
+  const first = closes[0];
+  const last = closes[closes.length - 1];
+
+  const trend3mPct = ((last - first) / first) * 100;
+  const momentumPct = calcMomentumSlope(closes);
+
+  const avgVol = volumes.reduce((a: number, b: number) => a + b, 0) / volumes.length;
+  const recentVol = volumes.slice(-5).reduce((a: number, b: number) => a + b, 0) / 5;
+
+  const volumeTrendPct = ((recentVol - avgVol) / avgVol) * 100;
+
+  const returns = closes.slice(1).map((c: number, i: number) => (c - closes[i]) / closes[i]);
+  const variance =
+    returns.reduce((a: number, b: number) => a + b * b, 0) / returns.length;
+
+  const volatilityPct = Math.sqrt(variance) * 100 * Math.sqrt(5);
+
+  const risk = clamp(volatilityPct, 3, 8);
+  const newsBoost = clamp(newsImpact, -1, 1);
+
+  let tp = price * (1 + (risk * (1.5 + newsBoost * 0.5)) / 100);
+  let sl = price * (1 - risk / 100);
+
+  if (trend3mPct < 0) {
+    tp = price * (1 + risk / 100);
+  }
+
+  return {
+    trend3mPct,
+    volatilityPct,
+    momentumPct,
+    momentum5dPct: momentumPct,
+    volumeTrendPct,
+    suggestedTp: roundPrice(tp),
+    suggestedSl: roundPrice(sl),
+  };
+}
+
+// ================= DECISION ENGINE =================
+
+function decideAction(sig: TechnicalSignal) {
+  const { trend3mPct, momentumPct, volumeTrendPct, newsImpact } = sig;
+
+  let score = 0;
+
+  if (trend3mPct > 5) score += 2;
+  if (trend3mPct < -5) score -= 2;
+
+  if (momentumPct > 0) score += 2;
+  if (momentumPct < 0) score -= 2;
+
+  if (volumeTrendPct > 10) score += 1;
+
+  if (newsImpact > 0.5) score += 1;
+  if (newsImpact < -0.5) score -= 1;
+
+  if (score >= 4)
+    return { action: 'BUY', confidence: 'HIGH', reason: 'Strong trend + momentum + volume' };
+
+  if (score >= 2)
+    return { action: 'BUY', confidence: 'MEDIUM', reason: 'Uptrend forming' };
+
+  if (score <= -4)
+    return { action: 'SELL', confidence: 'HIGH', reason: 'Downtrend confirmed' };
+
+  if (score <= -2)
+    return { action: 'REDUCE', confidence: 'MEDIUM', reason: 'Weak trend' };
+
+  return { action: 'WATCH', confidence: 'LOW', reason: 'No clear signal' };
 }
 
 // ================= MAIN =================
@@ -300,18 +270,25 @@ export async function buildTechnicalSignals(
       const newsImpact = calcNewsImpact(news);
       const stats = calcSignals(history, price, newsImpact);
 
-      return {
+      const base = {
         symbol,
         currentPrice: price,
         ...stats,
         newsImpact,
         news,
       };
+
+      const decision = decideAction(base as TechnicalSignal);
+
+      return {
+        ...base,
+        ...decision,
+      };
     })
   );
 }
 
-// ================= AI CALL =================
+// ================= AI =================
 
 export async function callOpenRouterJson<T>(
   apiKey: string | undefined,
@@ -344,12 +321,8 @@ export async function callOpenRouterJson<T>(
     if (!res.ok) return fallback;
 
     const json = await res.json();
-    const text = json?.choices?.[0]?.message?.content;
-
-    if (!text) return fallback;
-
-    return JSON.parse(text);
+    return JSON.parse(json?.choices?.[0]?.message?.content || '{}');
   } catch {
     return fallback;
   }
-      }
+                          }
