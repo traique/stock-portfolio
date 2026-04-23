@@ -11,6 +11,8 @@ type NewsHeadline = {
 
 export type DecisionAction = 'BUY' | 'HOLD' | 'SELL' | 'WATCH';
 
+export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+
 export type TechnicalSignal = {
   symbol: string;
   currentPrice: number;
@@ -28,21 +30,17 @@ export type TechnicalSignal = {
   newsImpact: number;
   news: NewsHeadline[];
 
-  // 🔥 NEW
   action: DecisionAction;
-  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  confidence: ConfidenceLevel;
   reason: string;
 };
 
 // ================= UTILS =================
 
-function clamp(v: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, v));
-}
+const clamp = (v: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, v));
 
-function roundPrice(v: number) {
-  return Math.round(v / 10) * 10;
-}
+const roundPrice = (v: number) => Math.round(v / 10) * 10;
 
 // ================= FETCH =================
 
@@ -77,29 +75,29 @@ async function fetchHistory(symbol: string) {
   if (!res) return { close: [], volume: [] };
 
   const json = await res.json();
-  const quote = json?.chart?.result?.[0]?.indicators?.quote?.[0] || {};
+  const q = json?.chart?.result?.[0]?.indicators?.quote?.[0] || {};
 
   return {
-    close: (quote.close || []).filter((v: number) => v > 0),
-    volume: (quote.volume || []).filter((v: number) => v > 0),
+    close: (q.close || []).filter((v: number) => v > 0),
+    volume: (q.volume || []).filter((v: number) => v > 0),
   };
 }
 
 // ================= MOMENTUM =================
 
 function calcMomentumSlope(closes: number[], period = 10) {
-  const slice = closes.slice(-period);
-  const n = slice.length;
+  const s = closes.slice(-period);
+  const n = s.length;
   if (n < 2) return 0;
 
   const xMean = (n - 1) / 2;
-  const yMean = slice.reduce((a, b) => a + b, 0) / n;
+  const yMean = s.reduce((a, b) => a + b, 0) / n;
 
   let num = 0;
   let den = 0;
 
   for (let i = 0; i < n; i++) {
-    num += (i - xMean) * (slice[i] - yMean);
+    num += (i - xMean) * (s[i] - yMean);
     den += (i - xMean) ** 2;
   }
 
@@ -110,30 +108,29 @@ function calcMomentumSlope(closes: number[], period = 10) {
 
 function isValidNews(title: string) {
   const t = title.toLowerCase();
-  if (t.includes('cw ')) return false;
-  if (t.includes('cmw')) return false;
-  if (t.includes('chứng quyền')) return false;
-  return true;
+  return !(
+    t.includes('cw ') ||
+    t.includes('cmw') ||
+    t.includes('chứng quyền')
+  );
 }
 
 function sentimentScore(title: string) {
   const pos = ['tăng', 'lãi', 'mua', 'tích cực'];
   const neg = ['giảm', 'lỗ', 'bán', 'rủi ro'];
 
-  let score = 0;
-  for (const p of pos) if (title.includes(p)) score++;
-  for (const n of neg) if (title.includes(n)) score--;
+  let s = 0;
+  for (const p of pos) if (title.includes(p)) s++;
+  for (const n of neg) if (title.includes(n)) s--;
 
-  return clamp(score / 3, -1, 1);
+  return clamp(s / 3, -1, 1);
 }
 
 function calcNewsImpact(news: NewsHeadline[]) {
   if (!news.length) return 0;
-
-  const sentiment =
+  const avg =
     news.reduce((s, n) => s + (n.sentiment || 0), 0) / news.length;
-
-  return sentiment * Math.log(news.length + 1);
+  return avg * Math.log(news.length + 1);
 }
 
 async function fetchAllNews(symbol: string): Promise<NewsHeadline[]> {
@@ -186,14 +183,21 @@ function calcSignals(history: any, price: number, newsImpact: number) {
   const trend3mPct = ((last - first) / first) * 100;
   const momentumPct = calcMomentumSlope(closes);
 
-  const avgVol = volumes.reduce((a: number, b: number) => a + b, 0) / volumes.length;
-  const recentVol = volumes.slice(-5).reduce((a: number, b: number) => a + b, 0) / 5;
+  const avgVol =
+    volumes.reduce((a: number, b: number) => a + b, 0) / volumes.length;
+
+  const recentVol =
+    volumes.slice(-5).reduce((a: number, b: number) => a + b, 0) / 5;
 
   const volumeTrendPct = ((recentVol - avgVol) / avgVol) * 100;
 
-  const returns = closes.slice(1).map((c: number, i: number) => (c - closes[i]) / closes[i]);
+  const returns = closes.slice(1).map(
+    (c: number, i: number) => (c - closes[i]) / closes[i]
+  );
+
   const variance =
-    returns.reduce((a: number, b: number) => a + b * b, 0) / returns.length;
+    returns.reduce((a: number, b: number) => a + b * b, 0) /
+    returns.length;
 
   const volatilityPct = Math.sqrt(variance) * 100 * Math.sqrt(5);
 
@@ -203,9 +207,7 @@ function calcSignals(history: any, price: number, newsImpact: number) {
   let tp = price * (1 + (risk * (1.5 + newsBoost * 0.5)) / 100);
   let sl = price * (1 - risk / 100);
 
-  if (trend3mPct < 0) {
-    tp = price * (1 + risk / 100);
-  }
+  if (trend3mPct < 0) tp = price * (1 + risk / 100);
 
   return {
     trend3mPct,
@@ -220,7 +222,13 @@ function calcSignals(history: any, price: number, newsImpact: number) {
 
 // ================= DECISION ENGINE =================
 
-function decideAction(sig: TechnicalSignal) {
+function decideAction(
+  sig: Omit<TechnicalSignal, 'action' | 'confidence' | 'reason'>
+): {
+  action: DecisionAction;
+  confidence: ConfidenceLevel;
+  reason: string;
+} {
   const { trend3mPct, momentumPct, volumeTrendPct, newsImpact } = sig;
 
   let score = 0;
@@ -237,16 +245,16 @@ function decideAction(sig: TechnicalSignal) {
   if (newsImpact < -0.5) score -= 1;
 
   if (score >= 4)
-    return { action: 'BUY', confidence: 'HIGH', reason: 'Strong trend + momentum + volume' };
+    return { action: 'BUY', confidence: 'HIGH', reason: 'Strong uptrend' };
 
   if (score >= 2)
     return { action: 'BUY', confidence: 'MEDIUM', reason: 'Uptrend forming' };
 
   if (score <= -4)
-    return { action: 'SELL', confidence: 'HIGH', reason: 'Downtrend confirmed' };
+    return { action: 'SELL', confidence: 'HIGH', reason: 'Downtrend' };
 
   if (score <= -2)
-    return { action: 'REDUCE', confidence: 'MEDIUM', reason: 'Weak trend' };
+    return { action: 'SELL', confidence: 'MEDIUM', reason: 'Weak trend' };
 
   return { action: 'WATCH', confidence: 'LOW', reason: 'No clear signal' };
 }
@@ -278,7 +286,7 @@ export async function buildTechnicalSignals(
         news,
       };
 
-      const decision = decideAction(base as TechnicalSignal);
+      const decision = decideAction(base);
 
       return {
         ...base,
@@ -325,4 +333,4 @@ export async function callOpenRouterJson<T>(
   } catch {
     return fallback;
   }
-                          }
+}
