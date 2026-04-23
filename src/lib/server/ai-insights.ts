@@ -21,7 +21,13 @@ export type TechnicalSignal = {
   currentPrice: number;
   trend3mPct: number;
   volatilityPct: number;
+
+  // NEW
   momentumPct: number;
+
+  // BACKWARD COMPAT (fix build lỗi)
+  momentum5dPct: number;
+
   volumeTrendPct: number;
   suggestedTp: number;
   suggestedSl: number;
@@ -44,11 +50,10 @@ function toNumberArray(input: unknown) {
   return input.map(Number).filter(v => Number.isFinite(v) && v > 0);
 }
 
-// ================= FETCH WITH TIMEOUT =================
+// ================= FETCH =================
 
 async function fetchWithTimeout(
   url: string,
-  options: RequestInit = {},
   timeoutMs = 5000,
   retries = 2
 ): Promise<Response | null> {
@@ -58,7 +63,6 @@ async function fetchWithTimeout(
 
     try {
       const res = await fetch(url, {
-        ...options,
         signal: controller.signal,
         cache: 'no-store',
       });
@@ -98,7 +102,7 @@ async function fetchHistory(symbol: string): Promise<PriceHistory> {
   };
 }
 
-// ================= MOMENTUM =================
+// ================= MOMENTUM (SLOPE) =================
 
 function calcMomentumSlope(closes: number[], period = 10) {
   const slice = closes.slice(-period);
@@ -198,6 +202,7 @@ function calcSignals(
       trend3mPct: 0,
       volatilityPct: 2,
       momentumPct: 0,
+      momentum5dPct: 0,
       volumeTrendPct: 0,
       suggestedTp: roundPrice(price * 1.08),
       suggestedSl: roundPrice(price * 0.95),
@@ -208,6 +213,7 @@ function calcSignals(
   const last = closes[closes.length - 1];
 
   const trend3mPct = ((last - first) / first) * 100;
+
   const momentumPct = calcMomentumSlope(closes, 10);
 
   const avgVol = volumes.reduce((a, b) => a + b, 0) / volumes.length;
@@ -235,6 +241,7 @@ function calcSignals(
     trend3mPct,
     volatilityPct,
     momentumPct,
+    momentum5dPct: momentumPct, // 🔥 FIX COMPAT
     volumeTrendPct,
     suggestedTp: roundPrice(
       price * (1 + baseRisk * trendBoost * (2 + newsBoost) / 100)
@@ -304,7 +311,7 @@ export async function buildTechnicalSignals(
   );
 }
 
-// ================= AI CALL (RESTORED FIX) =================
+// ================= AI CALL =================
 
 export async function callOpenRouterJson<T>(
   apiKey: string | undefined,
@@ -345,4 +352,4 @@ export async function callOpenRouterJson<T>(
   } catch {
     return fallback;
   }
-}
+      }
