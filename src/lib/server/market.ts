@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import TradingView from '@mathieuc/tradingview';
+
+// ⚠️ KHÔNG import trực tiếp để tránh crash SSR
+let TradingViewModule: any = null;
 
 // ================= TYPES =================
 
@@ -43,9 +45,47 @@ const RETRY = 1;
 
 const YAHOO_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
-// ================= CLIENT =================
+// ================= SAFE CLIENT =================
 
-const tvClient = new TradingView();
+let tvClient: any = null;
+let tvInitTried = false;
+
+function getTvClient(): any | null {
+  if (tvInitTried) return tvClient;
+  tvInitTried = true;
+
+  try {
+    TradingViewModule = require('@mathieuc/tradingview');
+
+    const mod = TradingViewModule?.default || TradingViewModule;
+
+    if (typeof mod === 'function') {
+      tvClient = new mod();
+      return tvClient;
+    }
+
+    if (typeof mod?.TradingView === 'function') {
+      tvClient = new mod.TradingView();
+      return tvClient;
+    }
+
+    if (typeof mod?.Client === 'function') {
+      tvClient = new mod.Client();
+      return tvClient;
+    }
+
+    if (typeof mod?.getBar === 'function') {
+      tvClient = mod;
+      return tvClient;
+    }
+
+    console.warn('[TV] Unknown module shape');
+    return null;
+  } catch (e) {
+    console.warn('[TV] init failed:', e);
+    return null;
+  }
+}
 
 // ================= UTILS =================
 
@@ -106,6 +146,8 @@ async function fetchWithTimeout(url: string, init?: RequestInit) {
       signal: controller.signal,
       cache: 'no-store',
     });
+  } catch (e) {
+    throw new Error('Fetch timeout or network error');
   } finally {
     clearTimeout(id);
   }
@@ -129,32 +171,35 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
 // ================= TRADINGVIEW =================
 
 async function fetchFromTradingView(symbol: string): Promise<MarketResult> {
-  const tvSymbol = getTvSymbol(symbol);
+  const client = getTvClient();
+  if (!client) throw new Error('TV unavailable');
 
-  const bar = await retry(() => tvClient.getBar(tvSymbol, 'D'));
+  const fn = client.getBar || client.getBars;
+  if (typeof fn !== 'function') throw new Error('TV method missing');
 
-  const price = safeNumber(bar?.close);
-  const prev = safeNumber(bar?.open);
+  const bar = await retry(() => fn.call(client, getTvSymbol(symbol), 'D'));
 
-  if (!price) throw new Error('TV no price');
+  const price = safeNumber(bar?.close ?? bar?.c);
+  const prev = safeNumber(bar?.open ?? bar?.o);
+
+  if (!price) throw new Error('TV invalid price');
 
   const change = price - prev;
-  const pct = prev ? (change / prev) * 100 : 0;
 
   return {
     symbol,
-    ticker: tvSymbol,
+    ticker: getTvSymbol(symbol),
     price,
     change,
-    pct,
+    pct: prev ? (change / prev) * 100 : 0,
     previousClose: prev,
     ceilingPriceEstimate: estimateCeiling(prev || price),
     floorPriceEstimate: estimateFloor(prev || price),
-    dayHigh: safeNumber(bar?.high),
-    dayLow: safeNumber(bar?.low),
+    dayHigh: safeNumber(bar?.high ?? bar?.h),
+    dayLow: safeNumber(bar?.low ?? bar?.l),
     marketTime: bar?.time ? bar.time * 1000 : null,
     currency: 'VND',
-    volume: safeNumber(bar?.volume),
+    volume: safeNumber(bar?.volume ?? bar?.v),
     provider: 'tradingview',
   };
 }
@@ -184,7 +229,7 @@ async function fetchFromYahoo(symbol: string): Promise<MarketResult> {
       const price = safeNumber(meta.regularMarketPrice);
       const prev = safeNumber(meta.previousClose);
 
-      if (!price || !prev) throw new Error('Invalid data');
+      if (!price || !prev) throw new Error('Invalid Yahoo data');
 
       const change = price - prev;
 
@@ -246,8 +291,17 @@ async function fetchOne(symbol: string): Promise<MarketResult> {
 
 export async function fetchMarketPrices(
   symbols: string[],
-  _withCacheBust?: boolean // giữ tương thích với code cũ
+  _withCacheBust?: boolean
 ): Promise<PricesPayload> {
+  if (!symbols || symbols.length === 0) {
+    return {
+      prices: {},
+      updatedAt: new Date().toISOString(),
+      provider: 'yahoo',
+      debug: [],
+    };
+  }
+
   const results = await Promise.all(symbols.map(fetchOne));
 
   const prices = Object.fromEntries(
@@ -271,4 +325,4 @@ export async function fetchMarketPrices(
     provider,
     debug: results,
   };
-        }
+    }
