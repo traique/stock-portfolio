@@ -22,13 +22,13 @@ export type MarketResult = {
   currency: string;
   volume: number;
   error?: string;
-  provider?: 'tradingview' | 'yahoo';
+  provider: 'tradingview' | 'yahoo';
 };
 
 export type PricesPayload = {
   prices: Record<string, number>;
   updatedAt: string;
-  provider: string;        // 'tradingview' hoặc 'yahoo' hoặc 'mixed'
+  provider: 'tradingview' | 'yahoo' | 'mixed';
   debug: MarketResult[];
   cached?: boolean;
 };
@@ -38,12 +38,13 @@ export type PricesPayload = {
 const CEILING_MULTIPLIER = 1.07;
 const FLOOR_MULTIPLIER   = 0.93;
 
-// TradingView client (public, không cần login cho giá cơ bản)
+// TradingView client
 const tvClient = new TradingView();
 
-// Yahoo constants (giữ nguyên logic cũ của bạn)
+// Yahoo constants
 const YAHOO_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
 // ================= UTILS =================
 
@@ -64,7 +65,7 @@ function isVnIndexSymbol(symbol: string): boolean {
 
 function getTvSymbol(symbol: string): string {
   if (isVnIndexSymbol(symbol)) return 'HOSE:VNINDEX';
-  return symbol;                    // VNM, VCB, SSI... hoạt động tốt
+  return symbol; // VNM, VCB, SSI... hoạt động trực tiếp
 }
 
 function getYahooCandidates(symbol: string): string[] {
@@ -91,7 +92,7 @@ function estimateFloor(previousClose: number): number {
   return roundPrice(previousClose * FLOOR_MULTIPLIER);
 }
 
-function buildErrorResult(symbol: string, error: unknown, provider: string): MarketResult {
+function buildErrorResult(symbol: string, error: unknown, provider: 'tradingview' | 'yahoo'): MarketResult {
   return {
     symbol,
     ticker: provider === 'tradingview' ? getTvSymbol(symbol) : (isVnIndexSymbol(symbol) ? '^VNINDEX' : `${symbol}.VN`),
@@ -107,11 +108,11 @@ function buildErrorResult(symbol: string, error: unknown, provider: string): Mar
     currency: 'VND',
     volume: 0,
     error: error instanceof Error ? error.message : 'Unknown error',
-    provider: provider as 'tradingview' | 'yahoo',
+    provider,
   };
 }
 
-// ================= FETCH TRADINGVIEW =================
+// ================= FETCH FROM TRADINGVIEW =================
 
 async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
   const tvSymbol = getTvSymbol(baseSymbol);
@@ -120,9 +121,11 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
     const bar = await tvClient.getBar(tvSymbol, 'D');
 
     const price = safeNumber(bar.close);
-    const previousClose = safeNumber(bar.open);   // tạm dùng open của nến hiện tại
+    const previousClose = safeNumber(bar.open); // tạm dùng open của nến hiện tại
 
-    if (!price) throw new Error(`No close price from TradingView for ${tvSymbol}`);
+    if (price === 0) {
+      throw new Error(`No valid close price from TradingView for ${tvSymbol}`);
+    }
 
     const change = price - previousClose;
     const pct = previousClose > 0 ? (change / previousClose) * 100 : 0;
@@ -145,11 +148,11 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
     };
   } catch (error) {
     console.warn(`[TradingView failed] \( {baseSymbol} ( \){tvSymbol}):`, error);
-    throw error;   // throw để fallback sang Yahoo
+    throw error; // Throw để fallback sang Yahoo
   }
 }
 
-// ================= FETCH YAHOO (giữ nguyên logic cũ của bạn) =================
+// ================= FETCH FROM YAHOO =================
 
 async function fetchYahooTicker(baseSymbol: string, ticker: string): Promise<MarketResult> {
   const qs = `?interval=1m&range=1d&_=${Date.now()}`;
@@ -160,17 +163,23 @@ async function fetchYahooTicker(baseSymbol: string, ticker: string): Promise<Mar
     cache: 'no-store',
   });
 
-  if (!response.ok) throw new Error(`Yahoo HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`Yahoo HTTP ${response.status} for ${ticker}`);
+  }
 
   const data = await response.json();
   const meta = data?.chart?.result?.[0]?.meta;
 
-  if (!meta) throw new Error(`Yahoo empty meta for ${ticker}`);
+  if (!meta) {
+    throw new Error(`Yahoo returned empty meta for ${ticker}`);
+  }
 
   const price = safeNumber(meta.regularMarketPrice);
   const previousClose = safeNumber(meta.previousClose);
 
-  if (!price || !previousClose) throw new Error(`Missing data for ${ticker}`);
+  if (price === 0 || previousClose === 0) {
+    throw new Error(`Missing market data for ${ticker}`);
+  }
 
   const change = price - previousClose;
   const pct = (change / previousClose) * 100;
@@ -207,7 +216,7 @@ async function fetchFromYahoo(baseSymbol: string): Promise<MarketResult> {
   throw lastError;
 }
 
-// ================= MAIN FUNCTION (ƯU TIÊN TV → YAHOO) =================
+// ================= MAIN PUBLIC API =================
 
 export async function fetchMarketPrices(
   symbols: string[],
@@ -223,7 +232,7 @@ export async function fetchMarketPrices(
         try {
           return await fetchFromYahoo(symbol);
         } catch (yahooError) {
-          console.error(`[Both failed] ${symbol}:`, { tvError, yahooError });
+          console.error(`[Both sources failed] ${symbol}:`, { tvError, yahooError });
           return buildErrorResult(symbol, yahooError || tvError, 'yahoo');
         }
       }
@@ -232,6 +241,7 @@ export async function fetchMarketPrices(
 
   const results: MarketResult[] = settled.map((r, i) => {
     if (r.status === 'fulfilled') return r.value;
+    console.error(`[fetchMarketPrices] ${symbols[i]} failed:`, r.reason);
     return buildErrorResult(symbols[i], r.reason, 'yahoo');
   });
 
@@ -242,10 +252,13 @@ export async function fetchMarketPrices(
   );
 
   // Xác định provider tổng thể
-  const usedProviders = new Set(results.map(r => r.provider).filter(Boolean));
-  const finalProvider = usedProviders.size === 1 
-    ? Array.from(usedProviders)[0] 
-    : 'mixed';
+  const usedProviders = new Set(results.map(r => r.provider));
+  const finalProvider: 'tradingview' | 'yahoo' | 'mixed' =
+    usedProviders.size === 1
+      ? Array.from(usedProviders)[0]
+      : usedProviders.size === 0
+        ? 'yahoo'
+        : 'mixed';
 
   return {
     prices,
@@ -253,4 +266,4 @@ export async function fetchMarketPrices(
     provider: finalProvider,
     debug: results,
   } satisfies PricesPayload;
-}
+  }
