@@ -53,6 +53,11 @@ type PortfolioContextItem = {
   news: TechnicalSignal['news'];
 };
 
+// Payload gửi AI — news đã trim còn title + sentiment để tránh 413
+type PortfolioAiPayloadItem = Omit<PortfolioContextItem, 'news'> & {
+  news: { title: string; sentiment: number }[];
+};
+
 // ================= CONSTANTS =================
 
 const PORTFOLIO_AI_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -132,12 +137,18 @@ function buildPortfolioContext(
         action:         sig?.action         ?? 'WATCH',
         confidence:     sig?.confidence     ?? 'LOW',
       },
-      // Trim news để tránh 413 — giữ title + sentiment đủ để AI đọc
-      news: (sig?.news ?? [])
-        .slice(0, AI_MAX_NEWS_PER_SYMBOL)
-        .map(n => ({ title: n.title, sentiment: n.sentiment ?? 0 })),
+      news: sig?.news ?? [],
     };
   });
+}
+
+function trimPayloadForAI(context: PortfolioContextItem[]): PortfolioAiPayloadItem[] {
+  return context.map(item => ({
+    ...item,
+    news: item.news
+      .slice(0, AI_MAX_NEWS_PER_SYMBOL)
+      .map(n => ({ title: n.title, sentiment: n.sentiment ?? 0 })),
+  }));
 }
 
 function buildBaseActions(context: PortfolioContextItem[]): AiAction[] {
@@ -307,7 +318,7 @@ export async function POST(request: NextRequest) {
         apiKey,
         aiModel,
         buildSystemPrompt(parsed.data.risk_profile),
-        JSON.stringify(portfolioContext),
+        JSON.stringify(trimPayloadForAI(portfolioContext)),
         fallback,
       )
     : fallback;
@@ -323,4 +334,4 @@ export async function POST(request: NextRequest) {
   setAiCache(cacheKey, finalResponse, PORTFOLIO_AI_CACHE_TTL_MS);
 
   return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS) });
-        }
+                                      }
