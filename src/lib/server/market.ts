@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import TradingView from '@mathieuc/tradingview';
+import * as TradingViewModule from '@mathieuc/tradingview';   // Import tất cả để debug dễ
 
 // ================= TYPES =================
 
@@ -38,15 +38,31 @@ export type PricesPayload = {
 const CEILING_MULTIPLIER = 1.07;
 const FLOOR_MULTIPLIER   = 0.93;
 
-// TradingView client
-const tvClient = new TradingView();
+// Khởi tạo TradingView client một cách an toàn (fix lỗi "not a constructor")
+const tvClient = (() => {
+  // Cách 1: Default export là constructor
+  if (typeof TradingViewModule.default === 'function') {
+    return new (TradingViewModule.default as any)();
+  }
+  // Cách 2: Named export TradingView
+  if (typeof (TradingViewModule as any).TradingView === 'function') {
+    return new (TradingViewModule as any).TradingView();
+  }
+  // Cách 3: Default là object có method (một số version)
+  if (TradingViewModule.default && typeof TradingViewModule.default.getBar === 'function') {
+    return TradingViewModule.default;
+  }
+  // Fallback
+  console.warn('[TradingView] Using raw module as client');
+  return TradingViewModule.default || TradingViewModule;
+})();
 
 // Yahoo constants
 const YAHOO_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
-// ================= UTILS =================
+// ================= UTILS (giữ nguyên) =================
 
 export function normalizeSymbols(raw: string): string[] {
   return [
@@ -65,7 +81,7 @@ function isVnIndexSymbol(symbol: string): boolean {
 
 function getTvSymbol(symbol: string): string {
   if (isVnIndexSymbol(symbol)) return 'HOSE:VNINDEX';
-  return symbol; // VNM, VCB, SSI... hoạt động trực tiếp
+  return symbol;
 }
 
 function getYahooCandidates(symbol: string): string[] {
@@ -118,10 +134,11 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
   const tvSymbol = getTvSymbol(baseSymbol);
 
   try {
+    // Gọi getBar an toàn
     const bar = await tvClient.getBar(tvSymbol, 'D');
 
-    const price = safeNumber(bar.close);
-    const previousClose = safeNumber(bar.open); // tạm dùng open của nến hiện tại
+    const price = safeNumber(bar?.close);
+    const previousClose = safeNumber(bar?.open);
 
     if (price === 0) {
       throw new Error(`No valid close price from TradingView for ${tvSymbol}`);
@@ -139,20 +156,20 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
       previousClose,
       ceilingPriceEstimate: estimateCeiling(previousClose || price),
       floorPriceEstimate: estimateFloor(previousClose || price),
-      dayHigh: safeNumber(bar.high),
-      dayLow: safeNumber(bar.low),
-      marketTime: bar.time ? bar.time * 1000 : null,
+      dayHigh: safeNumber(bar?.high),
+      dayLow: safeNumber(bar?.low),
+      marketTime: bar?.time ? bar.time * 1000 : null,
       currency: 'VND',
-      volume: safeNumber(bar.volume),
+      volume: safeNumber(bar?.volume),
       provider: 'tradingview',
     };
   } catch (error) {
     console.warn(`[TradingView failed] \( {baseSymbol} ( \){tvSymbol}):`, error);
-    throw error; // Throw để fallback sang Yahoo
+    throw error;
   }
 }
 
-// ================= FETCH FROM YAHOO =================
+// ================= FETCH FROM YAHOO (giữ nguyên) =================
 
 async function fetchYahooTicker(baseSymbol: string, ticker: string): Promise<MarketResult> {
   const qs = `?interval=1m&range=1d&_=${Date.now()}`;
@@ -163,23 +180,17 @@ async function fetchYahooTicker(baseSymbol: string, ticker: string): Promise<Mar
     cache: 'no-store',
   });
 
-  if (!response.ok) {
-    throw new Error(`Yahoo HTTP ${response.status} for ${ticker}`);
-  }
+  if (!response.ok) throw new Error(`Yahoo HTTP ${response.status} for ${ticker}`);
 
   const data = await response.json();
   const meta = data?.chart?.result?.[0]?.meta;
 
-  if (!meta) {
-    throw new Error(`Yahoo returned empty meta for ${ticker}`);
-  }
+  if (!meta) throw new Error(`Yahoo empty meta for ${ticker}`);
 
   const price = safeNumber(meta.regularMarketPrice);
   const previousClose = safeNumber(meta.previousClose);
 
-  if (price === 0 || previousClose === 0) {
-    throw new Error(`Missing market data for ${ticker}`);
-  }
+  if (price === 0 || previousClose === 0) throw new Error(`Missing data for ${ticker}`);
 
   const change = price - previousClose;
   const pct = (change / previousClose) * 100;
@@ -225,10 +236,8 @@ export async function fetchMarketPrices(
   const settled = await Promise.allSettled(
     symbols.map(async (symbol) => {
       try {
-        // Ưu tiên TradingView trước
         return await fetchFromTradingView(symbol);
       } catch (tvError) {
-        // Nếu TradingView lỗi → fallback sang Yahoo
         try {
           return await fetchFromYahoo(symbol);
         } catch (yahooError) {
@@ -251,7 +260,6 @@ export async function fetchMarketPrices(
       .map(item => [item.symbol, item.price]),
   );
 
-  // Xác định provider tổng thể
   const usedProviders = new Set(results.map(r => r.provider));
   const finalProvider: 'tradingview' | 'yahoo' | 'mixed' =
     usedProviders.size === 1
@@ -266,4 +274,4 @@ export async function fetchMarketPrices(
     provider: finalProvider,
     debug: results,
   } satisfies PricesPayload;
-  }
+                                                                              }
