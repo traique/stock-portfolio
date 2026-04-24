@@ -49,18 +49,13 @@ type WatchlistContextItem = {
 // ================= CONSTANTS =================
 
 const WATCHLIST_AI_CACHE_TTL_MS = 10 * 60 * 1000;
-const CACHE_VERSION = 'v4'; // bumped — TechnicalSignal shape changed
-const MAX_SYMBOLS = 60;
-const SCORE_BASE = 50;
-const AVOID_THRESHOLD = 45;
-const TOP_PICKS = 5;
-
-// Groq có giới hạn ~6000 token cho user message.
-// Với 60 symbols + news, payload dễ vượt → 413.
-// Chỉ gửi top N candidates (score cao nhất) để AI xét picks,
-// phần còn lại xử lý bằng fallback score.
-const AI_MAX_CANDIDATES = 20;
-const AI_MAX_NEWS_PER_SYMBOL = 3; // trim news để giảm size
+const CACHE_VERSION              = 'v5';
+const MAX_SYMBOLS                = 60;
+const SCORE_BASE                 = 50;
+const AVOID_THRESHOLD            = 45;
+const TOP_PICKS                  = 5;
+const AI_MAX_CANDIDATES          = 20;
+const AI_MAX_NEWS_PER_SYMBOL     = 3;
 
 // ================= HELPERS =================
 
@@ -70,12 +65,13 @@ function buildWatchlistCacheKey(riskProfile: string, symbols: string[]): string 
 
 function scoreSignal(s: TechnicalSignal): number {
   const trendScore    = Math.max(-20, Math.min(20, s.trend3mPct));
-  const momentumScore = Math.max(-15, Math.min(15, s.momentumPct * 1.5)); // was momentum5dPct
+  const momentumScore = Math.max(-15, Math.min(15, s.momentumPct * 1.5));
   const volumeScore   = Math.max(-15, Math.min(15, s.volumeTrendPct * 0.5));
   const newsScore     = s.news.length > 0 ? 5 : 0;
+  const volPenalty    = s.volatilityPct * 0.5;
 
   return Number(
-    (SCORE_BASE + trendScore + momentumScore + volumeScore + newsScore - s.volatilityPct * 0.5).toFixed(2),
+    (SCORE_BASE + trendScore + momentumScore + volumeScore + newsScore - volPenalty).toFixed(2),
   );
 }
 
@@ -86,9 +82,9 @@ function buildWatchlistContext(signals: TechnicalSignal[]): WatchlistContextItem
       currentPrice: s.currentPrice,
       score:        scoreSignal(s),
       technical: {
-        trend3mPct:    s.trend3mPct,
-        momentumPct:   s.momentumPct, // was momentum5dPct
-        volatilityPct: s.volatilityPct,
+        trend3mPct:     s.trend3mPct,
+        momentumPct:    s.momentumPct,
+        volatilityPct:  s.volatilityPct,
         volumeTrendPct: s.volumeTrendPct,
       },
       news:        s.news,
@@ -104,7 +100,7 @@ function buildFallback(context: WatchlistContextItem[]): WatchlistScanResponse {
     picks: context.slice(0, TOP_PICKS).map(s => ({
       symbol: s.symbol,
       score:  s.score,
-      reason: `Dòng tiền: ${s.technical.volumeTrendPct > 0 ? 'Vào' : 'Cạn'}`,
+      reason: `Score: ${s.score} | Trend: ${s.technical.trend3mPct.toFixed(1)}% | Dòng tiền: ${s.technical.volumeTrendPct > 0 ? 'Vào' : 'Cạn'}`,
       entry:  s.currentPrice,
       tp:     s.suggestedTp,
       sl:     s.suggestedSl,
@@ -115,9 +111,8 @@ function buildFallback(context: WatchlistContextItem[]): WatchlistScanResponse {
 
 /**
  * Trim payload trước khi gửi Groq để tránh 413.
- * - Chỉ giữ top AI_MAX_CANDIDATES theo score
- * - Mỗi symbol chỉ giữ AI_MAX_NEWS_PER_SYMBOL tin, và chỉ giữ title + sentiment
- * - Bỏ các field thừa không cần cho AI (suggestedTp/Sl đã có trong technical)
+ * Chỉ giữ top AI_MAX_CANDIDATES, trim news còn title + sentiment.
+ * newsContext trả về client vẫn là full data.
  */
 function trimPayloadForAI(context: WatchlistContextItem[]) {
   return context.slice(0, AI_MAX_CANDIDATES).map(s => ({
@@ -127,7 +122,6 @@ function trimPayloadForAI(context: WatchlistContextItem[]) {
     technical:    s.technical,
     suggestedTp:  s.suggestedTp,
     suggestedSl:  s.suggestedSl,
-    // Chỉ giữ title và sentiment — bỏ source/pubDate/url để giảm size
     news: s.news.slice(0, AI_MAX_NEWS_PER_SYMBOL).map(n => ({
       title:     n.title,
       sentiment: n.sentiment ?? 0,
@@ -135,35 +129,77 @@ function trimPayloadForAI(context: WatchlistContextItem[]) {
   }));
 }
 
+// ================= PROMPT =================
+
 function buildSystemPrompt(riskProfile: RiskProfile): string {
-  return `Bạn là Giám đốc Tự doanh & Chuyên gia VSA (Volume Spread Analysis) tại TTCK Việt Nam.
-Khách hàng nhờ lọc Watchlist tìm ĐIỂM MUA MỚI. Khẩu vị rủi ro: ${riskProfile}.
+  const entryGuide: Record<RiskProfile, string> = {
+    conservative: 'Chỉ chọn mã có score > 55, volatility thấp (<8%), và tin tức tích cực rõ ràng. Tối đa 3 picks.',
+    balanced:     'Chọn mã có score > 50, cân bằng momentum và vol. Tối đa 5 picks.',
+    aggressive:   'Có thể chọn mã score > 45 nếu momentum đang bùng nổ mạnh. Tối đa 7 picks.',
+  };
 
-NHIỆM VỤ QUAN TRỌNG NHẤT:
-1. Phân tích điểm mua dựa trên sự kết hợp giữa "volumeTrendPct" (Dòng tiền), "news" (Tin tức) và "currentPrice".
-2. Dấu hiệu MUA (Picks): Có tin Tích cực + Volume nổ mạnh (Cá mập gom hàng), hoặc giá chỉnh nhưng cạn cung chờ tin.
-3. Dấu hiệu BỎ (Avoid): Có tin Tích cực nhưng Volume suy kiệt (Kéo xả/Bull-trap), hoặc có tin Xấu + Nổ Vol (Bán tháo).
-4. Lệnh Mua (entry) sát "currentPrice". Cắt lỗ (sl) BẮT BUỘC THẤP HƠN "entry". Chốt lời (tp) BẮT BUỘC CAO HƠN "entry".
+  return `Bạn là chuyên gia quét cơ hội chứng khoán Việt Nam, chuyên VSA (Volume Spread Analysis) và đọc vị dòng tiền.
+Nhiệm vụ: Từ danh sách watchlist, lọc ra những mã ĐÁNG MUA ngay bây giờ và những mã cần TRÁNH.
 
-VĂN PHONG VÀ CÁCH PHÂN TÍCH:
-- Lý do (reason) BẮT BUỘC phải nhắc đến Tin tức đang ảnh hưởng kết hợp với trạng thái Volume.
-  (VD: "Tin đồn chia cổ tức hỗ trợ đà tăng, nổ vol gom hàng...")
-- Dùng từ ngữ thực chiến: Cạn cung, test đáy, nổ vol, bùng nổ theo đà, rũ bỏ, gãy nền, kéo xả, tin ra để bán.
+KHẨU VỊ RỦI RO: ${riskProfile.toUpperCase()}
+${entryGuide[riskProfile]}
 
-YÊU CẦU TRẢ VỀ JSON DUY NHẤT:
+=== DỮ LIỆU MỖI MÃ ===
+- symbol, currentPrice: mã và giá hiện tại
+- score: điểm kỹ thuật tổng hợp (0-100, cao hơn = tốt hơn)
+- suggestedTp / suggestedSl: vùng TP/SL tính từ currentPrice theo volatility
+- technical.trend3mPct: xu hướng 3 tháng (%)
+- technical.momentumPct: tốc độ thay đổi giá (dương = đang tăng tốc)
+- technical.volumeTrendPct: so sánh vol 5 phiên vs TB (dương = dòng tiền vào)
+- technical.volatilityPct: độ biến động — càng cao càng rủi ro
+- news[]: tin tức gần đây với sentiment (-1 đến +1)
+
+=== FRAMEWORK PHÂN TÍCH ===
+
+PHASE IDENTIFICATION — Xác định pha thị trường của từng mã:
+• ACCUMULATION (Tích lũy): giá đi ngang hoặc nhích tăng + vol thấp dần → chuẩn bị bùng nổ
+• MARKUP (Tăng tốc): trend dương + momentum dương + vol tăng → đang trong sóng tăng
+• DISTRIBUTION (Phân phối): giá cao + vol nổ nhưng giá không tăng thêm → cá mập đang xả
+• MARKDOWN (Giảm): trend âm + momentum âm → tránh
+
+ĐIỂM MUA TỐT (PICKS) — Cần hội tụ ít nhất 3 trong 5 tiêu chí:
+1. Score > ngưỡng theo risk profile
+2. volumeTrendPct > 10% (dòng tiền đang vào)
+3. momentumPct > 0 (đà tăng chưa tắt)
+4. Tin tức sentiment >= 0 hoặc tin xấu nhưng vol không xác nhận (cạn cung)
+5. Pha ACCUMULATION hoặc MARKUP, không phải DISTRIBUTION
+
+DẤU HIỆU TRÁNH (AVOID):
+• Pha DISTRIBUTION: vol nổ + giá không tăng
+• Bull trap: tin tích cực + vol cạn (< -20%)
+• Momentum âm mạnh (< -3%) kéo dài
+• Tin xấu + vol bùng nổ (bán tháo chưa xong)
+• volatilityPct > 15% với risk profile conservative
+
+SO SÁNH TƯƠNG ĐỐI:
+• Xếp hạng các mã có score gần nhau — ưu tiên mã vol xác nhận hơn mã vol cạn
+• Nếu toàn bộ watchlist đều yếu → nói thẳng, chỉ picks mã tốt nhất tương đối, không ép đủ số lượng
+
+=== ĐỊNH DẠNG REASON ===
+Cấu trúc: [Pha thị trường] → [Tín hiệu vol/momentum] → [Tin tức] → [Điểm vào]
+Ví dụ tốt: "Pha tích lũy 3 tuần, vol 5 phiên tăng 35% vs TB — dấu hiệu cá mập đang gom. Tin kết quả kinh doanh Q1 tích cực, vol xác nhận. Entry vùng hiện tại, SL dưới đáy tích lũy."
+Không viết: "Cổ phiếu có tiềm năng tăng trưởng tốt."
+
+=== OUTPUT JSON ===
+Trả về DUY NHẤT một JSON hợp lệ, không có text ngoài JSON:
 {
-  "summary": "Nhận định chung về sự luân chuyển dòng tiền và tâm lý tin tức trong Watchlist này...",
+  "summary": "Nhận định tổng thể dòng tiền: bao nhiêu mã đang tích lũy, bao nhiêu phân phối, thị trường đang ở giai đoạn nào. Nếu ít cơ hội thì nói thẳng.",
   "picks": [
     {
-      "symbol": "Mã CP",
-      "score": <Điểm số sức mạnh 0-100>,
-      "reason": "Lý do VSA + Tin tức",
-      "entry": <Vùng giá mua kỳ vọng>,
-      "tp": <Giá chốt lời>,
-      "sl": <Giá cắt lỗ>
+      "symbol": "string",
+      "score": number,
+      "reason": "Phân tích theo framework pha + vol + tin tức",
+      "entry": number,
+      "tp": number,
+      "sl": number
     }
   ],
-  "avoid": ["Mã 1", "Mã 2"]
+  "avoid": ["HPG (phân phối, vol xả mạnh)", "VIC (momentum âm, tin xấu chưa hấp thụ)"]
 }`;
 }
 
@@ -174,27 +210,22 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) return validationErrorResponse(parsed.error);
 
-  const symbols = [...new Set(parsed.data.symbols)].slice(0, MAX_SYMBOLS).sort();
+  const symbols  = [...new Set(parsed.data.symbols)].slice(0, MAX_SYMBOLS).sort();
   const cacheKey = buildWatchlistCacheKey(parsed.data.risk_profile, symbols);
 
   if (!parsed.data.force_refresh) {
     const cached = getAiCache<WatchlistScanResponse>(cacheKey);
     if (cached) {
-      return NextResponse.json({
-        ...cached,
-        ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS),
-      });
+      return NextResponse.json({ ...cached, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
     }
   }
 
-  const signals = await buildTechnicalSignals(symbols);
+  const signals          = await buildTechnicalSignals(symbols);
   const watchlistContext = buildWatchlistContext(signals);
-  const fallback = buildFallback(watchlistContext);
+  const fallback         = buildFallback(watchlistContext);
 
-  const apiKey = envServer.OPENROUTER_API_KEY;
-  const aiModel = envServer.OPENROUTER_MODEL || 'llama-3.3-70b-versatile';
-
-  // Trim payload trước khi gửi AI để tránh 413
+  const apiKey    = envServer.OPENROUTER_API_KEY;
+  const aiModel   = envServer.OPENROUTER_MODEL || 'llama-3.3-70b-versatile';
   const aiPayload = trimPayloadForAI(watchlistContext);
 
   const aiResponse = apiKey
@@ -209,6 +240,7 @@ export async function POST(request: NextRequest) {
 
   const finalResponse: WatchlistScanResponse = {
     ...aiResponse,
+    // newsContext = full news cho UI, không trim
     newsContext: Object.fromEntries(
       watchlistContext.map(s => [s.symbol, s.news]),
     ),
@@ -216,8 +248,5 @@ export async function POST(request: NextRequest) {
 
   setAiCache(cacheKey, finalResponse, WATCHLIST_AI_CACHE_TTL_MS);
 
-  return NextResponse.json({
-    ...finalResponse,
-    ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS),
-  });
-}
+  return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
+    }
