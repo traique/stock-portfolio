@@ -1,5 +1,6 @@
 import { z } from 'zod';
-// @ts-expect-error - Thư viện không có types chính thức, chúng ta xử lý runtime
+
+// @ts-expect-error - Thư viện @mathieuc/tradingview không có types chính thức
 import * as TradingViewModule from '@mathieuc/tradingview';
 
 // ================= TYPES =================
@@ -43,16 +44,16 @@ const FLOOR_MULTIPLIER   = 0.93;
 const tvClient = (() => {
   console.log('[TradingView] Initializing client...');
 
-  // Cách 1: Default export là class/constructor
+  // Cách 1: Default export là constructor
   if (typeof (TradingViewModule as any).default === 'function') {
     try {
       return new (TradingViewModule as any).default();
     } catch (e) {
-      console.warn('[TradingView] new default() failed, trying alternatives');
+      console.warn('[TradingView] new default() failed');
     }
   }
 
-  // Cách 2: Named export TradingView hoặc Client
+  // Cách 2: Named export
   if (typeof (TradingViewModule as any).TradingView === 'function') {
     return new (TradingViewModule as any).TradingView();
   }
@@ -60,13 +61,13 @@ const tvClient = (() => {
     return new (TradingViewModule as any).Client();
   }
 
-  // Cách 3: Default export là object đã có sẵn method (phổ biến ở một số version)
+  // Cách 3: Default export là object có sẵn method
   if (TradingViewModule.default && typeof (TradingViewModule.default as any).getBar === 'function') {
     console.log('[TradingView] Using default export as client object');
     return TradingViewModule.default;
   }
 
-  // Fallback cuối cùng
+  // Fallback
   console.warn('[TradingView] Using raw module as client');
   return TradingViewModule.default || TradingViewModule;
 })();
@@ -147,10 +148,9 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
   const tvSymbol = getTvSymbol(baseSymbol);
 
   try {
-    // Gọi getBar an toàn
     const getBarFn = (tvClient as any).getBar || (tvClient as any).getBars;
     if (typeof getBarFn !== 'function') {
-      throw new Error('getBar method not found on TradingView client');
+      throw new Error(`getBar method not found on TradingView client for ${tvSymbol}`);
     }
 
     const bar = await getBarFn.call(tvClient, tvSymbol, 'D');
@@ -159,7 +159,7 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
     const previousClose = safeNumber(bar?.open ?? bar?.o);
 
     if (price === 0) {
-      throw new Error(`No valid price from TradingView for ${tvSymbol}`);
+      throw new Error(`No valid price returned from TradingView for ${tvSymbol}`);
     }
 
     const change = price - previousClose;
@@ -187,7 +187,7 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
   }
 }
 
-// ================= FETCH FROM YAHOO (giữ nguyên) =================
+// ================= FETCH FROM YAHOO =================
 
 async function fetchYahooTicker(baseSymbol: string, ticker: string): Promise<MarketResult> {
   const qs = `?interval=1m&range=1d&_=${Date.now()}`;
@@ -292,4 +292,4 @@ export async function fetchMarketPrices(
     provider: finalProvider,
     debug: results,
   } satisfies PricesPayload;
-}
+    }
