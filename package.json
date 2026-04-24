@@ -1,0 +1,30 @@
+{
+  "name": "stock-portfolio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "update:tv": "npm install github:Mathieu2301/TradingView-API"
+  },
+  "dependencies": {
+    "@mathieuc/tradingview": "latest",
+    "@supabase/supabase-js": "^2.57.4",
+    "cheerio": "^1.0.0",
+    "lucide-react": "^0.542.0",
+    "lunar-javascript": "^1.7.4",
+    "next": "15.5.15",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "yahoo-finance2": "3.14.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "typescript": "^5.8.3"
+  }
+}
