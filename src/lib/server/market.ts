@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import * as TradingViewModule from '@mathieuc/tradingview';   // Import tất cả để debug dễ
+// @ts-expect-error - Thư viện không có types chính thức, chúng ta xử lý runtime
+import * as TradingViewModule from '@mathieuc/tradingview';
 
 // ================= TYPES =================
 
@@ -38,31 +39,43 @@ export type PricesPayload = {
 const CEILING_MULTIPLIER = 1.07;
 const FLOOR_MULTIPLIER   = 0.93;
 
-// Khởi tạo TradingView client một cách an toàn (fix lỗi "not a constructor")
+// ================= KHỞI TẠO TRADINGVIEW CLIENT AN TOÀN =================
 const tvClient = (() => {
-  // Cách 1: Default export là constructor
-  if (typeof TradingViewModule.default === 'function') {
-    return new (TradingViewModule.default as any)();
+  console.log('[TradingView] Initializing client...');
+
+  // Cách 1: Default export là class/constructor
+  if (typeof (TradingViewModule as any).default === 'function') {
+    try {
+      return new (TradingViewModule as any).default();
+    } catch (e) {
+      console.warn('[TradingView] new default() failed, trying alternatives');
+    }
   }
-  // Cách 2: Named export TradingView
+
+  // Cách 2: Named export TradingView hoặc Client
   if (typeof (TradingViewModule as any).TradingView === 'function') {
     return new (TradingViewModule as any).TradingView();
   }
-  // Cách 3: Default là object có method (một số version)
-  if (TradingViewModule.default && typeof TradingViewModule.default.getBar === 'function') {
+  if (typeof (TradingViewModule as any).Client === 'function') {
+    return new (TradingViewModule as any).Client();
+  }
+
+  // Cách 3: Default export là object đã có sẵn method (phổ biến ở một số version)
+  if (TradingViewModule.default && typeof (TradingViewModule.default as any).getBar === 'function') {
+    console.log('[TradingView] Using default export as client object');
     return TradingViewModule.default;
   }
-  // Fallback
+
+  // Fallback cuối cùng
   console.warn('[TradingView] Using raw module as client');
   return TradingViewModule.default || TradingViewModule;
 })();
 
 // Yahoo constants
 const YAHOO_BASE_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
-// ================= UTILS (giữ nguyên) =================
+// ================= UTILS =================
 
 export function normalizeSymbols(raw: string): string[] {
   return [
@@ -135,13 +148,18 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
 
   try {
     // Gọi getBar an toàn
-    const bar = await tvClient.getBar(tvSymbol, 'D');
+    const getBarFn = (tvClient as any).getBar || (tvClient as any).getBars;
+    if (typeof getBarFn !== 'function') {
+      throw new Error('getBar method not found on TradingView client');
+    }
 
-    const price = safeNumber(bar?.close);
-    const previousClose = safeNumber(bar?.open);
+    const bar = await getBarFn.call(tvClient, tvSymbol, 'D');
+
+    const price = safeNumber(bar?.close ?? bar?.c);
+    const previousClose = safeNumber(bar?.open ?? bar?.o);
 
     if (price === 0) {
-      throw new Error(`No valid close price from TradingView for ${tvSymbol}`);
+      throw new Error(`No valid price from TradingView for ${tvSymbol}`);
     }
 
     const change = price - previousClose;
@@ -156,11 +174,11 @@ async function fetchFromTradingView(baseSymbol: string): Promise<MarketResult> {
       previousClose,
       ceilingPriceEstimate: estimateCeiling(previousClose || price),
       floorPriceEstimate: estimateFloor(previousClose || price),
-      dayHigh: safeNumber(bar?.high),
-      dayLow: safeNumber(bar?.low),
-      marketTime: bar?.time ? bar.time * 1000 : null,
+      dayHigh: safeNumber(bar?.high ?? bar?.h),
+      dayLow: safeNumber(bar?.low ?? bar?.l),
+      marketTime: bar?.time ? Number(bar.time) * 1000 : null,
       currency: 'VND',
-      volume: safeNumber(bar?.volume),
+      volume: safeNumber(bar?.volume ?? bar?.v),
       provider: 'tradingview',
     };
   } catch (error) {
@@ -274,4 +292,4 @@ export async function fetchMarketPrices(
     provider: finalProvider,
     debug: results,
   } satisfies PricesPayload;
-                                                                              }
+}
