@@ -245,12 +245,15 @@ async function fetchOne(symbol: string): Promise<MarketResult> {
 // ================= PUBLIC =================
 
 export async function fetchMarketPrices(
-  symbols: string[]
+  symbols: string[],
+  _withCacheBust?: boolean // giữ tương thích với code cũ
 ): Promise<PricesPayload> {
   const results = await Promise.all(symbols.map(fetchOne));
 
   const prices = Object.fromEntries(
-    results.filter((r) => r.price > 0).map((r) => [r.symbol, r.price])
+    results
+      .filter((r) => r.price > 0)
+      .map((r) => [r.symbol, r.price])
   );
 
   const providers = new Set(results.map((r) => r.provider));
@@ -268,4 +271,4 @@ export async function fetchMarketPrices(
     provider,
     debug: results,
   };
-          }
+        }
