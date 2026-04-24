@@ -1,7 +1,5 @@
 import { z } from 'zod';
-
-// fallback require để tránh TS issues
-const TradingViewModule: any = require('@mathieuc/tradingview');
+import TradingView from '@mathieuc/tradingview';
 
 // ================= TYPES =================
 
@@ -43,29 +41,28 @@ const FLOOR_MULTIPLIER = 0.93;
 const TIMEOUT = 4000;
 const RETRY = 1;
 
+const YAHOO_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
+
 // ================= CLIENT =================
 
-const tvClient = (() => {
-  try {
-    if (typeof TradingViewModule === 'function') {
-      return new TradingViewModule();
-    }
-    if (TradingViewModule?.default) {
-      return new TradingViewModule.default();
-    }
-    if (TradingViewModule?.Client) {
-      return new TradingViewModule.Client();
-    }
-  } catch {}
-
-  return TradingViewModule;
-})();
+const tvClient = new TradingView();
 
 // ================= UTILS =================
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+export function normalizeSymbols(raw?: string): string[] {
+  if (!raw) return [];
 
-function safeNumber(v: any): number {
+  return [
+    ...new Set(
+      raw
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+    ),
+  ];
+}
+
+function safeNumber(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
@@ -82,10 +79,6 @@ function estimateFloor(p: number) {
   return roundPrice(p * FLOOR_MULTIPLIER);
 }
 
-function normalizeSymbols(raw: string): string[] {
-  return [...new Set(raw.split(',').map(s => s.trim().toUpperCase()).filter(Boolean))];
-}
-
 function isVNIndex(symbol: string) {
   return symbol === 'VNINDEX' || symbol === '^VNINDEX';
 }
@@ -99,39 +92,49 @@ function getYahooCandidates(symbol: string) {
   return [`${symbol}.VN`];
 }
 
-function timeoutFetch(url: string, options: RequestInit) {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ================= NETWORK =================
+
+async function fetchWithTimeout(url: string, init?: RequestInit) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), TIMEOUT);
 
-  return fetch(url, { ...options, signal: controller.signal })
-    .finally(() => clearTimeout(id));
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+  } finally {
+    clearTimeout(id);
+  }
 }
 
 async function retry<T>(fn: () => Promise<T>): Promise<T> {
-  let lastErr: any;
+  let lastErr: unknown;
+
   for (let i = 0; i <= RETRY; i++) {
     try {
       return await fn();
     } catch (e) {
       lastErr = e;
-      await sleep(150);
+      if (i < RETRY) await sleep(150);
     }
   }
+
   throw lastErr;
 }
 
 // ================= TRADINGVIEW =================
 
-async function fetchTV(symbol: string): Promise<MarketResult> {
+async function fetchFromTradingView(symbol: string): Promise<MarketResult> {
   const tvSymbol = getTvSymbol(symbol);
 
-  const fn = tvClient?.getBar || tvClient?.getBars;
-  if (!fn) throw new Error('TV getBar missing');
+  const bar = await retry(() => tvClient.getBar(tvSymbol, 'D'));
 
-  const bar = await retry(() => fn.call(tvClient, tvSymbol, 'D'));
-
-  const price = safeNumber(bar?.close ?? bar?.c);
-  const prev = safeNumber(bar?.open ?? bar?.o);
+  const price = safeNumber(bar?.close);
+  const prev = safeNumber(bar?.open);
 
   if (!price) throw new Error('TV no price');
 
@@ -147,30 +150,27 @@ async function fetchTV(symbol: string): Promise<MarketResult> {
     previousClose: prev,
     ceilingPriceEstimate: estimateCeiling(prev || price),
     floorPriceEstimate: estimateFloor(prev || price),
-    dayHigh: safeNumber(bar?.high ?? bar?.h),
-    dayLow: safeNumber(bar?.low ?? bar?.l),
+    dayHigh: safeNumber(bar?.high),
+    dayLow: safeNumber(bar?.low),
     marketTime: bar?.time ? bar.time * 1000 : null,
     currency: 'VND',
-    volume: safeNumber(bar?.volume ?? bar?.v),
+    volume: safeNumber(bar?.volume),
     provider: 'tradingview',
   };
 }
 
 // ================= YAHOO =================
 
-const YAHOO = 'https://query1.finance.yahoo.com/v8/finance/chart';
-
-async function fetchYahoo(symbol: string): Promise<MarketResult> {
-  let lastErr: any;
+async function fetchFromYahoo(symbol: string): Promise<MarketResult> {
+  let lastErr: unknown;
 
   for (const ticker of getYahooCandidates(symbol)) {
     try {
-      const url = `${YAHOO}/${encodeURIComponent(ticker)}?interval=1m&range=1d`;
+      const url = `${YAHOO_URL}/${encodeURIComponent(ticker)}?interval=1m&range=1d`;
 
       const res = await retry(() =>
-        timeoutFetch(url, {
+        fetchWithTimeout(url, {
           headers: { 'User-Agent': 'Mozilla/5.0' },
-          cache: 'no-store',
         })
       );
 
@@ -179,12 +179,12 @@ async function fetchYahoo(symbol: string): Promise<MarketResult> {
       const data = await res.json();
       const meta = data?.chart?.result?.[0]?.meta;
 
-      if (!meta) throw new Error('no meta');
+      if (!meta) throw new Error('No meta');
 
       const price = safeNumber(meta.regularMarketPrice);
       const prev = safeNumber(meta.previousClose);
 
-      if (!price || !prev) throw new Error('invalid data');
+      if (!price || !prev) throw new Error('Invalid data');
 
       const change = price - prev;
 
@@ -216,8 +216,8 @@ async function fetchYahoo(symbol: string): Promise<MarketResult> {
 
 async function fetchOne(symbol: string): Promise<MarketResult> {
   const [tv, yahoo] = await Promise.allSettled([
-    fetchTV(symbol),
-    fetchYahoo(symbol),
+    fetchFromTradingView(symbol),
+    fetchFromYahoo(symbol),
   ]);
 
   if (tv.status === 'fulfilled') return tv.value;
@@ -244,14 +244,16 @@ async function fetchOne(symbol: string): Promise<MarketResult> {
 
 // ================= PUBLIC =================
 
-export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayload> {
+export async function fetchMarketPrices(
+  symbols: string[]
+): Promise<PricesPayload> {
   const results = await Promise.all(symbols.map(fetchOne));
 
   const prices = Object.fromEntries(
-    results.filter(r => r.price > 0).map(r => [r.symbol, r.price])
+    results.filter((r) => r.price > 0).map((r) => [r.symbol, r.price])
   );
 
-  const providers = new Set(results.map(r => r.provider));
+  const providers = new Set(results.map((r) => r.provider));
 
   const provider =
     providers.size === 1
@@ -266,4 +268,4 @@ export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayloa
     provider,
     debug: results,
   };
-}
+          }
