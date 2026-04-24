@@ -61,7 +61,7 @@ const tvClient = (() => {
     return new (TradingViewModule as any).Client();
   }
 
-  // Cách 3: Default export là object có sẵn method
+  // Cách 3: Default export là object có method
   if (TradingViewModule.default && typeof (TradingViewModule.default as any).getBar === 'function') {
     console.log('[TradingView] Using default export as client object');
     return TradingViewModule.default;
@@ -292,4 +292,4 @@ export async function fetchMarketPrices(
     provider: finalProvider,
     debug: results,
   } satisfies PricesPayload;
-    }
+      }
