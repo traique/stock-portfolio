@@ -1,0 +1,283 @@
+/*
+  premium-overrides.css
+  Chỉ chứa component-level additions không thuộc design system core.
+  - Không override token (--var)
+  - Không dùng !important
+  - Không redefine .ab-page, .ab-card, .ab-premium-card (đã có trong globals.css)
+*/
+
+/* =========================================================
+   BRAND MARK
+========================================================= */
+/* (Defined in globals.css — nothing to add) */
+
+/* =========================================================
+   HERO SUBLINE TAG
+========================================================= */
+.ab-hero-subline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   MARKET STRIP (layout supplement)
+========================================================= */
+.ab-strip-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 12px;
+}
+
+.ab-strip-item.vnindex {
+  border-right: 1px solid var(--border);
+  padding-right: 16px;
+}
+
+.ab-strip-stack {
+  display: flex;
+  align-items: center;
+}
+
+/* =========================================================
+   POSITION CARD EXTRAS
+========================================================= */
+.ab-position-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ab-position-meta-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.40);
+  border: 1px solid var(--border);
+}
+
+:root[data-theme='dark'] .ab-position-meta-cell {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ab-position-meta-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.ab-position-meta-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+/* =========================================================
+   AI SECTION — Action cards
+========================================================= */
+.ab-ai-action-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ab-ai-tp-sl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ab-ai-tp {
+  background: rgba(16, 185, 129, 0.10);
+  border: 1px solid rgba(16, 185, 129, 0.20);
+  padding: 8px 0;
+  border-radius: 12px;
+}
+
+.ab-ai-sl {
+  background: rgba(244, 63, 94, 0.10);
+  border: 1px solid rgba(244, 63, 94, 0.20);
+  padding: 8px 0;
+  border-radius: 12px;
+}
+
+.ab-ai-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ab-ai-value {
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+.ab-ai-summary {
+  padding: 14px;
+  background: var(--soft);
+  border-radius: 14px;
+  font-style: italic;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.ab-ai-risks {
+  padding: 14px;
+  background: rgba(244, 63, 94, 0.05);
+  border-radius: 14px;
+  border: 1px solid rgba(244, 63, 94, 0.20);
+}
+
+.ab-ai-risks-label {
+  color: var(--red);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.ab-ai-risks-text {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* =========================================================
+   RISK PROFILE SELECTOR
+========================================================= */
+.ab-risk-selector {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ab-risk-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ab-risk-btn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.ab-risk-btn.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+/* =========================================================
+   NEWS MODAL
+========================================================= */
+.ab-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.60);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ab-modal-inner {
+  width: 100%;
+  max-width: 450px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  padding: 20px;
+}
+
+.ab-news-item {
+  display: block;
+  padding: 14px;
+  background: var(--soft);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  text-decoration: none;
+  transition: border-color 0.2s ease;
+}
+
+.ab-news-item:hover { border-color: var(--border-strong); }
+
+.ab-news-title {
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.ab-news-meta {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* =========================================================
+   SPIN ANIMATION (AI loading)
+========================================================= */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spin-animation { animation: spin 0.8s linear infinite; }
+
+/* =========================================================
+   COMPACT FORM GRID
+========================================================= */
+.compact-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+/* =========================================================
+   TOGGLE ROW (checkbox label)
+========================================================= */
+.ab-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.ab-toggle-row input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--text);
+  cursor: pointer;
+}
