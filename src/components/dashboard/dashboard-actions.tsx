@@ -9,7 +9,7 @@ import {
   DEFAULT_CASH_FORM, DEFAULT_TELEGRAM, DEFAULT_TRADE_FORM,
   getAccessToken, RiskProfile, TelegramSettings,
   clampHour, vnToUtc, utcToVn,
-} from '@/app/dashboard/page';
+} from '@/lib/dashboard-types';
 import { supabase } from '@/lib/supabase';
 
 // =========================================================
