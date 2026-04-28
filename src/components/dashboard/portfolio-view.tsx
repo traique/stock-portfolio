@@ -4,8 +4,8 @@ import { Newspaper, RefreshCw, X } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { calcPosition, formatCurrency, PriceMap } from '@/lib/calculations';
 import {
-  AllocationItem, AiPortfolioResponse, CashSummaryShape, NewsItem, QuoteItem,
-} from '@/app/dashboard/page';
+  AllocationItem, CashSummaryShape, NewsItem, QuoteItem,
+} from '@/lib/dashboard-types';
 
 // =========================================================
 // TYPES
@@ -136,8 +136,8 @@ function NewsModal({ symbol, news, onClose }: {
                 rel="noopener noreferrer"
                 className="ab-news-item"
               >
-                <div className="ab-news-title">{n.title}</div>
-                <div className="ab-news-meta num-premium">
+                <div className="ab-news-title" style={{ fontWeight: 'bold', marginBottom: 4 }}>{n.title}</div>
+                <div className="ab-news-meta num-premium" style={{ fontSize: 12, color: 'var(--muted)' }}>
                   {n.source} • {new Date(n.pubDate).toLocaleDateString('vi-VN')}
                 </div>
               </a>
