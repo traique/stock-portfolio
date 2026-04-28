@@ -1,3 +1,4 @@
+// src/components/dashboard/portfolio-view.tsx
 'use client';
 
 import { Newspaper, RefreshCw, X } from 'lucide-react';
@@ -12,10 +13,13 @@ import {
 // =========================================================
 
 type Position = {
-  symbol:      string;
-  quantity:    number;
-  avgBuyPrice: number;
-  holdings:    any[];
+  symbol:        string;
+  quantity:      number;
+  avgBuyPrice:   number;
+  totalBuy:      number;
+  latestBuyDate?: string | null;
+  note?:         string | null;
+  holdings:      any[];
 };
 
 type Props = {
@@ -289,7 +293,7 @@ export function PortfolioView({
         {!loading && positions.length > 0 ? (
           <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
             {positions.map(pos => {
-              const row      = calcPosition(pos, prices);
+              const row      = calcPosition(pos as any, prices);
               const quote    = quoteMap.get(pos.symbol.toUpperCase());
               const positive = row.pnl >= 0;
               const expanded = !!expandedSymbols[pos.symbol];
