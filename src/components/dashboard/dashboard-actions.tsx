@@ -658,43 +658,20 @@ export function DashboardActions({
       ========================================================= */}
       <Section kicker="Telegram" title="BÁO CÁO CUỐI NGÀY" open={telegramOpen} onToggle={handleToggleTelegram}>
         <form onSubmit={handleSaveTelegram} style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-          <input 
-            value={telegram.chat_id} 
-            onChange={e => setTelegram(t => ({ ...t, chat_id: e.target.value }))} 
-            placeholder="Nhập Chat ID Telegram" 
-            className="ab-input num-premium" 
-            style={{ ...INPUT, gridColumn: '1 / -1' }} 
-          />
-
-          <label className="ab-toggle-row" style={{ color: C_MUTED, fontSize: 13, fontWeight: 700 }}>
-            <input 
-              type="checkbox" 
-              checked={telegram.is_enabled} 
-              onChange={e => setTelegram(t => ({ ...t, is_enabled: e.target.checked }))} 
-            />
-            <span>Bật báo cáo qua Telegram</span>
-          </label>
+          <input value={telegram.chat_id} onChange={(e) => setTelegram({ ...telegram, chat_id: e.target.value })} placeholder="Nhập Chat ID Telegram" className="ab-input num-premium" style={{ ...INPUT, gridColumn: '1 / -1' }} />
           
           <label className="ab-toggle-row" style={{ color: C_MUTED, fontSize: 13, fontWeight: 700 }}>
-            <input 
-              type="checkbox" 
-              checked={telegram.notify_daily} 
-              onChange={e => setTelegram(t => ({ ...t, notify_daily: e.target.checked }))} 
-            />
+            <input type="checkbox" checked={telegram.is_enabled} onChange={(e) => setTelegram({ ...telegram, is_enabled: e.target.checked })} />
+            <span>Bật báo cáo qua Telegram</span>
+          </label>
+          <label className="ab-toggle-row" style={{ color: C_MUTED, fontSize: 13, fontWeight: 700 }}>
+            <input type="checkbox" checked={telegram.notify_daily} onChange={(e) => setTelegram({ ...telegram, notify_daily: e.target.checked })} />
             <span>Gửi tự động hàng ngày</span>
           </label>
-
+          
           <div style={{ gridColumn: '1 / -1', marginTop: 8 }}>
             <div style={{ ...LABEL, marginBottom: 6 }}>Giờ gửi báo cáo (Giờ VN)</div>
-            <input 
-              value={telegram.daily_hour_vn} 
-              onChange={e => setTelegram(t => ({ ...t, daily_hour_vn: clampHour(Number(e.target.value || 15)) }))} 
-              type="number" 
-              min={0} max={23} 
-              className="ab-input num-premium" 
-              style={{ ...INPUT, width: '100%' }} 
-              placeholder="Ví dụ: 15" 
-            />
+            <input value={telegram.daily_hour_vn} onChange={(e) => setTelegram({ ...telegram, daily_hour_vn: clampHour(Number(e.target.value || 15)) })} type="number" min={0} max={23} className="ab-input num-premium" style={{ ...INPUT, width: '100%' }} placeholder="Ví dụ: 15" />
           </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', gridColumn: '1 / -1', marginTop: 8 }}>
