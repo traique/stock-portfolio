@@ -665,23 +665,33 @@ export function DashboardActions({
               { label: 'Bật báo cáo qua Telegram', key: 'is_enabled'   as keyof TelegramSettings },
               { label: 'Gửi tự động hàng ngày',    key: 'notify_daily' as keyof TelegramSettings },
             ].map(opt => (
-              <div key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div 
+                key={opt.key} 
+                onClick={() => setTelegram(t => ({ ...t, [opt.key]: !t[opt.key] }))}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 10, 
+                  cursor: 'pointer', 
+                  WebkitTapHighlightColor: 'transparent',
+                  padding: '4px 0'
+                }}
+              >
                 <input
-                  id={`tg-checkbox-${opt.key}`}
                   type="checkbox"
                   checked={Boolean(telegram[opt.key])}
-                  onChange={e => {
-                    const isChecked = e.target.checked;
-                    setTelegram(t => ({ ...t, [opt.key]: isChecked }));
+                  readOnly
+                  style={{ 
+                    width: 22, 
+                    height: 22, 
+                    accentColor: 'var(--primary, #3b82f6)', 
+                    pointerEvents: 'none',
+                    margin: 0 
                   }}
-                  style={{ width: 22, height: 22, cursor: 'pointer', accentColor: 'var(--primary, #3b82f6)' }}
                 />
-                <label 
-                  htmlFor={`tg-checkbox-${opt.key}`} 
-                  style={{ color: C_MUTED, fontSize: 14, fontWeight: 700, cursor: 'pointer', userSelect: 'none', margin: 0 }}
-                >
+                <span style={{ color: C_MUTED, fontSize: 14, fontWeight: 700, userSelect: 'none' }}>
                   {opt.label}
-                </label>
+                </span>
               </div>
             ))}
           </div>
