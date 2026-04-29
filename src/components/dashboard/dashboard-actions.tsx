@@ -1,3 +1,4 @@
+// src/components/dashboard/dashboard-actions.tsx
 'use client';
 
 import { ArrowDownRight, ArrowUpRight, Landmark, PieChart, RefreshCw, Send, Trash2, Wallet } from 'lucide-react';
@@ -373,8 +374,10 @@ export function DashboardActions({
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
         body: JSON.stringify({
-          chat_id: telegram.chat_id.trim(), is_enabled: telegram.is_enabled,
-          notify_daily: telegram.notify_daily, daily_hour_utc: vnToUtc(telegram.daily_hour_vn),
+          chat_id: telegram.chat_id.trim(), 
+          is_enabled: telegram.is_enabled,
+          notify_daily: telegram.notify_daily, 
+          daily_hour_utc: vnToUtc(telegram.daily_hour_vn),
         }),
       });
       const data = await res.json();
@@ -657,15 +660,31 @@ export function DashboardActions({
         <form onSubmit={handleSaveTelegram} style={{ display: 'grid', gap: 10 }}>
           <input value={telegram.chat_id} onChange={e => setTelegram(t => ({ ...t, chat_id: e.target.value }))} placeholder="Nhập Chat ID Telegram" className="ab-input num-premium" style={INPUT} />
 
-          {[
-            { label: 'Bật báo cáo qua Telegram', key: 'is_enabled'   as keyof TelegramSettings },
-            { label: 'Gửi tự động hàng ngày',    key: 'notify_daily' as keyof TelegramSettings },
-          ].map(opt => (
-            <label key={opt.key} className="ab-toggle-row" style={{ color: C_MUTED, fontSize: 13, fontWeight: 700 }}>
-              <input type="checkbox" checked={telegram[opt.key] as boolean} onChange={e => setTelegram(t => ({ ...t, [opt.key]: e.target.checked }))} />
-              <span>{opt.label}</span>
-            </label>
-          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 0' }}>
+            {[
+              { label: 'Bật báo cáo qua Telegram', key: 'is_enabled'   as keyof TelegramSettings },
+              { label: 'Gửi tự động hàng ngày',    key: 'notify_daily' as keyof TelegramSettings },
+            ].map(opt => (
+              <div key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  id={`tg-checkbox-${opt.key}`}
+                  type="checkbox"
+                  checked={Boolean(telegram[opt.key])}
+                  onChange={e => {
+                    const isChecked = e.target.checked;
+                    setTelegram(t => ({ ...t, [opt.key]: isChecked }));
+                  }}
+                  style={{ width: 22, height: 22, cursor: 'pointer', accentColor: 'var(--primary, #3b82f6)' }}
+                />
+                <label 
+                  htmlFor={`tg-checkbox-${opt.key}`} 
+                  style={{ color: C_MUTED, fontSize: 14, fontWeight: 700, cursor: 'pointer', userSelect: 'none', margin: 0 }}
+                >
+                  {opt.label}
+                </label>
+              </div>
+            ))}
+          </div>
 
           <div>
             <div style={{ ...LABEL, marginBottom: 6 }}>Giờ gửi báo cáo (Giờ VN)</div>
