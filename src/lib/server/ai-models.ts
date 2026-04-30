@@ -11,6 +11,20 @@ export const AI_MODELS = [
     desc:     'Google · Quota cao · Recommended',
   },
   {
+    key:      'gemini-3.1-flash-lite',
+    label:    'Gemini 3.1 Flash Lite',
+    provider: 'gemini' as const,
+    badge:    '⚡ Nhanh',
+    desc:     'Google · Quota cao · Recommended',
+  },
+  {
+    key:      'gemma-4-31b',
+    label:    'Gemma 4 31b',
+    provider: 'gemini' as const,
+    badge:    'nhiều',
+    desc:     'Google ',
+  },
+  {
     key:      'gemini-1.5-flash',
     label:    'Gemini 1.5 Flash',
     provider: 'gemini' as const,
