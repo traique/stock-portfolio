@@ -4,11 +4,7 @@
     {
       "path": "/api/cron/telegram",
       "schedule": "0 8 * * *"
-    }
-  ]
-}
-{
-  "crons": [
+    },
     {
       "path": "/api/cron/snapshot",
       "schedule": "10 8 * * 1-5"
