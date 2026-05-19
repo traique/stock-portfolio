@@ -107,49 +107,19 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
   });
 
   return (
-    <header style={{
-      position: 'sticky',
-      top: 8,
-      zIndex: 1000,
-      padding: 12,
-      borderRadius: 24,
-      border: '1px solid rgba(255,255,255,0.10)',
-      background: 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))',
-      backdropFilter: 'blur(30px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(30px) saturate(180%)',
-      display: 'grid',
-      gap: 10,
-      overflow: 'visible',
-    }}>
+    <header style={{ position: 'sticky', top: 8, zIndex: 1000, padding: 12, borderRadius: 24, border: '1px solid rgba(255,255,255,0.10)', background: 'linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.05))', backdropFilter: 'blur(30px) saturate(180%)', WebkitBackdropFilter: 'blur(30px) saturate(180%)', display: 'grid', gap: 10, overflow: 'visible' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link href='/' style={{ textDecoration: 'none', color: 'var(--text)', fontSize: 18, letterSpacing: '0.18em' }}>
-          LCTA
-        </Link>
+        <Link href='/' style={{ textDecoration: 'none', color: 'var(--text)', fontSize: 18, letterSpacing: '0.18em' }}>LCTA</Link>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={toggleTheme} style={{ width: 32, height: 32, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--soft)' }}>
             {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
           </button>
 
-          <div ref={menuRef} style={{ position: 'relative' }}>
+          <div ref={menuRef} style={{ position: 'relative', zIndex: 4000 }}>
             <button onClick={() => isLoggedIn ? setMenuOpen(v => !v) : onAuthOpen?.()} style={{ height: 32, padding: '0 12px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--soft)', fontSize: 10, fontWeight: 800 }}>
               {isLoggedIn ? getDisplayName(email) : 'SIGN IN'}
             </button>
-
-            {menuOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 240, background: 'rgba(15,23,42,0.92)', borderRadius: 18, padding: 12, zIndex: 2000 }}>
-                {AI_MODELS.map(m => (
-                  <button key={m.key} onClick={() => { setAiModelState(m.key); localStorage.setItem(AI_MODEL_KEY, m.key); }} style={{ width: '100%', marginBottom: 6, padding: 10, borderRadius: 12, border: 'none', background: aiModel === m.key ? 'rgba(59,130,246,0.20)' : 'rgba(255,255,255,0.06)', color: 'white', display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{m.label}</span>
-                    {aiModel === m.key && <Check size={12} />}
-                  </button>
-                ))}
-
-                <button onClick={onLogout} style={{ width: '100%', padding: 10, borderRadius: 12, border: 'none', background: 'rgba(244,63,94,0.14)', color: '#fb7185' }}>
-                  <LogOut size={12} /> ĐĂNG XUẤT
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -159,21 +129,21 @@ export default function AppShellHeader({ email, isLoggedIn, currentTab, onLogout
         <span>{infoLine}</span>
       </div>
 
-      <nav style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+      <nav style={{ display: 'flex', gap: 6, overflowX: 'auto', overflowY: 'visible', paddingBottom: 24, position: 'relative', zIndex: 5000 }}>
         <Link href='/' style={tabStyle(currentTab === 'home')}>HOME</Link>
         <Link href='/dashboard' style={tabStyle(currentTab === 'dashboard')}>DANH MỤC</Link>
 
-        <div ref={toolsRef} style={{ position: 'relative' }}>
-          <button onClick={() => setToolsOpen(v => !v)} style={tabStyle(['gold','oil','system-live','backtest'].includes(currentTab))}>
+        <div ref={toolsRef} style={{ position: 'relative', zIndex: 9999 }}>
+          <button type='button' onClick={(e) => { e.preventDefault(); e.stopPropagation(); setToolsOpen(v => !v); }} style={tabStyle(['gold','oil','system-live','backtest'].includes(currentTab))}>
             TIỆN ÍCH <ChevronDown size={12} style={{ transform: toolsOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
           </button>
 
           {toolsOpen && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, minWidth: 180, background: 'rgba(15,23,42,0.96)', borderRadius: 16, padding: 8, zIndex: 3000, display: 'grid', gap: 4 }}>
-              <Link href='/system-live' style={{ padding: 10, borderRadius: 12, textDecoration: 'none', color: 'white' }}>TOP BUY/SELL</Link>
-              <Link href='/backtest' style={{ padding: 10, borderRadius: 12, textDecoration: 'none', color: 'white' }}>BACKTEST</Link>
-              <Link href='/gold' style={{ padding: 10, borderRadius: 12, textDecoration: 'none', color: 'white' }}>GIÁ VÀNG</Link>
-              <Link href='/oil' style={{ padding: 10, borderRadius: 12, textDecoration: 'none', color: 'white' }}>GIÁ XĂNG</Link>
+            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 190, background: 'rgba(15,23,42,0.98)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 18, padding: 8, zIndex: 99999, display: 'grid', gap: 4, boxShadow: '0 20px 40px rgba(0,0,0,0.35)' }}>
+              <Link href='/system-live' onClick={() => setToolsOpen(false)} style={{ padding: 12, borderRadius: 12, textDecoration: 'none', color: 'white', background: 'rgba(255,255,255,0.04)' }}>TOP BUY/SELL</Link>
+              <Link href='/backtest' onClick={() => setToolsOpen(false)} style={{ padding: 12, borderRadius: 12, textDecoration: 'none', color: 'white', background: 'rgba(255,255,255,0.04)' }}>BACKTEST</Link>
+              <Link href='/gold' onClick={() => setToolsOpen(false)} style={{ padding: 12, borderRadius: 12, textDecoration: 'none', color: 'white', background: 'rgba(255,255,255,0.04)' }}>GIÁ VÀNG</Link>
+              <Link href='/oil' onClick={() => setToolsOpen(false)} style={{ padding: 12, borderRadius: 12, textDecoration: 'none', color: 'white', background: 'rgba(255,255,255,0.04)' }}>GIÁ XĂNG</Link>
             </div>
           )}
         </div>
