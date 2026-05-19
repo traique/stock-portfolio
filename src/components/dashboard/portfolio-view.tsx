@@ -1,8 +1,22 @@
 'use client';
 
+import React from 'react';
 import { RefreshCw } from 'lucide-react';
-import { calcPosition, formatCurrency, PriceMap, PositionGroup } from '@/lib/calculations';
-import { AllocationItem, CashSummaryShape, NewsItem, QuoteItem } from '@/lib/dashboard-types';
+
+import {
+  calcPosition,
+  formatCurrency,
+  PriceMap,
+  PositionGroup,
+} from '@/lib/calculations';
+
+import {
+  AllocationItem,
+  CashSummaryShape,
+  NewsItem,
+  QuoteItem,
+} from '@/lib/dashboard-types';
+
 import { PerformanceChart } from '@/components/dashboard/performance-chart';
 
 type Props = {
@@ -14,178 +28,402 @@ type Props = {
   quoteMap: Map<string, QuoteItem>;
   vnIndex: QuoteItem | null;
   allocations: AllocationItem[];
+
   totalAssets: number;
   totalPnl: number;
   totalPnlPct: number;
+
   actualNav: number;
   marketValue: number;
+
   unrealizedPnl: number;
   realizedPnl: number;
   totalSellOrders: number;
   dayPnl: number;
+
   cashSummary: CashSummaryShape;
+
   aiNewsContext?: Record<string, NewsItem[]>;
+
   onRefreshPrices: () => void;
 };
 
 const card: React.CSSProperties = {
   borderRadius: 24,
   border: '1px solid var(--border)',
-  background: 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
-  backdropFilter: 'blur(20px)',
+  background:
+    'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015))',
+  backdropFilter: 'blur(18px)',
   boxShadow: 'var(--shadow-soft)',
 };
 
 export function PortfolioView(props: Props) {
   const {
-    loading, accessToken, refreshing, positions, prices, quoteMap,
-    allocations, totalAssets, totalPnl, totalPnlPct, actualNav,
-    marketValue, unrealizedPnl, realizedPnl, dayPnl, onRefreshPrices,
+    loading,
+    accessToken,
+    refreshing,
+    positions,
+    prices,
+    quoteMap,
+
+    totalAssets,
+    totalPnl,
+
+    onRefreshPrices,
   } = props;
 
-  const val = (v: number) => loading ? '...' : formatCurrency(v);
-  const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  const val = (v: number) =>
+    loading ? '...' : formatCurrency(v);
+
+  const pnlColor =
+    totalPnl >= 0
+      ? 'var(--green)'
+      : 'var(--red)';
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <section style={{ ...card, padding: 18, display: 'grid', gap: 16 }}>
-        <div style={{ fontSize: 11, letterSpacing: '0.08em', color: 'var(--muted)', fontWeight: 800 }}>
+    <div
+      style={{
+        display: 'grid',
+        gap: 16,
+      }}
+    >
+      <section
+        style={{
+          ...card,
+          padding: 18,
+          display: 'grid',
+          gap: 16,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: '0.08em',
+            color: 'var(--muted)',
+            fontWeight: 800,
+          }}
+        >
           TỔNG TÀI SẢN
         </div>
 
-        <div className='num-premium' style={{ fontSize: 'clamp(36px,10vw,68px)', lineHeight: 1, fontWeight: 900, letterSpacing: '-0.05em', color: pnlColor }}>
+        <div
+          className='num-premium'
+          style={{
+            fontSize: 'clamp(34px,9vw,64px)',
+            lineHeight: 1,
+            fontWeight: 900,
+            letterSpacing: '-0.05em',
+            color: pnlColor,
+          }}
+        >
           {val(totalAssets)}
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 12 }}>
-          {[
-            ['NAV THỰC TẾ', val(actualNav), 'var(--text)'],
-            ['GIÁ TRỊ THỊ TRƯỜNG', val(marketValue), 'var(--text)'],
-            ['LÃI/LỖ ĐÃ CHỐT', val(realizedPnl), realizedPnl >= 0 ? 'var(--green)' : 'var(--red)'],
-            ['LÃI/LỖ ĐANG MỞ', val(unrealizedPnl), unrealizedPnl >= 0 ? 'var(--green)' : 'var(--red)'],
-          ].map(([label, value, color]) => (
-            <div key={label} style={{ ...card, padding: 14 }}>
-              <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>{label}</div>
-              <div className='num-premium' style={{ marginTop: 10, fontSize: 'clamp(18px,5vw,28px)', fontWeight: 800, lineHeight: 1.2, color: color as string }}>
-                {value}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <div className='num-premium' style={{ padding: '8px 12px', borderRadius: 999, background: 'var(--soft)', color: pnlColor, fontWeight: 800 }}>PnL {val(totalPnl)}</div>
-          <div className='num-premium' style={{ padding: '8px 12px', borderRadius: 999, background: 'var(--soft)', color: pnlColor, fontWeight: 800 }}>{totalPnlPct.toFixed(2)}%</div>
-          <div className='num-premium' style={{ padding: '8px 12px', borderRadius: 999, background: 'var(--soft)', color: dayPnl >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 800 }}>Hôm nay {val(dayPnl)}</div>
-        </div>
       </section>
 
-      <section style={{ display: 'grid', gap: 16 }}>
-        <div style={{ ...card, padding: 18 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
-            <div>
-              <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>PORTFOLIO</div>
-              <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>ALLOCATION</div>
-            </div>
-            <div className='num-premium' style={{ fontSize: 12, fontWeight: 800 }}>{positions.length} MÃ</div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 16 }}>
-            {allocations.map(item => (
-              <div key={item.symbol}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <strong>{item.symbol}</strong>
-                  <span className='num-premium'>{item.percent.toFixed(1)}%</span>
-                </div>
-                <div style={{ height: 10, borderRadius: 999, background: 'var(--soft)', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(item.percent,3)}%`, height: '100%', background: 'linear-gradient(90deg,#2563eb,#60a5fa)' }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {accessToken && <div style={{ ...card, padding: 18 }}><PerformanceChart accessToken={accessToken} /></div>}
-      </section>
-
-      <section style={{ ...card, padding: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+      <section
+        style={{
+          ...card,
+          padding: 18,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 18,
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
           <div>
-            <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>HOLDINGS</div>
-            <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>DANH MỤC</div>
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--muted)',
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+              }}
+            >
+              HOLDINGS
+            </div>
+
+            <div
+              style={{
+                fontSize: 24,
+                fontWeight: 800,
+                marginTop: 6,
+              }}
+            >
+              DANH MỤC
+            </div>
           </div>
 
-          <button onClick={onRefreshPrices} style={{ padding: '10px 14px', borderRadius: 999, border: '1px solid var(--border)', background: 'var(--soft)', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
-            <RefreshCw size={14} className={refreshing ? 'spin-animation' : ''} /> REFRESH
+          <button
+            onClick={onRefreshPrices}
+            style={{
+              padding: '10px 14px',
+              borderRadius: 999,
+              border: '1px solid var(--border)',
+              background: 'var(--soft)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontWeight: 700,
+              color: 'var(--text)',
+            }}
+          >
+            <RefreshCw
+              size={14}
+              className={
+                refreshing
+                  ? 'spin-animation'
+                  : ''
+              }
+            />
+
+            REFRESH
           </button>
         </div>
 
-        <div style={{ display: 'grid', gap: 12 }}>
-          {positions.map(pos => {
-            const row = calcPosition(pos, prices);
-            const quote = quoteMap.get(pos.symbol.toUpperCase());
-            const currentPrice = Number(quote?.price || row.currentPrice || 0);
-            const change = Number(quote?.change || 0);
-            const pct = Number(quote?.pct || row.pnlPct || 0);
-            const marketColor = change >= 0 ? 'var(--green)' : 'var(--red)';
+        <div
+          style={{
+            display: 'grid',
+            gap: 12,
+          }}
+        >
+          {positions.map((pos) => {
+            const row = calcPosition(
+              pos,
+              prices
+            );
+
+            const quote = quoteMap.get(
+              pos.symbol.toUpperCase()
+            );
+
+            const currentPrice = Number(
+              quote?.price ||
+                row.currentPrice ||
+                0
+            );
+
+            const change = Number(
+              quote?.change || 0
+            );
+
+            const pct = Number(
+              quote?.pct ||
+                row.pnlPct ||
+                0
+            );
+
+            const marketColor =
+              change >= 0
+                ? 'var(--green)'
+                : 'var(--red)';
 
             return (
               <div
                 key={pos.symbol}
                 style={{
                   ...card,
-                  padding: 16,
+                  padding: 18,
                   display: 'grid',
-                  gap: 12,
-                  background: change >= 0
-                    ? 'linear-gradient(180deg, rgba(34,197,94,0.08), rgba(255,255,255,0.02))'
-                    : 'linear-gradient(180deg, rgba(239,68,68,0.08), rgba(255,255,255,0.02))',
+                  gap: 14,
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent:
+                      'space-between',
+                    alignItems: 'flex-start',
+                    gap: 12,
+                  }}
+                >
                   <div>
-                    <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1 }}>{pos.symbol}</div>
-                    <div className='num-premium' style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
-                      {pos.quantity} CP · Avg {formatCurrency(pos.avgBuyPrice)}
+                    <div
+                      style={{
+                        fontSize: 28,
+                        fontWeight: 800,
+                        lineHeight: 1,
+                        letterSpacing:
+                          '-0.03em',
+                      }}
+                    >
+                      {pos.symbol}
+                    </div>
+
+                    <div
+                      className='num-premium'
+                      style={{
+                        marginTop: 8,
+                        fontSize: 12,
+                        color:
+                          'var(--muted)',
+                        display: 'flex',
+                        gap: 8,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <span>
+                        {pos.quantity} CP
+                      </span>
+
+                      <span>•</span>
+
+                      <span>
+                        Avg{' '}
+                        {formatCurrency(
+                          pos.avgBuyPrice
+                        )}
+                      </span>
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right' }}>
-                    <div className='num-premium' style={{ color: row.pnl >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 900, fontSize: 16 }}>
-                      {formatCurrency(row.pnl)}
+                  <div
+                    style={{
+                      textAlign: 'right',
+                    }}
+                  >
+                    <div
+                      className='num-premium'
+                      style={{
+                        color:
+                          row.pnl >= 0
+                            ? 'var(--green)'
+                            : 'var(--red)',
+                        fontWeight: 800,
+                        fontSize: 15,
+                      }}
+                    >
+                      {formatCurrency(
+                        row.pnl
+                      )}
                     </div>
-                    <div className='num-premium' style={{ marginTop: 4, fontSize: 12, color: row.pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                      {row.pnlPct.toFixed(2)}%
+
+                    <div
+                      className='num-premium'
+                      style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color:
+                          row.pnl >= 0
+                            ? 'var(--green)'
+                            : 'var(--red)',
+                      }}
+                    >
+                      {row.pnlPct.toFixed(
+                        2
+                      )}
+                      %
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>GIÁ HIỆN TẠI</div>
-                    <div className='num-premium' style={{ marginTop: 6, fontSize: 28, fontWeight: 900, lineHeight: 1, color: marketColor }}>
-                      {formatCurrency(currentPrice)}
-                    </div>
-                    <div className='num-premium' style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: marketColor }}>
-                      {change > 0 ? '+' : ''}{formatCurrency(change)} ({pct > 0 ? '+' : ''}{pct.toFixed(2)}%)
-                    </div>
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color:
+                        'var(--muted)',
+                      fontWeight: 700,
+                      letterSpacing:
+                        '0.04em',
+                    }}
+                  >
+                    GIÁ HIỆN TẠI
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 44, width: 82, padding: '6px 8px', borderRadius: 14, background: 'rgba(255,255,255,0.05)' }}>
-                    {[20, 35, 26, 42, 30, 52, 36].map((h, i) => (
-                      <div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: 999, background: marketColor, opacity: 0.9 }} />
-                    ))}
+                  <div
+                    className='num-premium'
+                    style={{
+                      marginTop: 6,
+                      fontSize: 22,
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      color: marketColor,
+                    }}
+                  >
+                    {formatCurrency(
+                      currentPrice
+                    )}
+                  </div>
+
+                  <div
+                    className='num-premium'
+                    style={{
+                      marginTop: 8,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: marketColor,
+                    }}
+                  >
+                    {change > 0
+                      ? '+'
+                      : ''}
+                    {formatCurrency(
+                      change
+                    )}{' '}
+                    (
+                    {pct > 0
+                      ? '+'
+                      : ''}
+                    {pct.toFixed(2)}%)
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Market Value</div>
-                  <div className='num-premium' style={{ fontWeight: 900 }}>{formatCurrency(row.totalNow)}</div>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent:
+                      'space-between',
+                    alignItems: 'center',
+                    paddingTop: 10,
+                    borderTop:
+                      '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color:
+                        'var(--muted)',
+                    }}
+                  >
+                    Market Value
+                  </div>
+
+                  <div
+                    className='num-premium'
+                    style={{
+                      fontWeight: 800,
+                    }}
+                  >
+                    {formatCurrency(
+                      row.totalNow
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
+
+        {accessToken && (
+          <div
+            style={{
+              marginTop: 18,
+              ...card,
+              padding: 18,
+            }}
+          >
+            <PerformanceChart
+              accessToken={accessToken}
+            />
+          </div>
+        )}
       </section>
     </div>
   );
