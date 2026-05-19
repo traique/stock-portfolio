@@ -1,1 +1,45 @@
-[TRUNCATED]
+:root {
+  --bg: #0f172a;
+  --card: rgba(15, 23, 42, 0.72);
+  --soft: rgba(255,255,255,0.06);
+  --border: rgba(255,255,255,0.08);
+  --text: #f8fafc;
+  --muted: rgba(248,250,252,0.62);
+  --green: #22c55e;
+  --red: #ef4444;
+  --shadow-soft: 0 10px 30px rgba(0,0,0,0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: #020617;
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.num-premium {
+  font-variant-numeric: tabular-nums;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
