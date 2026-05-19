@@ -25,6 +25,8 @@ type Props = {
   email?: string;
 
   onLogout?: () => void;
+
+  onAuthOpen?: () => void;
 };
 
 export default function AppShellHeader({
@@ -33,6 +35,7 @@ export default function AppShellHeader({
   currentTab = 'home',
   email,
   onLogout,
+  onAuthOpen,
 }: Props) {
   const [theme, setTheme] =
     useState<'dark' | 'light'>(
@@ -258,6 +261,31 @@ export default function AppShellHeader({
 
             Home
           </Link>
+
+          {!isLoggedIn &&
+            onAuthOpen && (
+              <button
+                onClick={
+                  onAuthOpen
+                }
+                className='glass-card'
+                style={{
+                  height: 46,
+                  padding:
+                    '0 16px',
+                  borderRadius: 18,
+                  border:
+                    '1px solid var(--border)',
+                  color:
+                    'var(--text)',
+                  fontWeight: 700,
+                  background:
+                    'var(--soft)',
+                }}
+              >
+                Đăng nhập
+              </button>
+            )}
 
           <div
             style={{
