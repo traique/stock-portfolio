@@ -120,43 +120,67 @@ export function PortfolioView(props: Props) {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gap: 14 }}>
+        <div style={{ display: 'grid', gap: 12 }}>
           {positions.map(pos => {
             const row = calcPosition(pos, prices);
             const quote = quoteMap.get(pos.symbol.toUpperCase());
-            const currentPrice = quote?.price || row.currentPrice || 0;
+            const currentPrice = Number(quote?.price || row.currentPrice || 0);
+            const change = Number(quote?.change || 0);
+            const pct = Number(quote?.pct || row.pnlPct || 0);
+            const marketColor = change >= 0 ? 'var(--green)' : 'var(--red)';
 
             return (
-              <div key={pos.symbol} style={{ ...card, padding: 16, display: 'grid', gap: 14 }}>
+              <div
+                key={pos.symbol}
+                style={{
+                  ...card,
+                  padding: 16,
+                  display: 'grid',
+                  gap: 12,
+                  background: change >= 0
+                    ? 'linear-gradient(180deg, rgba(34,197,94,0.08), rgba(255,255,255,0.02))'
+                    : 'linear-gradient(180deg, rgba(239,68,68,0.08), rgba(255,255,255,0.02))',
+                }}
+              >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: 32, fontWeight: 900, lineHeight: 1 }}>{pos.symbol}</div>
-                    <div className='num-premium' style={{ marginTop: 6, fontSize: 12 }}>{pos.quantity} CP</div>
+                    <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1 }}>{pos.symbol}</div>
+                    <div className='num-premium' style={{ marginTop: 8, fontSize: 12, color: 'var(--muted)' }}>
+                      {pos.quantity} CP · Avg {formatCurrency(pos.avgBuyPrice)}
+                    </div>
                   </div>
 
-                  <div className='num-premium' style={{ color: row.pnl >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 900, fontSize: 16, textAlign: 'right' }}>
-                    {formatCurrency(row.pnl)}
-                    <div style={{ marginTop: 4, fontSize: 12 }}>{row.pnlPct.toFixed(2)}%</div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className='num-premium' style={{ color: row.pnl >= 0 ? 'var(--green)' : 'var(--red)', fontWeight: 900, fontSize: 16 }}>
+                      {formatCurrency(row.pnl)}
+                    </div>
+                    <div className='num-premium' style={{ marginTop: 4, fontSize: 12, color: row.pnl >= 0 ? 'var(--green)' : 'var(--red)' }}>
+                      {row.pnlPct.toFixed(2)}%
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ ...card, padding: 12 }}>
-                  <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>GIÁ HIỆN TẠI</div>
-                  <div className='num-premium' style={{ marginTop: 8, fontSize: 26, fontWeight: 900 }}>
-                    {formatCurrency(currentPrice)}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>GIÁ HIỆN TẠI</div>
+                    <div className='num-premium' style={{ marginTop: 6, fontSize: 28, fontWeight: 900, lineHeight: 1, color: marketColor }}>
+                      {formatCurrency(currentPrice)}
+                    </div>
+                    <div className='num-premium' style={{ marginTop: 8, fontSize: 13, fontWeight: 800, color: marketColor }}>
+                      {change > 0 ? '+' : ''}{formatCurrency(change)} ({pct > 0 ? '+' : ''}{pct.toFixed(2)}%)
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 44, width: 82, padding: '6px 8px', borderRadius: 14, background: 'rgba(255,255,255,0.05)' }}>
+                    {[20, 35, 26, 42, 30, 52, 36].map((h, i) => (
+                      <div key={i} style={{ flex: 1, height: `${h}%`, borderRadius: 999, background: marketColor, opacity: 0.9 }} />
+                    ))}
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }}>
-                  <div style={{ ...card, padding: 12 }}>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>GIÁ TB</div>
-                    <div className='num-premium' style={{ marginTop: 8, fontWeight: 800 }}>{formatCurrency(pos.avgBuyPrice)}</div>
-                  </div>
-
-                  <div style={{ ...card, padding: 12 }}>
-                    <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 800 }}>GIÁ TRỊ</div>
-                    <div className='num-premium' style={{ marginTop: 8, fontWeight: 800 }}>{formatCurrency(row.totalNow)}</div>
-                  </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--muted)' }}>Market Value</div>
+                  <div className='num-premium' style={{ fontWeight: 900 }}>{formatCurrency(row.totalNow)}</div>
                 </div>
               </div>
             );
