@@ -5,11 +5,11 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
-  ReferenceLine,
 } from 'recharts';
 
 // =========================================================
@@ -27,7 +27,13 @@ type Snapshot = {
   position_count: number;
 };
 
-type Range = '7d' | '30d' | '90d' | '180d' | '1y' | 'all';
+type Range =
+  | '7d'
+  | '30d'
+  | '90d'
+  | '180d'
+  | '1y'
+  | 'all';
 
 type Props = {
   accessToken: string;
@@ -57,7 +63,8 @@ const shortFmt = (v: number) => {
   return vnFmt.format(v);
 };
 
-const fmtCurrency = (v: number) => `${vnFmt.format(v)}₫`;
+const fmtCurrency = (v: number) =>
+  `${vnFmt.format(v)}₫`;
 
 const fmtPct = (v: number) =>
   `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
@@ -95,22 +102,28 @@ const C_BORDER = 'var(--border)';
 // TOOLTIP
 // =========================================================
 
-function ChartTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
+function ChartTooltip({
+  active,
+  payload,
+}: any) {
+  if (!active || !payload?.length) {
+    return null;
+  }
 
   const d = payload[0]?.payload as Snapshot;
 
   if (!d) return null;
 
-  const pnlPos = d.total_pnl >= 0;
+  const pnlPositive = d.total_pnl >= 0;
 
   return (
     <div
       style={{
         background: 'var(--card)',
-        border: '1px solid var(--border-strong)',
-        borderRadius: 16,
-        padding: '12px 16px',
+        border:
+          '1px solid var(--border-strong)',
+        borderRadius: 18,
+        padding: '14px 16px',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
         boxShadow: 'var(--shadow-strong)',
@@ -120,9 +133,9 @@ function ChartTooltip({ active, payload }: any) {
       <div
         style={{
           fontSize: 11,
-          fontWeight: 800,
           color: C_MUTED,
-          marginBottom: 10,
+          fontWeight: 800,
+          marginBottom: 12,
           letterSpacing: '0.04em',
         }}
       >
@@ -155,17 +168,20 @@ function ChartTooltip({ active, payload }: any) {
           },
           {
             label: 'LÃI / LỖ',
-            value: `${fmtCurrency(d.total_pnl)} (${fmtPct(
-              d.total_pnl_pct,
-            )})`,
-            color: pnlPos ? C_GREEN : C_RED,
+            value: `${fmtCurrency(
+              d.total_pnl,
+            )} (${fmtPct(d.total_pnl_pct)})`,
+            color: pnlPositive
+              ? C_GREEN
+              : C_RED,
           },
-        ].map((row) => (
+        ].map((item) => (
           <div
-            key={row.label}
+            key={item.label}
             style={{
               display: 'flex',
               justifyContent: 'space-between',
+              alignItems: 'center',
               gap: 16,
             }}
           >
@@ -177,18 +193,20 @@ function ChartTooltip({ active, payload }: any) {
                 letterSpacing: '0.04em',
               }}
             >
-              {row.label}
+              {item.label}
             </span>
 
             <span
               className="num-premium"
               style={{
                 fontSize: 13,
-                fontWeight: row.bold ? 800 : 700,
-                color: row.color,
+                fontWeight: item.bold
+                  ? 800
+                  : 700,
+                color: item.color,
               }}
             >
-              {row.value}
+              {item.value}
             </span>
           </div>
         ))}
@@ -216,10 +234,18 @@ function ChartTooltip({ active, payload }: any) {
 // MAIN
 // =========================================================
 
-export function PerformanceChart({ accessToken }: Props) {
-  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
-  const [range, setRange] = useState<Range>('90d');
-  const [loading, setLoading] = useState(true);
+export function PerformanceChart({
+  accessToken,
+}: Props) {
+  const [snapshots, setSnapshots] =
+    useState<Snapshot[]>([]);
+
+  const [range, setRange] =
+    useState<Range>('all');
+
+  const [loading, setLoading] =
+    useState(true);
+
   const [error, setError] = useState('');
 
   // =========================================================
@@ -246,23 +272,34 @@ export function PerformanceChart({ accessToken }: Props) {
 
         if (!res.ok) {
           setError(
-            data?.error ?? 'Không tải được lịch sử',
+            data?.error ??
+              'Không tải được dữ liệu',
           );
           return;
         }
 
-        const normalized = (data.snapshots ?? []).map(
-          (s: Snapshot) => ({
-            ...s,
-            total_assets: Number(s.total_assets || 0),
-            market_value: Number(s.market_value || 0),
-            nav_cash: Number(s.nav_cash || 0),
-            net_capital: Number(s.net_capital || 0),
-            total_pnl: Number(s.total_pnl || 0),
-            total_pnl_pct: Number(s.total_pnl_pct || 0),
-            position_count: Number(s.position_count || 0),
-          }),
-        );
+        const normalized = (
+          data.snapshots ?? []
+        ).map((s: Snapshot) => ({
+          ...s,
+          total_assets: Number(
+            s.total_assets || 0,
+          ),
+          market_value: Number(
+            s.market_value || 0,
+          ),
+          nav_cash: Number(s.nav_cash || 0),
+          net_capital: Number(
+            s.net_capital || 0,
+          ),
+          total_pnl: Number(s.total_pnl || 0),
+          total_pnl_pct: Number(
+            s.total_pnl_pct || 0,
+          ),
+          position_count: Number(
+            s.position_count || 0,
+          ),
+        }));
 
         setSnapshots(normalized);
       } catch {
@@ -279,17 +316,20 @@ export function PerformanceChart({ accessToken }: Props) {
   }, [range, fetchSnapshots]);
 
   // =========================================================
-  // CHART DATA
+  // DATA
   // =========================================================
 
   const chartData = useMemo(() => {
     return snapshots.map((s) => ({
       ...s,
-      display_date: fmtDate(s.snapshot_date),
+      display_date: fmtDate(
+        s.snapshot_date,
+      ),
     }));
   }, [snapshots]);
 
   const firstSnapshot = snapshots[0];
+
   const lastSnapshot =
     snapshots[snapshots.length - 1];
 
@@ -308,7 +348,9 @@ export function PerformanceChart({ accessToken }: Props) {
 
     const pct =
       firstSnapshot.total_assets > 0
-        ? (diff / firstSnapshot.total_assets) * 100
+        ? (diff /
+            firstSnapshot.total_assets) *
+          100
         : 0;
 
     return {
@@ -322,38 +364,47 @@ export function PerformanceChart({ accessToken }: Props) {
 
   // =========================================================
   // Y DOMAIN
+  // Focus only NAV for premium visual
   // =========================================================
 
   const yMin = useMemo(() => {
     if (!snapshots.length) return 0;
 
-    const values = snapshots
-      .flatMap((s) => [
-        s.total_assets,
-        s.market_value,
-        s.net_capital,
-      ])
-      .filter((v) => Number.isFinite(v));
+    const values = snapshots.map(
+      (s) => s.total_assets,
+    );
 
     const min = Math.min(...values);
+    const max = Math.max(...values);
 
-    return Math.floor(min * 0.95);
+    const diff = max - min;
+
+    const padding =
+      diff === 0
+        ? min * 0.04
+        : diff * 0.45;
+
+    return Math.floor(min - padding);
   }, [snapshots]);
 
   const yMax = useMemo(() => {
     if (!snapshots.length) return 0;
 
-    const values = snapshots
-      .flatMap((s) => [
-        s.total_assets,
-        s.market_value,
-        s.net_capital,
-      ])
-      .filter((v) => Number.isFinite(v));
+    const values = snapshots.map(
+      (s) => s.total_assets,
+    );
 
+    const min = Math.min(...values);
     const max = Math.max(...values);
 
-    return Math.ceil(max * 1.05);
+    const diff = max - min;
+
+    const padding =
+      diff === 0
+        ? max * 0.04
+        : diff * 0.45;
+
+    return Math.ceil(max + padding);
   }, [snapshots]);
 
   // =========================================================
@@ -363,11 +414,11 @@ export function PerformanceChart({ accessToken }: Props) {
   if (loading) {
     return (
       <div
+        className="ab-skeleton"
         style={{
           width: '100%',
           height: 320,
           borderRadius: 24,
-          background: 'var(--soft)',
         }}
       />
     );
@@ -381,11 +432,39 @@ export function PerformanceChart({ accessToken }: Props) {
           padding: '48px 24px',
           color: C_MUTED,
           background: 'var(--soft)',
-          borderRadius: 20,
+          borderRadius: 24,
           border: `1px solid ${C_BORDER}`,
         }}
       >
-        Chưa có dữ liệu hiệu suất
+        <div
+          style={{
+            fontSize: 34,
+            marginBottom: 10,
+          }}
+        >
+          📈
+        </div>
+
+        <div
+          style={{
+            fontSize: 15,
+            color: C_TEXT,
+            fontWeight: 800,
+            marginBottom: 6,
+          }}
+        >
+          Chưa có dữ liệu hiệu suất
+        </div>
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.7,
+          }}
+        >
+          Hệ thống sẽ tự động ghi nhận NAV
+          mỗi ngày giao dịch.
+        </div>
       </div>
     );
   }
@@ -399,17 +478,20 @@ export function PerformanceChart({ accessToken }: Props) {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 20,
+        gap: 22,
       }}
     >
-      {/* HEADER */}
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
           flexWrap: 'wrap',
-          gap: 12,
+          gap: 14,
         }}
       >
         <div>
@@ -419,7 +501,7 @@ export function PerformanceChart({ accessToken }: Props) {
                 className="num-premium"
                 style={{
                   fontSize:
-                    'clamp(24px,4vw,34px)',
+                    'clamp(24px,4vw,36px)',
                   fontWeight: 800,
                   lineHeight: 1.1,
                   color: C_TEXT,
@@ -436,7 +518,7 @@ export function PerformanceChart({ accessToken }: Props) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    marginTop: 6,
+                    marginTop: 8,
                     flexWrap: 'wrap',
                   }}
                 >
@@ -453,11 +535,11 @@ export function PerformanceChart({ accessToken }: Props) {
                         : 'rgba(244,63,94,0.10)',
                       border: `1px solid ${
                         returnPositive
-                          ? 'rgba(16,185,129,0.20)'
-                          : 'rgba(244,63,94,0.20)'
+                          ? 'rgba(16,185,129,0.18)'
+                          : 'rgba(244,63,94,0.18)'
                       }`,
-                      padding: '4px 10px',
-                      borderRadius: 99,
+                      padding: '5px 12px',
+                      borderRadius: 999,
                     }}
                   >
                     {fmtPct(totalReturn.pct)}
@@ -467,11 +549,13 @@ export function PerformanceChart({ accessToken }: Props) {
                     className="num-premium"
                     style={{
                       fontSize: 12,
-                      color: C_MUTED,
                       fontWeight: 700,
+                      color: C_MUTED,
                     }}
                   >
-                    {returnPositive ? '+' : ''}
+                    {returnPositive
+                      ? '+'
+                      : ''}
                     {fmtCurrency(
                       totalReturn.diff,
                     )}{' '}
@@ -484,14 +568,15 @@ export function PerformanceChart({ accessToken }: Props) {
         </div>
 
         {/* RANGE */}
+
         <div
           style={{
             display: 'flex',
             gap: 4,
-            padding: 4,
+            padding: 5,
             background: 'var(--soft)',
             border: `1px solid ${C_BORDER}`,
-            borderRadius: 99,
+            borderRadius: 999,
           }}
         >
           {RANGES.map((r) => (
@@ -500,12 +585,9 @@ export function PerformanceChart({ accessToken }: Props) {
               type="button"
               onClick={() => setRange(r.key)}
               style={{
-                padding: '6px 12px',
-                borderRadius: 99,
+                padding: '8px 14px',
+                borderRadius: 999,
                 border: 'none',
-                fontSize: 12,
-                fontWeight: 800,
-                cursor: 'pointer',
                 background:
                   range === r.key
                     ? 'var(--text)'
@@ -514,6 +596,11 @@ export function PerformanceChart({ accessToken }: Props) {
                   range === r.key
                     ? 'var(--bg)'
                     : C_MUTED,
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                transition:
+                  'all 0.18s ease',
               }}
             >
               {r.label}
@@ -523,14 +610,19 @@ export function PerformanceChart({ accessToken }: Props) {
       </div>
 
       {error && (
-        <div className="ab-error">{error}</div>
+        <div className="ab-error">
+          {error}
+        </div>
       )}
 
-      {/* CHART */}
+      {/* =====================================================
+          CHART
+      ===================================================== */}
+
       <div
         style={{
           width: '100%',
-          height: 320,
+          height: 330,
         }}
       >
         <ResponsiveContainer
@@ -541,14 +633,18 @@ export function PerformanceChart({ accessToken }: Props) {
             data={chartData}
             margin={{
               top: 10,
-              right: 5,
-              left: 0,
+              right: 2,
+              left: -10,
               bottom: 0,
             }}
           >
+            {/* =================================================
+                GRADIENTS
+            ================================================= */}
+
             <defs>
               <linearGradient
-                id="gradTotalAssets"
+                id="navGradient"
                 x1="0"
                 y1="0"
                 x2="0"
@@ -557,21 +653,30 @@ export function PerformanceChart({ accessToken }: Props) {
                 <stop
                   offset="0%"
                   stopColor="#3b82f6"
-                  stopOpacity={0.22}
+                  stopOpacity={0.14}
                 />
+
                 <stop
                   offset="100%"
                   stopColor="#3b82f6"
-                  stopOpacity={0.02}
+                  stopOpacity={0.01}
                 />
               </linearGradient>
             </defs>
 
+            {/* =================================================
+                GRID
+            ================================================= */}
+
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="var(--border)"
+              stroke="rgba(255,255,255,0.05)"
               vertical={false}
             />
+
+            {/* =================================================
+                X AXIS
+            ================================================= */}
 
             <XAxis
               dataKey="display_date"
@@ -585,6 +690,10 @@ export function PerformanceChart({ accessToken }: Props) {
               interval="preserveStartEnd"
             />
 
+            {/* =================================================
+                Y AXIS
+            ================================================= */}
+
             <YAxis
               domain={[yMin, yMax]}
               tickFormatter={shortFmt}
@@ -595,53 +704,67 @@ export function PerformanceChart({ accessToken }: Props) {
               }}
               tickLine={false}
               axisLine={false}
-              width={58}
+              width={60}
             />
+
+            {/* =================================================
+                TOOLTIP
+            ================================================= */}
 
             <Tooltip
               content={<ChartTooltip />}
               cursor={{
                 stroke:
-                  'var(--border-strong)',
+                  'rgba(255,255,255,0.14)',
                 strokeWidth: 1,
                 strokeDasharray: '4 4',
               }}
             />
 
-            {/* VỐN GỐC */}
-            {lastSnapshot?.net_capital > 0 && (
+            {/* =================================================
+                NET CAPITAL
+            ================================================= */}
+
+            {lastSnapshot?.net_capital >
+              0 && (
               <ReferenceLine
-                y={lastSnapshot.net_capital}
-                stroke="var(--muted)"
-                strokeDasharray="4 4"
-                strokeWidth={1.5}
+                y={
+                  lastSnapshot.net_capital
+                }
+                stroke="rgba(255,255,255,0.35)"
+                strokeDasharray="5 5"
+                strokeWidth={1}
               />
             )}
 
-            {/* MARKET VALUE */}
+            {/* =================================================
+                MARKET VALUE
+            ================================================= */}
+
             <Area
-              type="linear"
+              type="monotone"
               dataKey="market_value"
-              stackId={undefined}
               connectNulls
-              stroke="rgba(59,130,246,0.45)"
-              strokeWidth={1}
-              fill="rgba(59,130,246,0.06)"
+              stroke="rgba(96,165,250,0.28)"
+              strokeWidth={1.3}
+              fillOpacity={0}
               dot={false}
               activeDot={false}
               isAnimationActive
               animationDuration={500}
             />
 
-            {/* TOTAL ASSETS */}
+            {/* =================================================
+                TOTAL ASSETS
+            ================================================= */}
+
             <Area
-              type="linear"
+              type="monotone"
               dataKey="total_assets"
-              stackId={undefined}
               connectNulls
               stroke="#3b82f6"
-              strokeWidth={2.5}
-              fill="url(#gradTotalAssets)"
+              strokeWidth={3.5}
+              fill="url(#navGradient)"
               dot={false}
               activeDot={{
                 r: 5,
@@ -656,11 +779,14 @@ export function PerformanceChart({ accessToken }: Props) {
         </ResponsiveContainer>
       </div>
 
-      {/* LEGEND */}
+      {/* =====================================================
+          LEGEND
+      ===================================================== */}
+
       <div
         style={{
           display: 'flex',
-          gap: 20,
+          gap: 22,
           flexWrap: 'wrap',
         }}
       >
@@ -675,7 +801,8 @@ export function PerformanceChart({ accessToken }: Props) {
               : '—',
           },
           {
-            color: 'rgba(59,130,246,0.45)',
+            color:
+              'rgba(96,165,250,0.40)',
             label: 'Giá trị TT',
             value: lastSnapshot
               ? fmtCurrency(
@@ -684,7 +811,8 @@ export function PerformanceChart({ accessToken }: Props) {
               : '—',
           },
           {
-            color: C_MUTED,
+            color:
+              'rgba(255,255,255,0.45)',
             label: 'Vốn gốc',
             value: lastSnapshot
               ? fmtCurrency(
@@ -703,10 +831,11 @@ export function PerformanceChart({ accessToken }: Props) {
           >
             <div
               style={{
-                width: 12,
+                width: 14,
                 height: 3,
-                borderRadius: 99,
+                borderRadius: 999,
                 background: item.color,
+                flexShrink: 0,
               }}
             />
 
@@ -737,7 +866,10 @@ export function PerformanceChart({ accessToken }: Props) {
         ))}
       </div>
 
-      {/* FOOTER */}
+      {/* =====================================================
+          FOOTER
+      ===================================================== */}
+
       <div
         style={{
           fontSize: 11,
@@ -750,4 +882,4 @@ export function PerformanceChart({ accessToken }: Props) {
       </div>
     </div>
   );
-      }
+        }
