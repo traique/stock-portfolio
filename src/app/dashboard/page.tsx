@@ -12,11 +12,10 @@ import {
   AI_CACHE_KEY, AllocationItem, AiPortfolioResponse, CashSummaryShape,
   getAccessToken, PricesResponse, QuoteItem,
 } from '@/lib/dashboard-types';
-import { PortfolioView }    from '@/components/dashboard/portfolio-view';
+import { PortfolioView } from '@/components/dashboard/portfolio-view';
 import { DashboardActions } from '@/components/dashboard/dashboard-actions';
 
 export default function DashboardPage() {
-
   const [userId, setUserId] = useState('');
   const [email, setEmail] = useState('');
   const [accessToken, setAccessToken] = useState('');
@@ -257,8 +256,8 @@ export default function DashboardPage() {
     window.location.href = '/';
   }, []);
 
-  const handleReload = useCallback(() => {
-    loadPortfolio(userId, email);
+  const handleReload = useCallback(async () => {
+    await loadPortfolio(userId, email);
   }, [loadPortfolio, userId, email]);
 
   const handleRefreshPrices = useCallback(() => {
@@ -267,43 +266,16 @@ export default function DashboardPage() {
 
   return (
     <main className="ab-page">
-      <div
-        className="ab-shell"
-        style={{
-          width: '100%',
-          maxWidth: 1680,
-          margin: '0 auto',
-          paddingInline: 'clamp(12px, 2vw, 28px)',
-          gap: 20,
-        }}
-      >
-        <AppShellHeader
-          isLoggedIn={true}
-          email={email}
-          currentTab="dashboard"
-          onLogout={handleLogout}
-        />
+      <div className="ab-shell" style={{ width: '100%', maxWidth: 1680, margin: '0 auto', paddingInline: 'clamp(12px, 2vw, 28px)', gap: 20 }}>
+        <AppShellHeader isLoggedIn={true} email={email} currentTab="dashboard" onLogout={handleLogout} />
 
         {message && (
-          <div
-            className="ab-error"
-            style={{
-              borderRadius: 20,
-              padding: '14px 18px',
-            }}
-          >
+          <div className="ab-error" style={{ borderRadius: 20, padding: '14px 18px' }}>
             {message}
           </div>
         )}
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr)',
-            gap: 20,
-            alignItems: 'start',
-          }}
-        >
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
           <PortfolioView
             loading={loading}
             refreshing={refreshing}
@@ -327,15 +299,7 @@ export default function DashboardPage() {
             onRefreshPrices={handleRefreshPrices}
           />
 
-          <div
-            style={{
-              borderRadius: 28,
-              padding: 20,
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              boxShadow: 'var(--shadow-soft)',
-            }}
-          >
+          <div style={{ borderRadius: 28, padding: 20, background: 'var(--card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-soft)' }}>
             <DashboardActions
               userId={userId}
               email={email}
