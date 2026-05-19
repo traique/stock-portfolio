@@ -157,11 +157,6 @@ function ChartTooltip({
             bold: true,
           },
           {
-            label: 'GIÁ TRỊ TT',
-            value: fmtCurrency(d.market_value),
-            color: '#60a5fa',
-          },
-          {
             label: 'TIỀN MẶT',
             value: fmtCurrency(d.nav_cash),
             color: '#10b981',
@@ -174,6 +169,13 @@ function ChartTooltip({
             color: pnlPositive
               ? C_GREEN
               : C_RED,
+          },
+          {
+            label: 'VỐN GỐC',
+            value: fmtCurrency(
+              d.net_capital,
+            ),
+            color: C_MUTED,
           },
         ].map((item) => (
           <div
@@ -231,7 +233,7 @@ function ChartTooltip({
 }
 
 // =========================================================
-// MAIN
+// MAIN COMPONENT
 // =========================================================
 
 export function PerformanceChart({
@@ -364,7 +366,6 @@ export function PerformanceChart({
 
   // =========================================================
   // Y DOMAIN
-  // Focus only NAV for premium visual
   // =========================================================
 
   const yMin = useMemo(() => {
@@ -408,7 +409,22 @@ export function PerformanceChart({
   }, [snapshots]);
 
   // =========================================================
-  // EMPTY
+  // DYNAMIC COLORS
+  // =========================================================
+
+  const isPositive =
+    (lastSnapshot?.total_pnl ?? 0) >= 0;
+
+  const navStroke = isPositive
+    ? '#3b82f6'
+    : '#ef4444';
+
+  const navGlow = isPositive
+    ? 'rgba(59,130,246,0.14)'
+    : 'rgba(239,68,68,0.14)';
+
+  // =========================================================
+  // LOADING
   // =========================================================
 
   if (loading) {
@@ -417,12 +433,16 @@ export function PerformanceChart({
         className="ab-skeleton"
         style={{
           width: '100%',
-          height: 320,
-          borderRadius: 24,
+          height: 330,
+          borderRadius: 28,
         }}
       />
     );
   }
+
+  // =========================================================
+  // EMPTY
+  // =========================================================
 
   if (!loading && !snapshots.length) {
     return (
@@ -432,7 +452,7 @@ export function PerformanceChart({
           padding: '48px 24px',
           color: C_MUTED,
           background: 'var(--soft)',
-          borderRadius: 24,
+          borderRadius: 28,
           border: `1px solid ${C_BORDER}`,
         }}
       >
@@ -633,13 +653,13 @@ export function PerformanceChart({
             data={chartData}
             margin={{
               top: 10,
-              right: 2,
+              right: 4,
               left: -10,
               bottom: 0,
             }}
           >
             {/* =================================================
-                GRADIENTS
+                GRADIENT
             ================================================= */}
 
             <defs>
@@ -652,13 +672,13 @@ export function PerformanceChart({
               >
                 <stop
                   offset="0%"
-                  stopColor="#3b82f6"
-                  stopOpacity={0.14}
+                  stopColor={navStroke}
+                  stopOpacity={0.18}
                 />
 
                 <stop
                   offset="100%"
-                  stopColor="#3b82f6"
+                  stopColor={navStroke}
                   stopOpacity={0.01}
                 />
               </linearGradient>
@@ -715,14 +735,14 @@ export function PerformanceChart({
               content={<ChartTooltip />}
               cursor={{
                 stroke:
-                  'rgba(255,255,255,0.14)',
+                  'rgba(255,255,255,0.12)',
                 strokeWidth: 1,
                 strokeDasharray: '4 4',
               }}
             />
 
             {/* =================================================
-                NET CAPITAL
+                CAPITAL LINE
             ================================================= */}
 
             {lastSnapshot?.net_capital >
@@ -731,44 +751,27 @@ export function PerformanceChart({
                 y={
                   lastSnapshot.net_capital
                 }
-                stroke="rgba(255,255,255,0.35)"
+                stroke="rgba(255,255,255,0.32)"
                 strokeDasharray="5 5"
                 strokeWidth={1}
               />
             )}
 
             {/* =================================================
-                MARKET VALUE
-            ================================================= */}
-
-            <Area
-              type="monotone"
-              dataKey="market_value"
-              connectNulls
-              stroke="rgba(96,165,250,0.28)"
-              strokeWidth={1.3}
-              fillOpacity={0}
-              dot={false}
-              activeDot={false}
-              isAnimationActive
-              animationDuration={500}
-            />
-
-            {/* =================================================
-                TOTAL ASSETS
+                NAV LINE
             ================================================= */}
 
             <Area
               type="monotone"
               dataKey="total_assets"
               connectNulls
-              stroke="#3b82f6"
+              stroke={navStroke}
               strokeWidth={3.5}
               fill="url(#navGradient)"
               dot={false}
               activeDot={{
                 r: 5,
-                fill: '#3b82f6',
+                fill: navStroke,
                 stroke: 'var(--card)',
                 strokeWidth: 3,
               }}
@@ -792,21 +795,11 @@ export function PerformanceChart({
       >
         {[
           {
-            color: '#3b82f6',
+            color: navStroke,
             label: 'Tổng tài sản',
             value: lastSnapshot
               ? fmtCurrency(
                   lastSnapshot.total_assets,
-                )
-              : '—',
-          },
-          {
-            color:
-              'rgba(96,165,250,0.40)',
-            label: 'Giá trị TT',
-            value: lastSnapshot
-              ? fmtCurrency(
-                  lastSnapshot.market_value,
                 )
               : '—',
           },
@@ -882,4 +875,4 @@ export function PerformanceChart({
       </div>
     </div>
   );
-        }
+               }
