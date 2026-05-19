@@ -13,7 +13,7 @@ type Props = {
   title?: string;
 };
 
-export function AppShellHeader({
+export default function AppShellHeader({
   title = 'Portfolio',
 }: Props) {
   const [theme, setTheme] =
