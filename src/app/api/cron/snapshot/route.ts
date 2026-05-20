@@ -10,8 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import {
   calcCashSummary, calcSummary,
-  CashTransaction, deriveOpenHoldings,
-  enrichTransactions, groupHoldingsBySymbol,
+  CashTransaction, derivePortfolio,
   PortfolioSettings, Transaction,
 } from '@/lib/calculations';
 
@@ -79,18 +78,16 @@ async function snapshotForUser(
     return { ok: true, skipped: true, reason: 'no data' };
   }
 
-  // 2. Derive open positions
-  const openHoldings     = deriveOpenHoldings(transactions);
-  const enrichedTxs      = enrichTransactions(transactions);
-  const positions        = groupHoldingsBySymbol(openHoldings);
-  const symbols          = positions.map(p => p.symbol);
+  // 2. Derive open positions — 1 lần simulate duy nhất
+  const { openLots, enrichedTransactions, positions } = derivePortfolio(transactions);
+  const symbols = positions.map(p => p.symbol);
 
   // 3. Fetch live prices
-  const prices           = await fetchPrices(symbols);
+  const prices = await fetchPrices(symbols);
 
   // 4. Calculate
-  const summary          = calcSummary(openHoldings, prices);
-  const cashSummary      = calcCashSummary(cashTransactions, enrichedTxs, settings);
+  const summary     = calcSummary(openLots, prices);
+  const cashSummary = calcCashSummary(cashTransactions, enrichedTransactions, settings);
 
   const totalAssets  = cashSummary.actualCash + summary.totalNow;
   const netCapital   = cashSummary.netCapital;
@@ -105,8 +102,7 @@ async function snapshotForUser(
         user_id:        userId,
         snapshot_date:  snapshotDate,
         total_assets:   Math.round(totalAssets),
-        market_value:   Math.round(summary.totalNow),
-        nav_cash:       Math.round(cashSummary.actualCash),
+        market_value:   Math.round(summary.totalNow),        nav_cash:       Math.round(cashSummary.actualCash),
         net_capital:    Math.round(netCapital),
         total_pnl:      Math.round(totalPnl),
         total_pnl_pct:  Number(totalPnlPct.toFixed(4)),
