@@ -13,6 +13,7 @@ import {
   CashTransaction, derivePortfolio,
   PortfolioSettings, Transaction,
 } from '@/lib/calculations';
+import { verifyCronSecret } from '@/lib/server/api-utils';
 
 // =========================================================
 // SUPABASE SERVICE CLIENT  (bypass RLS)
@@ -120,11 +121,8 @@ async function snapshotForUser(
 // =========================================================
 
 export async function GET(request: NextRequest) {
-  // Security: verify cron secret
-  const secret = request.headers.get('authorization')?.replace('Bearer ', '');
-  if (secret !== process.env.CRON_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authErr = verifyCronSecret(request);
+  if (authErr) return authErr;
 
   const supabase = getServiceClient();
 
