@@ -13,6 +13,7 @@ import type {
   Transaction,
 } from '@/lib/calculations';
 import { envServer } from '@/lib/env-server';
+import { verifyCronSecret } from '@/lib/server/api-utils';
 
 type QuoteDebugItem = {
   symbol: string;
@@ -49,12 +50,8 @@ async function loadPrices(symbols: string[]) {
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = envServer.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authErr = verifyCronSecret(request);
+  if (authErr) return authErr;
 
   const now = new Date();
 
