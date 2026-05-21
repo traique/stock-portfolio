@@ -36,13 +36,15 @@ export async function GET(request: NextRequest) {
     }
 
     const cacheKey = buildPriceCacheKey(symbols);
-    const cached = getCachedValue<PricesPayload>(cacheKey);
+
+    // getCachedValue giờ là async (kiểm tra cả Supabase)
+    const cached = await getCachedValue<PricesPayload>(cacheKey);
     if (cached) {
       return NextResponse.json({ ...cached, cached: true });
     }
 
     const payload = await fetchMarketPrices(symbols, false);
-    setCachedValue(cacheKey, payload, PRICE_CACHE_TTL_MS);
+    await setCachedValue(cacheKey, payload, PRICE_CACHE_TTL_MS);
 
     return NextResponse.json({ ...payload, cached: false });
   } catch (error) {
