@@ -62,10 +62,13 @@ async function fetchGeminiModels(): Promise<AiModelMeta[]> {
     return rawModels
       .filter(m =>
         m.supportedGenerationMethods?.includes('generateContent') &&
-        // Loại bỏ model deprecated / vision-only / embedding
         !m.name.includes('embedding') &&
         !m.name.includes('aqa') &&
-        !m.name.includes('legacy'),
+        !m.name.includes('legacy') &&
+        !m.name.includes('tts') &&       // loại text-to-speech
+        !m.name.includes('tuned') &&     // loại fine-tuned models
+        !m.name.includes('vision') &&    // loại vision-only
+        !m.name.includes('preview'),     // loại preview không ổn định
       )
       .map(m => {
         const key = m.name.replace('models/', ''); // "gemini-2.0-flash"
@@ -99,7 +102,14 @@ async function fetchGeminiModels(): Promise<AiModelMeta[]> {
 
 async function fetchGroqModels(): Promise<AiModelMeta[]> {
   const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) {
+    // Trả fallback cứng khi chưa set GROQ_API_KEY
+    return [
+      { key: 'llama-3.3-70b-versatile',  label: 'Llama 3.3 70B',        provider: 'groq' as const, badge: '🏆 Mạnh nhất',  desc: 'Groq · Meta · Đa năng · 128K' },
+      { key: 'llama-3.1-8b-instant',     label: 'Llama 3.1 8B Instant', provider: 'groq' as const, badge: '⚡ Nhanh nhất', desc: 'Groq · Meta · Cực nhanh · 128K' },
+      { key: 'mixtral-8x7b-32768',       label: 'Mixtral 8x7B',         provider: 'groq' as const, badge: 'Context lớn',   desc: 'Groq · Mistral · Context 32K' },
+    ];
+  }
 
   try {
     const res = await fetch('https://api.groq.com/openai/v1/models', {
@@ -200,4 +210,4 @@ export async function GET() {
   };
 
   return NextResponse.json({ models, cached: false, fetchedAt });
-      }
+          }
