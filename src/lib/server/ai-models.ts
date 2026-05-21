@@ -23,6 +23,8 @@ export const FALLBACK_MODELS: AiModelMeta[] = [
   { key: 'mixtral-8x7b-32768',      label: 'Mixtral 8x7B',         provider: 'groq',   badge: 'Context lớn',   desc: 'Groq · Mistral · Context 32K' },
 ];
 
+export type AiModelKey = string;
+
 export const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 export const FALLBACK_MODEL = 'llama-3.3-70b-versatile';
 
