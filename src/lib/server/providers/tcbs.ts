@@ -32,7 +32,8 @@ export function isVietnamStock(symbol: string): boolean {
 export async function getTCBSMarketData(
   symbol: string,
 ): Promise<MarketData> {
-  const url = `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/second-tc-price/${symbol}`;
+  const url =
+    `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/beta/overview/${symbol}`;
 
   const response = await fetch(url, {
     headers: {
@@ -51,14 +52,23 @@ export async function getTCBSMarketData(
 
   const data = await response.json();
 
-  const price = safeNumber(data?.price);
+  const price = safeNumber(
+    data?.price
+      || data?.close
+      || data?.matchPrice
+      || data?.marketPrice,
+  );
 
   if (!price) {
-    throw new Error(`TCBS invalid data for ${symbol}`);
+    throw new Error(
+      `TCBS invalid data for ${symbol}`,
+    );
   }
 
   const previousClose = safeNumber(
-    data?.prevClosePrice || data?.referencePrice,
+    data?.referencePrice
+      || data?.prevClosePrice
+      || data?.previousClose,
   );
 
   const change = price - previousClose;
@@ -75,12 +85,21 @@ export async function getTCBSMarketData(
     previousClose,
     change,
     pct,
-    ceilingPriceEstimate: estimateCeiling(previousClose),
-    floorPriceEstimate: estimateFloor(previousClose),
-    dayHigh: safeNumber(data?.highestPrice),
-    dayLow: safeNumber(data?.lowestPrice),
+    ceilingPriceEstimate:
+      estimateCeiling(previousClose),
+    floorPriceEstimate:
+      estimateFloor(previousClose),
+    dayHigh: safeNumber(
+      data?.highestPrice || data?.high,
+    ),
+    dayLow: safeNumber(
+      data?.lowestPrice || data?.low,
+    ),
     marketTime: Date.now(),
     currency: 'VND',
-    volume: safeNumber(data?.accumulatedTradingVolume),
+    volume: safeNumber(
+      data?.accumulatedTradingVolume
+        || data?.volume,
+    ),
   };
-  }
+}
