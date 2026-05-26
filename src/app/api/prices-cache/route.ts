@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ...cached, cached: true });
     }
 
-    const payload = await fetchMarketPrices(symbols, false);
+    const payload = await fetchMarketPrices(symbols);
     await setCachedValue(cacheKey, payload, PRICE_CACHE_TTL_MS);
 
     return NextResponse.json({ ...payload, cached: false });
