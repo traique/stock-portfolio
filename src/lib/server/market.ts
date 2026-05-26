@@ -6,10 +6,6 @@ import {
 } from './providers/yahoo';
 
 import {
-  getTradingViewMarketData,
-} from './providers/tradingview';
-
-import {
   getTCBSMarketData,
   isVietnamStock,
 } from './providers/tcbs';
@@ -88,16 +84,6 @@ async function getMarketData(
     );
   }
 
-  // TradingView fallback cuối
-  try {
-    return await getTradingViewMarketData(symbol);
-  } catch (tvError) {
-    console.error(
-      `[TradingView Fail] ${symbol}`,
-      tvError,
-    );
-  }
-
   return buildErrorResult(symbol);
 }
 
@@ -127,7 +113,7 @@ export async function fetchMarketPrices(
   return {
     prices,
     updatedAt: new Date().toISOString(),
-    provider: 'hybrid',
+    provider: 'tcbs+yahoo',
     debug: results,
   };
-}
+    }
