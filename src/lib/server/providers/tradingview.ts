@@ -2,7 +2,6 @@ import TradingView from '@mathieuc/tradingview';
 
 import {
   getTradingViewSymbol,
-  getExchange,
 } from '../exchanges/exchange';
 
 import type { MarketData } from './yahoo';
@@ -28,6 +27,8 @@ function estimateFloor(previousClose: number): number {
   return roundPrice(previousClose * FLOOR_MULTIPLIER);
 }
 
+// TradingView chỉ dùng fallback cuối
+// Không dùng main provider trên Vercel
 export async function getTradingViewMarketData(
   symbol: string,
 ): Promise<MarketData> {
@@ -47,30 +48,23 @@ export async function getTradingViewMarketData(
       reject(
         new Error(`TradingView timeout for ${symbol}`),
       );
-    }, 10000);
+    }, 3000);
 
     chart.setMarket(tvSymbol, {
-      timeframe: '1D',
+      timeframe: '1',
     });
 
-    chart.onError((err: unknown) => {
-      clearTimeout(timeout);
-      client.end();
-
-      reject(
-        err instanceof Error
-          ? err
-          : new Error('TradingView unknown error'),
-      );
-    });
-
-    chart.onUpdate(() => {
+    const interval = setInterval(() => {
       try {
         const candle = chart.periods[0];
 
         if (!candle?.close) {
           return;
         }
+
+        clearTimeout(timeout);
+        clearInterval(interval);
+        client.end();
 
         const price = safeNumber(candle.close);
 
@@ -83,9 +77,6 @@ export async function getTradingViewMarketData(
         const pct = previousClose
           ? (change / previousClose) * 100
           : 0;
-
-        clearTimeout(timeout);
-        client.end();
 
         resolve({
           symbol,
@@ -109,18 +100,11 @@ export async function getTradingViewMarketData(
         });
       } catch (err) {
         clearTimeout(timeout);
+        clearInterval(interval);
         client.end();
 
         reject(err);
       }
-    });
+    }, 200);
   });
-}
-
-export function shouldUseTradingViewFirst(
-  symbol: string,
-): boolean {
-  const exchange = getExchange(symbol);
-
-  return exchange === 'HNX' || exchange === 'UPCOM';
 }
