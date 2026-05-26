@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const payload = await fetchMarketPrices(symbols, true);
+    const payload = await fetchMarketPrices(symbols);
     return NextResponse.json(payload);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
