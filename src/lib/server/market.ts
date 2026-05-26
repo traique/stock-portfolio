@@ -6,9 +6,9 @@ import {
 } from './providers/yahoo';
 
 import {
-  getTCBSMarketData,
+  getSSIMarketData,
   isVietnamStock,
-} from './providers/tcbs';
+} from './providers/ssi';
 
 import {
   normalizeSymbol,
@@ -62,14 +62,14 @@ export function normalizeSymbols(
 async function getMarketData(
   symbol: string,
 ): Promise<MarketData> {
-  // VN stock -> TCBS first
+  // VN stock -> SSI
   if (isVietnamStock(symbol)) {
     try {
-      return await getTCBSMarketData(symbol);
-    } catch (tcbsError) {
+      return await getSSIMarketData(symbol);
+    } catch (ssiError) {
       console.error(
-        `[TCBS Fail] ${symbol}`,
-        tcbsError,
+        `[SSI Fail] ${symbol}`,
+        ssiError,
       );
     }
   }
@@ -113,7 +113,7 @@ export async function fetchMarketPrices(
   return {
     prices,
     updatedAt: new Date().toISOString(),
-    provider: 'tcbs+yahoo',
+    provider: 'ssi+yahoo',
     debug: results,
   };
-    }
+}
