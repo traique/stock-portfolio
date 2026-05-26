@@ -519,7 +519,7 @@ export async function buildTechnicalSignals(
 ): Promise<TechnicalSignal[]> {
   // Fetch market prices cho tất cả symbols + VNINDEX (để tính relative strength)
   const allSymbols   = symbols.includes('VNINDEX') ? symbols : [...symbols, 'VNINDEX'];
-  const payload      = await fetchMarketPrices(allSymbols, true);
+  const payload      = await fetchMarketPrices(allSymbols);
 
   // Fetch VNINDEX history một lần — dùng chung cho tất cả symbols
   const vnindexHistory = await fetchHistory('VNINDEX');
