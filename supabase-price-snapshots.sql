@@ -86,8 +86,8 @@ language plpgsql
 security definer
 as $$
 declare
-  edge_url    text := 'https://<PROJECT_REF>.supabase.co/functions/v1/vci-prices';
-  service_key text := '<SERVICE_ROLE_KEY>';
+  edge_url    text := 'https://zctpghophfjubsjfsrdu.supabase.co/functions/v1/vci-prices';
+  service_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjdHBnaG9waGZqdWJzamZzcmR1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDkzNDg1NSwiZXhwIjoyMDkwNTEwODU1fQ.05_SI6DUNDpRXmoUl5G964cXJ1D_5a-8cCqKuUCt0LM';
   request_id  bigint;
 begin
   -- Chỉ chạy trong giờ giao dịch
