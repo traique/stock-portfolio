@@ -13,7 +13,7 @@ function safeNumber(v: unknown): number {
 function getEdgeUrl(): string {
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!base) throw new Error('NEXT_PUBLIC_SUPABASE_URL chưa được set');
-  return `${base.replace(/\/$/, '')}/functions/v1/vci-prices`;
+  return `${base.replace(/\/$/, '')}/functions/v1/quick-task`;
 }
 
 function getAnonKey(): string {
