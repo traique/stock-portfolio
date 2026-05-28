@@ -36,8 +36,27 @@ function parseItem(item: any) {
   const match   = item?.matchPrice  ?? {};
   const bidask  = item?.bidAsk      ?? {};
 
-  const symbol = String(listing.symbol ?? listing.ticker ?? '').toUpperCase();
+  const symbol = String(listing.symbol ?? listing.ticker ?? item?.symbol ?? '').toUpperCase();
   if (!symbol) return null;
+
+  // VNINDEX: VCI trả cấu trúc index khác cổ phiếu thường
+  if (symbol === 'VNINDEX') {
+    const price = safeNum(item?.indexValue ?? item?.close ?? item?.lastValue ?? match.matchPrice);
+    const ref   = safeNum(item?.refIndexValue ?? item?.referenceIndex ?? listing.refPrice);
+    if (!price) return null;
+    const change = ref ? price - ref : 0;
+    const pct    = ref ? (change / ref) * 100 : 0;
+    return {
+      symbol, price, ref, change, pct,
+      ceiling: 0, floor: 0,
+      high: safeNum(item?.highIndex ?? item?.high ?? match.highPrice),
+      low:  safeNum(item?.lowIndex  ?? item?.low  ?? match.lowPrice),
+      volume: safeNum(item?.totalVolume ?? item?.volume ?? match.totalVolume),
+      exchange: 'HOSE',
+      provider: 'vci-edge',
+      fetched_at: new Date().toISOString(),
+    };
+  }
 
   const price =
     safeNum(match.matchPrice) ||
@@ -108,6 +127,9 @@ async function getActiveSymbols(sb: ReturnType<typeof createClient>): Promise<st
   for (const row of txRes.data ?? []) {
     if (row.symbol) symbols.add(String(row.symbol).toUpperCase().trim());
   }
+
+  // Luôn include VNINDEX — fallback khi Yahoo bị block từ Vercel US
+  symbols.add('VNINDEX');
 
   return [...symbols].filter(Boolean).sort();
 }
