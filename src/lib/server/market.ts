@@ -81,31 +81,30 @@ async function getSnapshotBatch(symbols: string[]): Promise<Map<string, MarketDa
   return map;
 }
 
+// VNINDEX + cổ phiếu VN đều có thể fallback snapshot
+function canUseSnapshot(symbol: string): boolean {
+  return isVnIndexSymbol(symbol) || isVietnamStock(symbol);
+}
+
 export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayload> {
-  // Bước 1: thử Yahoo cho tất cả (VNINDEX dùng ^VNINDEX, cổ phiếu VN dùng .VN)
+  // Bước 1: thử Yahoo cho tất cả song song
   const yahooSettled = await Promise.allSettled(
     symbols.map(s => getYahooMarketData(s)),
   );
 
-  // Bước 2: tìm các mã Yahoo không trả được giá → fallback snapshot DB
-  const missedSymbols = symbols.filter((_, i) => {
-    const s = yahooSettled[i];
-    return s.status === 'rejected' || (s.status === 'fulfilled' && !(s.value.price > 0));
+  // Bước 2: mã nào Yahoo không có giá → fallback snapshot (VNINDEX + VN stocks)
+  const missedSymbols = symbols.filter((s, i) => {
+    const r = yahooSettled[i];
+    return (r.status === 'rejected' || !(r as PromiseFulfilledResult<MarketData>).value?.price) 
+      && canUseSnapshot(s);
   });
 
-  // Bước 3: lấy snapshot cho các mã bị miss (chỉ mã VN mới có trong DB)
-  const snapshotMap = new Map<string, MarketData>();
-  const vnMissed = missedSymbols.filter(s => isVietnamStock(s) && !isVnIndexSymbol(s));
-  if (vnMissed.length > 0) {
-    try {
-      const fetched = await getSnapshotBatch(vnMissed);
-      for (const [sym, data] of fetched) snapshotMap.set(sym, data);
-    } catch (err) {
-      console.error('[Snapshot Fallback Fail]', err);
-    }
-  }
+  const snapshotMap = await getSnapshotBatch(missedSymbols).catch(err => {
+    console.error('[Snapshot Fallback Fail]', err);
+    return new Map<string, MarketData>();
+  });
 
-  // Bước 4: gộp kết quả — Yahoo ưu tiên, snapshot bù vào chỗ thiếu
+  // Bước 3: gộp — Yahoo ưu tiên, snapshot bù vào chỗ thiếu
   const results: MarketData[] = symbols.map((symbol, i) => {
     const yahoo = yahooSettled[i];
     if (yahoo.status === 'fulfilled' && yahoo.value.price > 0) {
