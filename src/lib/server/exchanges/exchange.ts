@@ -38,7 +38,7 @@ export function getYahooSymbol(symbol: string): string {
   const s = normalizeSymbol(symbol);
 
   if (isVnIndexSymbol(s)) {
-    return '^VNINDEX';
+    return '^VNINDEX.VN';
   }
 
   return `${s}.VN`;
