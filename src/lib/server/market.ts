@@ -11,6 +11,7 @@ import {
 } from './providers/ssi';
 
 import {
+  isVnIndexSymbol,
   normalizeSymbol,
 } from './exchanges/exchange';
 
@@ -24,8 +25,6 @@ export type PricesPayload = {
   provider: string;
   debug: MarketData[];
 };
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function buildErrorResult(symbol: string): MarketData {
   return {
@@ -50,18 +49,12 @@ function getSupabase() {
   });
 }
 
-// ─── Đọc từ price_snapshots ──────────────────────────────────────────────────
-// Đây là nguồn chính cho tất cả mã VN.
-// Data được cron job cập nhật mỗi 30 phút trong giờ giao dịch.
-
-async function getSnapshotBatch(
-  symbols: string[],
-): Promise<Map<string, MarketData>> {
+async function getSnapshotBatch(symbols: string[]): Promise<Map<string, MarketData>> {
+  if (!symbols.length) return new Map();
   const sb = getSupabase();
-
   const { data, error } = await sb
     .from('price_snapshots')
-    .select('symbol, price, ref, change, pct, ceiling, floor, high, low, volume, fetched_at')
+    .select('symbol,price,ref,change,pct,ceiling,floor,high,low,volume,fetched_at')
     .in('symbol', symbols);
 
   if (error) throw new Error(`Supabase read: ${error.message}`);
@@ -88,43 +81,37 @@ async function getSnapshotBatch(
   return map;
 }
 
-// ─── Main ────────────────────────────────────────────────────────────────────
+export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayload> {
+  // Bước 1: thử Yahoo cho tất cả (VNINDEX dùng ^VNINDEX, cổ phiếu VN dùng .VN)
+  const yahooSettled = await Promise.allSettled(
+    symbols.map(s => getYahooMarketData(s)),
+  );
 
-export async function fetchMarketPrices(
-  symbols: string[],
-): Promise<PricesPayload> {
-  const vnSymbols     = symbols.filter(isVietnamStock);
-  const globalSymbols = symbols.filter(s => !isVietnamStock(s));
+  // Bước 2: tìm các mã Yahoo không trả được giá → fallback snapshot DB
+  const missedSymbols = symbols.filter((_, i) => {
+    const s = yahooSettled[i];
+    return s.status === 'rejected' || (s.status === 'fulfilled' && !(s.value.price > 0));
+  });
 
-  // VN: đọc từ snapshot DB (1 query)
+  // Bước 3: lấy snapshot cho các mã bị miss (chỉ mã VN mới có trong DB)
   const snapshotMap = new Map<string, MarketData>();
-  if (vnSymbols.length > 0) {
+  const vnMissed = missedSymbols.filter(s => isVietnamStock(s) && !isVnIndexSymbol(s));
+  if (vnMissed.length > 0) {
     try {
-      const fetched = await getSnapshotBatch(vnSymbols);
+      const fetched = await getSnapshotBatch(vnMissed);
       for (const [sym, data] of fetched) snapshotMap.set(sym, data);
     } catch (err) {
-      console.error('[Snapshot Read Fail]', err);
+      console.error('[Snapshot Fallback Fail]', err);
     }
   }
 
-  // Non-VN: Yahoo song song
-  const globalSettled = await Promise.allSettled(
-    globalSymbols.map(s =>
-      getYahooMarketData(s).catch(err => {
-        console.error(`[Yahoo Fail] ${s}`, err);
-        throw err;
-      }),
-    ),
-  );
-
-  // Gộp đúng thứ tự
-  const results: MarketData[] = symbols.map(symbol => {
-    if (isVietnamStock(symbol)) {
-      return snapshotMap.get(symbol) ?? buildErrorResult(symbol);
+  // Bước 4: gộp kết quả — Yahoo ưu tiên, snapshot bù vào chỗ thiếu
+  const results: MarketData[] = symbols.map((symbol, i) => {
+    const yahoo = yahooSettled[i];
+    if (yahoo.status === 'fulfilled' && yahoo.value.price > 0) {
+      return yahoo.value;
     }
-    const i = globalSymbols.indexOf(symbol);
-    const s = globalSettled[i];
-    return s?.status === 'fulfilled' ? s.value : buildErrorResult(symbol);
+    return snapshotMap.get(symbol) ?? buildErrorResult(symbol);
   });
 
   const prices = Object.fromEntries(
@@ -134,7 +121,7 @@ export async function fetchMarketPrices(
   return {
     prices,
     updatedAt: new Date().toISOString(),
-    provider: 'snapshot+yahoo',
+    provider: 'yahoo+snapshot',
     debug: results,
   };
-        }
+}
