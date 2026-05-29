@@ -6,9 +6,9 @@ import {
   type MarketData,
 } from './providers/yahoo';
 
-import {
-  isVietnamStock,
-} from './providers/ssi';
+//import {
+//  isVietnamStock,
+//} from './providers/ssi';
 
 import {
   isVnIndexSymbol,
