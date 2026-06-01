@@ -50,9 +50,9 @@ export type UsePortfolioReturn = {
   message:           string;
   setMessage:        (m: string) => void;
   // actions
-  handleReload:      () => void;
-  handleRefreshPrices: () => void;
-  handleLogout:      () => Promise<void>;
+  handleReload:        () => Promise<void>;
+  handleRefreshPrices: () => Promise<void>;
+  handleLogout:        () => Promise<void>;
 };
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
@@ -285,4 +285,4 @@ export function usePortfolio(): UsePortfolioReturn {
     loading, refreshing, message, setMessage,
     handleReload, handleRefreshPrices, handleLogout,
   };
-}
+    }
