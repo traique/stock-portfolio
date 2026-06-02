@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@mathieuc/tradingview": "^3.0.0",
+    "@sentry/nextjs": "^10.55.0",
+    "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.57.4",
     "cheerio": "^1.0.0",
     "lucide-react": "^0.542.0",
