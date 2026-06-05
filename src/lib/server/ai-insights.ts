@@ -1,4 +1,5 @@
 import { fetchMarketPrices } from '@/lib/server/market';
+import { getExchange } from '@/lib/server/exchanges/exchange';
 
 // ================= TYPES =================
 
@@ -281,21 +282,13 @@ async function fetchYahooHistory(ticker: string): Promise<PriceHistory> {
   throw lastError ?? new Error(`All Yahoo hosts failed for ${ticker}`);
 }
 
-// ─── VCI Edge history (HNX/UPCOM) ────────────────────────────────────────────
-
-const HNX_SYMBOLS  = new Set(['BAB','BVS','CEO','IDC','LAS','MBS','NTP','PLC','PVI','PVS','SHS','TNG','VCS','HHS','HHV','CII','ACB','SHB','TPB','NVL']);
-const UPCOM_SYMBOLS = new Set(['ABB','ACV','BSR','CTR','FOX','MCH','OIL','QNS','SIP','VEA','VGI']);
-
-function isHnxOrUpcom(symbol: string): boolean {
-  return HNX_SYMBOLS.has(symbol) || UPCOM_SYMBOLS.has(symbol);
-}
-
+// ─── VCI Edge history cho HNX / UPCOM ───────────────────────────────────────
 async function fetchVciEdgeHistory(symbol: string): Promise<PriceHistory> {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !anonKey) throw new Error('Supabase env not set');
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!supabaseUrl || !anonKey) throw new Error('Missing Supabase env vars');
 
-  const edgeUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/vci-prices`;
+  const edgeUrl = `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/vci-prices`;
   const res = await fetch(edgeUrl, {
     method:  'POST',
     headers: {
@@ -303,36 +296,35 @@ async function fetchVciEdgeHistory(symbol: string): Promise<PriceHistory> {
       'Authorization': `Bearer ${anonKey}`,
     },
     body: JSON.stringify({ mode: 'history', symbols: [symbol], days: 66 }),
-    next: { revalidate: 3600 },
   });
 
   if (!res.ok) throw new Error(`VCI Edge history HTTP ${res.status}`);
-
   const data = await res.json();
   const hist = (data.history ?? []).find((h: { symbol: string }) => h.symbol === symbol);
-
-  if (!hist || hist.closes.length === 0) throw new Error(`No history for ${symbol}`);
+  if (!hist || !(hist.closes as number[])?.length) throw new Error(`No history for ${symbol}`);
 
   return {
-    close:  hist.closes,
-    volume: hist.volumes,
-    high:   hist.highs,
-    low:    hist.lows,
+    close:  hist.closes  as number[],
+    volume: hist.volumes as number[],
+    high:   hist.highs   as number[],
+    low:    hist.lows    as number[],
   };
 }
 
 async function fetchHistory(symbol: string): Promise<PriceHistory> {
-  // HNX/UPCOM → VCI Edge Function (Deno, không bị Vercel network block)
-  if (isHnxOrUpcom(symbol)) {
+  // Dùng EXCHANGE_MAP để route đúng nguồn data theo sàn
+  const exchange = getExchange(symbol);
+
+  if (exchange === 'HNX' || exchange === 'UPCOM') {
     try {
       return await fetchVciEdgeHistory(symbol);
     } catch (err) {
-      console.error(`[fetchHistory] VCI Edge failed for ${symbol}:`, err);
+      console.error(`[fetchHistory] VCI Edge failed for ${symbol} (${exchange}):`, err);
       return { close: [], volume: [], high: [], low: [] };
     }
   }
 
-  // HOSE + VNINDEX → Yahoo Finance
+  // HOSE + VNINDEX + unknown → Yahoo Finance
   const ticker = symbol === 'VNINDEX' ? '^VNINDEX' : `${symbol}.VN`;
   try {
     return await fetchYahooHistory(ticker);
