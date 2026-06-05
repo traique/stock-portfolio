@@ -7,7 +7,8 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const VCI_URL = 'https://trading.vietcap.com.vn/api/price/symbols/getList';
+const VCI_URL       = 'https://trading.vietcap.com.vn/api/price/symbols/getList';
+const VCI_CHART_URL = 'https://trading.vietcap.com.vn/api/price/symbols/chart';
 
 const VCI_HEADERS = {
   'Content-Type': 'application/json',
@@ -135,77 +136,50 @@ async function getActiveSymbols(sb: ReturnType<typeof createClient>): Promise<st
 }
 
 
-// ─── VCI Chart History (HNX/UPCOM) ───────────────────────────────────────────
-//
-// Chạy trong Deno (Singapore) — không bị Vercel network restriction.
-// trading.vietcap.com.vn có chart API trả OHLCV theo ngày.
-//
-// Endpoint: POST /api/price/symbols/chart
-// Body: { symbol, resolution: "D", from: unix_ts, to: unix_ts }
+// ─── History mode (HNX/UPCOM) ────────────────────────────────────────────────
+// Dùng cho indicators: MACD, BB, RSI, Support/Resistance...
+// Yahoo không có HNX/UPCOM — Edge Function fetch từ VCI chart API.
 
-const VCI_CHART_URL = 'https://trading.vietcap.com.vn/api/price/symbols/chart';
-
-interface OHLCVDay {
-  t: number;  // timestamp
-  o: number;  // open
-  h: number;  // high
-  l: number;  // low
-  c: number;  // close
-  v: number;  // volume
-}
-
-interface HistoryResult {
-  symbol:  string;
-  closes:  number[];
-  highs:   number[];
-  lows:    number[];
-  volumes: number[];
-  source:  'vci' | 'empty';
-}
-
-async function fetchVciHistory(symbol: string, days = 66): Promise<HistoryResult> {
+// deno-lint-ignore no-explicit-any
+async function fetchVciHistory(symbol: string, days = 66): Promise<any> {
   const to   = Math.floor(Date.now() / 1000);
-  const from = to - days * 24 * 60 * 60;
+  const from = to - days * 86400;
 
-  try {
-    const res = await fetch(VCI_CHART_URL, {
-      method:  'POST',
-      headers: VCI_HEADERS,
-      body:    JSON.stringify({ symbol, resolution: 'D', from, to }),
-    });
+  const res = await fetch(VCI_CHART_URL, {
+    method:  'POST',
+    headers: VCI_HEADERS,
+    body:    JSON.stringify({ symbol, resolution: 'D', from, to }),
+  });
 
-    if (!res.ok) throw new Error(`VCI chart HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`VCI chart HTTP ${res.status}`);
+  const data = await res.json();
 
-    const data = await res.json();
+  // VCI có thể trả array of candles hoặc column format { t,o,h,l,c,v }
+  // deno-lint-ignore no-explicit-any
+  let candles: any[] = [];
 
-    // VCI chart response format: { t: [], o: [], h: [], l: [], c: [], v: [] }
-    // hoặc array of { t, o, h, l, c, v }
-    let candles: OHLCVDay[] = [];
-
-    if (Array.isArray(data)) {
-      candles = data.filter((d: OHLCVDay) => d.c > 0);
-    } else if (data.c && Array.isArray(data.c)) {
-      // Column format
-      candles = (data.t as number[]).map((t: number, i: number) => ({
-        t, o: data.o[i], h: data.h[i], l: data.l[i],
-        c: data.c[i], v: data.v[i],
-      })).filter((d: OHLCVDay) => d.c > 0);
-    }
-
-    if (candles.length === 0) throw new Error('No candle data');
-
-    return {
-      symbol,
-      closes:  candles.map((d: OHLCVDay) => d.c),
-      highs:   candles.map((d: OHLCVDay) => d.h),
-      lows:    candles.map((d: OHLCVDay) => d.l),
-      volumes: candles.map((d: OHLCVDay) => d.v),
-      source:  'vci',
-    };
-  } catch (err) {
-    console.error(`[fetchVciHistory] ${symbol}:`, err);
-    return { symbol, closes: [], highs: [], lows: [], volumes: [], source: 'empty' };
+  if (Array.isArray(data)) {
+    candles = data.filter((d) => d.c > 0);
+  } else if (Array.isArray(data.c)) {
+    // Column format
+    candles = (data.t as number[]).map((t: number, i: number) => ({
+      t, o: data.o[i], h: data.h[i], l: data.l[i], c: data.c[i], v: data.v[i],
+    })).filter((d) => d.c > 0);
+  } else {
+    throw new Error(`VCI chart unknown format for ${symbol}`);
   }
+
+  if (candles.length === 0) throw new Error(`VCI chart empty for ${symbol}`);
+
+  return {
+    symbol,
+    closes:  candles.map((d) => d.c),
+    highs:   candles.map((d) => d.h),
+    lows:    candles.map((d) => d.l),
+    volumes: candles.map((d) => d.v),
+    count:   candles.length,
+    source:  'vci-chart',
+  };
 }
 
 serve(async (req) => {
@@ -277,10 +251,9 @@ serve(async (req) => {
     );
   }
 
-  // ── MODE: HISTORY ────────────────────────────────────────────────────────
-  // Trả về OHLCV history cho 1 hoặc nhiều HNX/UPCOM symbols.
-  // Gọi từ Next.js khi Yahoo không có data (HNX/UPCOM).
+  // ── MODE: HISTORY ─────────────────────────────────────────────────────────
   // Body: { mode: "history", symbols: ["SHS","QNS"], days?: 66 }
+  // Trả về OHLCV history cho HNX/UPCOM để tính indicators (MACD, RSI, BB...)
   if (mode === 'history') {
     const histSymbols: string[] = Array.isArray(body.symbols)
       ? body.symbols.map((s: unknown) => String(s).trim().toUpperCase()).filter(Boolean)
@@ -288,25 +261,32 @@ serve(async (req) => {
 
     if (!histSymbols.length) {
       return new Response(
-        JSON.stringify({ error: 'symbols required for history mode' }),
+        JSON.stringify({ error: 'symbols array required for history mode' }),
         { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } },
       );
     }
 
     const days: number = typeof body.days === 'number' ? body.days : 66;
 
-    const histResults = await Promise.all(
-      histSymbols.map(sym => fetchVciHistory(sym, days))
+    const histResults = await Promise.allSettled(
+      histSymbols.map((sym) => fetchVciHistory(sym, days))
+    );
+
+    const history = histResults.map((r, i) =>
+      r.status === 'fulfilled'
+        ? r.value
+        : { symbol: histSymbols[i], closes: [], highs: [], lows: [], volumes: [], source: 'error', error: String((r as PromiseRejectedResult).reason) }
     );
 
     return new Response(
       JSON.stringify({
-        history: histResults,
+        history,
         updatedAt: new Date().toISOString(),
-        provider: 'vci-history',
+        provider:  'vci-history',
       }),
       { headers: { ...CORS, 'Content-Type': 'application/json' } },
     );
+  }
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
