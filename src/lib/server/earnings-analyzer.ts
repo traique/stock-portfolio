@@ -123,33 +123,33 @@ async function fetchYahooFinancials(symbol: string): Promise<VCIFinancialPeriod[
 
       // Ưu tiên quarterly income statement
       const quarterly: Array<Record<string, unknown>> =
-        result?.incomeStatementHistoryQuarterly?.incomeStatementHistory ?? [];
+        ((result as Record<string,unknown>)?.incomeStatementHistoryQuarterly as Record<string,unknown>)?.incomeStatementHistory as Array<Record<string,unknown>> ?? [];
 
       if (quarterly.length > 0) {
         return quarterly.slice(0, 8).map((q, i) => {
-          const endDate = String(q?.endDate?.fmt ?? q?.endDate?.raw ?? '');
+          const endDate = String((q?.endDate as Record<string,unknown>)?.fmt ?? (q?.endDate as Record<string,unknown>)?.raw ?? '');
           // Parse period từ endDate: "2025-03-31" → "Q1/2025"
           const period = parsePeriodFromDate(endDate) ?? `Q${4 - i}/2024`;
           return {
             period,
-            revenue:   Number((q?.totalRevenue as Record<string,unknown>)?.raw ?? 0) / 1e9,   // → tỷ VND
-            netIncome: Number((q?.netIncome    as Record<string,unknown>)?.raw ?? 0) / 1e9,
-            eps:       Number((q?.netIncome    as Record<string,unknown>)?.raw ?? 0) /
-                       Number((result?.defaultKeyStatistics?.sharesOutstanding as Record<string,unknown>)?.raw ?? 1e9),
+            revenue:   Number(((q as Record<string,unknown>)?.totalRevenue as Record<string,unknown>)?.raw ?? 0) / 1e9,
+            netIncome: Number(((q as Record<string,unknown>)?.netIncome    as Record<string,unknown>)?.raw ?? 0) / 1e9,
+            eps:       Number(((q as Record<string,unknown>)?.netIncome    as Record<string,unknown>)?.raw ?? 0) /
+                       Number(((result?.defaultKeyStatistics as Record<string,unknown>)?.sharesOutstanding as Record<string,unknown>)?.raw ?? 1e9),
           };
         });
       }
 
       // Fallback: earnings history từ Yahoo earnings module
       const earningsQ: Array<Record<string, unknown>> =
-        result?.earnings?.earningsChart?.quarterly ?? [];
+        (((result as Record<string,unknown>)?.earnings as Record<string,unknown>)?.earningsChart as Record<string,unknown>)?.quarterly as Array<Record<string,unknown>> ?? [];
 
       if (earningsQ.length > 0) {
         return earningsQ.slice(0, 8).map(q => ({
-          period:    String(q?.date ?? ''),
-          revenue:   0, // Yahoo earnings không có revenue
+          period:    String((q as Record<string,unknown>)?.date ?? ''),
+          revenue:   0,
           netIncome: 0,
-          eps:       Number((q?.actual as Record<string,unknown>)?.raw ?? 0),
+          eps:       Number(((q as Record<string,unknown>)?.actual as Record<string,unknown>)?.raw ?? 0),
         })).filter(q => q.eps !== 0);
       }
     } catch { /* try next host */ }
@@ -266,4 +266,4 @@ export function buildEarningsPromptSection(data: EarningsCalendar): string {
   }
 
   return lines.join('\n');
-}
+                  }
