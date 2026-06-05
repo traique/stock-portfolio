@@ -12,6 +12,8 @@
 //    Lịch công bố Q2 dự kiến: 15-20/7. Còn 25 ngày.
 //    Pre-earnings window — biến động tăng thường xuất hiện T-10."
 
+import { getExchange } from './exchanges/exchange';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type QuarterlyResult = {
@@ -98,12 +100,10 @@ type VCIFinancialPeriod = {
   eps:       number;
 };
 
-// HNX/UPCOM thường không có financials trên Yahoo — trả về empty, dùng estimate
-const HNX_UPCOM_EARNINGS = new Set(['BAB','BVS','CEO','IDC','LAS','MBS','NTP','PLC','PVI','PVS','SHS','TNG','VCS','HHS','HHV','CII','ACB','SHB','TPB','NVL','ABB','ACV','BSR','CTR','FOX','MCH','OIL','QNS','SIP','VEA','VGI']);
-
 async function fetchYahooFinancials(symbol: string): Promise<VCIFinancialPeriod[]> {
   // Yahoo Finance không có financials cho HNX/UPCOM — skip, dùng earnings estimate
-  if (HNX_UPCOM_EARNINGS.has(symbol)) return [];
+  const exchange = getExchange(symbol);
+  if (exchange === 'HNX' || exchange === 'UPCOM') return [];
 
   const ticker = `${symbol}.VN`;
   const modules = 'earnings,incomeStatementHistoryQuarterly,defaultKeyStatistics';
@@ -266,4 +266,4 @@ export function buildEarningsPromptSection(data: EarningsCalendar): string {
   }
 
   return lines.join('\n');
-                  }
+         }
