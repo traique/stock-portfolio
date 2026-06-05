@@ -10,6 +10,8 @@
 // Lý do chọn SSI iBoard: public endpoint, không cần API key, được dùng
 // rộng rãi trong cộng đồng dev VN, data update gần realtime.
 
+import { getExchange } from './exchanges/exchange';
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ForeignFlow = {
@@ -61,8 +63,6 @@ type YahooOHLCV = {
   lows:    number[];
 };
 
-const HNX_UPCOM_SET = new Set(['BAB','BVS','CEO','IDC','LAS','MBS','NTP','PLC','PVI','PVS','SHS','TNG','VCS','HHS','HHV','CII','ACB','SHB','TPB','NVL','ABB','ACV','BSR','CTR','FOX','MCH','OIL','QNS','SIP','VEA','VGI']);
-
 async function fetchVciEdgeOHLCV(symbol: string): Promise<YahooOHLCV | null> {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -86,7 +86,8 @@ async function fetchVciEdgeOHLCV(symbol: string): Promise<YahooOHLCV | null> {
 
 async function fetchYahooOHLCV(symbol: string, range = '3mo'): Promise<YahooOHLCV | null> {
   // HNX/UPCOM → VCI Edge (Yahoo không có data)
-  if (HNX_UPCOM_SET.has(symbol)) {
+  const exchange = getExchange(symbol);
+  if (exchange === 'HNX' || exchange === 'UPCOM') {
     return fetchVciEdgeOHLCV(symbol);
   }
 
@@ -436,4 +437,4 @@ export function buildMoneyFlowPromptSection(
   }
 
   return lines.join('\n');
-}
+  }
