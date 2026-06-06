@@ -11,8 +11,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const VCI_URL       = 'https://trading.vietcap.com.vn/api/price/symbols/getList';
-const VCI_CHART_URL = 'https://trading.vietcap.com.vn/api/price/symbols/chart';
+const VCI_URL        = 'https://trading.vietcap.com.vn/api/price/symbols/getList';
+// TCBS: nguồn OHLCV lịch sử — có cả HOSE, HNX, UPCOM, không bị block
+const TCBS_CHART_URL = 'https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term';
 
 const VCI_HEADERS = {
   'Content-Type': 'application/json',
@@ -132,34 +133,71 @@ async function getActiveSymbols(sb: ReturnType<typeof createClient>): Promise<st
 // ─── VCI Chart (EOD / History) ────────────────────────────────────────────────
 
 // deno-lint-ignore no-explicit-any
-async function fetchVciOHLCV(symbol: string, days = 90): Promise<any[]> {
+async function fetchOHLCV(symbol: string, days = 90): Promise<any[]> {
   const to   = Math.floor(Date.now() / 1000);
   const from = to - days * 86400;
 
-  const res = await fetch(VCI_CHART_URL, {
-    method: 'POST', headers: VCI_HEADERS,
-    body: JSON.stringify({ symbol, resolution: 'D', from, to }),
-  });
+  // TCBS API — public, không cần auth, có cả HOSE/HNX/UPCOM
+  // Endpoint: GET /stock-insight/v1/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&from=...&to=...
+  const url = `${TCBS_CHART_URL}?ticker=${symbol}&type=stock&resolution=D&from=${from}&to=${to}`;
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`VCI chart ${symbol} HTTP ${res.status} — ${body.slice(0, 200)}`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://tcinvest.tcbs.com.vn',
+        'Referer': 'https://tcinvest.tcbs.com.vn/',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`TCBS ${symbol} HTTP ${res.status} — ${body.slice(0, 100)}`);
+    }
+
+    const data = await res.json();
+    // TCBS format: { data: [ {open,high,low,close,volume,tradingDate}, ... ] }
+    // tradingDate: "2025-01-02T00:00:00.000+07:00" hoặc unix timestamp
+    // deno-lint-ignore no-explicit-any
+    const bars: any[] = data?.data ?? data?.bars ?? (Array.isArray(data) ? data : []);
+
+    if (!bars.length) throw new Error(`TCBS ${symbol} empty response`);
+
+    // deno-lint-ignore no-explicit-any
+    return bars.map((b: any) => {
+      // Parse tradingDate → unix timestamp
+      let t: number;
+      if (typeof b.tradingDate === 'string') {
+        t = Math.floor(new Date(b.tradingDate).getTime() / 1000);
+      } else if (typeof b.t === 'number') {
+        t = b.t;
+      } else {
+        t = Math.floor(Date.now() / 1000);
+      }
+      return {
+        t,
+        o: Number(b.open  ?? b.o ?? b.close),
+        h: Number(b.high  ?? b.h ?? b.close),
+        l: Number(b.low   ?? b.l ?? b.close),
+        c: Number(b.close ?? b.c),
+        v: Number(b.volume ?? b.v ?? 0),
+      };
+    }).filter((d) => d.c > 0);
+  } catch(e) {
+    clearTimeout(timer);
+    throw e;
   }
-  const data = await res.json();
-
-  // deno-lint-ignore no-explicit-any
-  let candles: any[] = [];
-
-  if (Array.isArray(data)) {
-    candles = data.filter((d) => d.c > 0);
-  } else if (Array.isArray(data?.c)) {
-    candles = (data.t as number[]).map((t: number, i: number) => ({
-      t, o: data.o[i], h: data.h[i], l: data.l[i], c: data.c[i], v: data.v[i],
-    })).filter((d) => d.c > 0);
-  }
-
-  return candles;
 }
+
+// Alias giữ compatibility với code gọi fetchVciOHLCV
+// deno-lint-ignore no-explicit-any
+const fetchVciOHLCV = fetchOHLCV;
 
 // deno-lint-ignore no-explicit-any
 async function saveEodHistory(supabase: any, symbol: string, exchange: string, candles: any[]) {
@@ -314,25 +352,19 @@ serve(async (req) => {
 
       const endpoints = [
         {
-          name: '1-trading-POST-symbols/chart',
-          method: 'POST',
-          url: 'https://trading.vietcap.com.vn/api/price/symbols/chart',
-          body: JSON.stringify({ symbol: sym, resolution: 'D', from, to }),
-        },
-        {
-          name: '2-trading-GET-tradingview',
+          name: '1-tcbs-HOSE-HPG',
           method: 'GET',
-          url: `https://trading.vietcap.com.vn/api/tradingview/history?symbol=${sym}&resolution=D&from=${from}&to=${to}`,
+          url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&from=${from}&to=${to}`,
           body: undefined,
         },
         {
-          name: '3-mt-GET-historical',
+          name: '2-tcbs-HNX-SHS',
           method: 'GET',
-          url: `https://mt.vietcap.com.vn/api/price/v1/historical-price/${sym}?resolution=D&limit=10`,
+          url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=SHS&type=stock&resolution=D&from=${from}&to=${to}`,
           body: undefined,
         },
         {
-          name: '4-tcbs-GET-bars',
+          name: '3-tcbs-symbol-from-body',
           method: 'GET',
           url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${sym}&type=stock&resolution=D&from=${from}&to=${to}`,
           body: undefined,
