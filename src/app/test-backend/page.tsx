@@ -18,7 +18,8 @@ type Results = Record<string, TestResult>;
 
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL  ?? '';
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
-const EDGE_URL      = `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/vci-prices`;
+//const EDGE_URL      = `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/vci-prices`;
+const EDGE_URL = `${SUPABASE_URL.replace(/\/+$/, '')}/functions/v1/quick-task`;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
