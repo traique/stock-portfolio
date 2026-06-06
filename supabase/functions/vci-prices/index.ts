@@ -292,45 +292,78 @@ serve(async (req) => {
       return json({ history, updatedAt: new Date().toISOString(), provider: 'vci-history' });
     }
 
-    // ── PROBE — tìm endpoint chart đúng ──────────────────────────────────────
+    // ── PROBE — tìm endpoint chart đúng (timeout 5s mỗi endpoint) ──────────
     if (mode === 'probe') {
       const sym = String(body.symbol ?? 'HPG').toUpperCase();
       const to   = Math.floor(Date.now() / 1000);
       const from = to - 10 * 86400;
 
+      // Helper fetch với timeout
+      async function fetchWithTimeout(url: string, opts: RequestInit, ms = 5000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), ms);
+        try {
+          const r = await fetch(url, { ...opts, signal: controller.signal });
+          clearTimeout(timer);
+          return r;
+        } catch(e) {
+          clearTimeout(timer);
+          throw e;
+        }
+      }
+
       const endpoints = [
-        { name: 'chart-POST-symbols/chart',     method: 'POST', url: 'https://trading.vietcap.com.vn/api/price/symbols/chart',            body: JSON.stringify({ symbol: sym, resolution: 'D', from, to }) },
-        { name: 'chart-POST-v1/chart',           method: 'POST', url: 'https://trading.vietcap.com.vn/api/price/v1/chart',                body: JSON.stringify({ symbol: sym, resolution: 'D', from, to }) },
-        { name: 'chart-GET-tradingview',         method: 'GET',  url: `https://trading.vietcap.com.vn/api/tradingview/history?symbol=${sym}&resolution=D&from=${from}&to=${to}`, body: undefined },
-        { name: 'mt-GET-historical',             method: 'GET',  url: `https://mt.vietcap.com.vn/api/price/v1/historical-price/${sym}?resolution=D&limit=10`, body: undefined },
-        { name: 'mt-POST-chart',                 method: 'POST', url: 'https://mt.vietcap.com.vn/api/price/v1/chart',                     body: JSON.stringify({ symbol: sym, resolution: 'D', from, to }) },
-        { name: 'chart-GET-history',             method: 'GET',  url: `https://trading.vietcap.com.vn/api/price/history?symbol=${sym}&resolution=D&from=${from}&to=${to}`, body: undefined },
-        { name: 'apipubaws-tcbs',                method: 'GET',  url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${sym}&type=stock&resolution=D&from=${from}&to=${to}`, body: undefined },
-        { name: 'iboard-ssi-chart',              method: 'GET',  url: `https://iboard.ssi.com.vn/dchart/api/history?symbol=${sym}&resolution=D&from=${from}&to=${to}`, body: undefined },
+        {
+          name: '1-trading-POST-symbols/chart',
+          method: 'POST',
+          url: 'https://trading.vietcap.com.vn/api/price/symbols/chart',
+          body: JSON.stringify({ symbol: sym, resolution: 'D', from, to }),
+        },
+        {
+          name: '2-trading-GET-tradingview',
+          method: 'GET',
+          url: `https://trading.vietcap.com.vn/api/tradingview/history?symbol=${sym}&resolution=D&from=${from}&to=${to}`,
+          body: undefined,
+        },
+        {
+          name: '3-mt-GET-historical',
+          method: 'GET',
+          url: `https://mt.vietcap.com.vn/api/price/v1/historical-price/${sym}?resolution=D&limit=10`,
+          body: undefined,
+        },
+        {
+          name: '4-tcbs-GET-bars',
+          method: 'GET',
+          url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${sym}&type=stock&resolution=D&from=${from}&to=${to}`,
+          body: undefined,
+        },
       ];
 
-      const probeResults = await Promise.allSettled(
-        endpoints.map(async (ep) => {
-          const r = await fetch(ep.url, {
+      // Chạy tuần tự để dễ debug, không song song
+      const results = [];
+      for (const ep of endpoints) {
+        try {
+          const r = await fetchWithTimeout(ep.url, {
             method: ep.method,
-            headers: { ...VCI_HEADERS, ...(ep.body ? {} : {}) },
+            headers: VCI_HEADERS,
             body: ep.body,
-          });
+          }, 5000);
           const text = await r.text();
-          return {
-            name:   ep.name,
-            status: r.status,
-            ok:     r.ok,
-            preview: text.slice(0, 300),
-          };
-        })
-      );
-
-      const results = probeResults.map((r, i) =>
-        r.status === 'fulfilled'
-          ? r.value
-          : { name: endpoints[i].name, status: 0, ok: false, error: String(r.reason) }
-      );
+          results.push({
+            name:    ep.name,
+            status:  r.status,
+            ok:      r.ok,
+            preview: text.slice(0, 200),
+          });
+        } catch(e) {
+          results.push({
+            name:  ep.name,
+            status: 0,
+            ok:    false,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
 
       return json({ probe: sym, results });
     }
