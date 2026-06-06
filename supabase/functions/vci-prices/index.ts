@@ -61,7 +61,8 @@ function parseItem(item: any) {
 
   const price =
     safeNum(match.matchPrice) ||
-    safeNum(match.closePrice) ||\n    safeNum(bidask?.bidPrices?.[0]?.price);
+    safeNum(match.closePrice) ||
+    safeNum(bidask?.bidPrices?.[0]?.price);
 
   const ref = safeNum(listing.refPrice ?? listing.referencePrice);
   if (!price) return null;
@@ -69,27 +70,18 @@ function parseItem(item: any) {
   const change = ref ? price - ref : 0;
   const pct    = ref ? (change / ref) * 100 : 0;
 
-  // Ưu tiên ceiling/floor từ VCI (đúng theo từng sàn: HOSE ±7%, HNX ±10%, UPCOM ±15%)
-  // Chỉ tự tính nếu VCI không trả về
-  const exchange = String(listing.board ?? listing.exchange ?? '').toUpperCase();
-  const ceilingMultiplier = exchange === 'HNX' ? 1.10 : exchange === 'UPCOM' ? 1.15 : 1.07;
-  const floorMultiplier   = exchange === 'HNX' ? 0.90 : exchange === 'UPCOM' ? 0.85 : 0.93;
-
-  const ceiling = safeNum(listing.ceiling) || round10(ref * ceilingMultiplier);
-  const floor   = safeNum(listing.floor)   || round10(ref * floorMultiplier);
-
   return {
     symbol,
     price,
     ref,
     change,
     pct,
-    ceiling,
-    floor,
+    ceiling:   round10(ref * 1.07),
+    floor:     round10(ref * 0.93),
     high:      safeNum(match.highPrice ?? match.high),
     low:       safeNum(match.lowPrice  ?? match.low),
     volume:    safeNum(match.totalVolume ?? match.totalShare ?? match.volume),
-    exchange,
+    exchange:  String(listing.board ?? listing.exchange ?? '').toUpperCase(),
     provider:  'vci-edge',
     fetched_at: new Date().toISOString(),
   };
@@ -144,12 +136,12 @@ async function getActiveSymbols(sb: ReturnType<typeof createClient>): Promise<st
 }
 
 
-// ─── History mode (HNX/UPCOM) ────────────────────────────────────────────────
-// Dùng cho indicators: MACD, BB, RSI, Support/Resistance...
-// Yahoo không có HNX/UPCOM — Edge Function fetch từ VCI chart API.
+// ─── EOD History ─────────────────────────────────────────────────────────────
+// Sau 15:20 VN: fetch OHLCV từ VCI chart API → upsert vào price_history.
+// Dùng cho indicators (MACD, RSI, BB) của tất cả sàn.
 
 // deno-lint-ignore no-explicit-any
-async function fetchVciHistory(symbol: string, days = 66): Promise<any> {
+async function fetchVciOHLCV(symbol: string, days = 90): Promise<any[]> {
   const to   = Math.floor(Date.now() / 1000);
   const from = to - days * 86400;
 
@@ -159,35 +151,77 @@ async function fetchVciHistory(symbol: string, days = 66): Promise<any> {
     body:    JSON.stringify({ symbol, resolution: 'D', from, to }),
   });
 
-  if (!res.ok) throw new Error(`VCI chart HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`VCI chart ${symbol} HTTP ${res.status}`);
   const data = await res.json();
 
-  // VCI có thể trả array of candles hoặc column format { t,o,h,l,c,v }
   // deno-lint-ignore no-explicit-any
   let candles: any[] = [];
 
   if (Array.isArray(data)) {
     candles = data.filter((d) => d.c > 0);
-  } else if (Array.isArray(data.c)) {
-    // Column format
+  } else if (Array.isArray(data?.c)) {
+    // Column format: { t:[], o:[], h:[], l:[], c:[], v:[] }
     candles = (data.t as number[]).map((t: number, i: number) => ({
       t, o: data.o[i], h: data.h[i], l: data.l[i], c: data.c[i], v: data.v[i],
     })).filter((d) => d.c > 0);
-  } else {
-    throw new Error(`VCI chart unknown format for ${symbol}`);
   }
 
-  if (candles.length === 0) throw new Error(`VCI chart empty for ${symbol}`);
+  return candles;
+}
 
-  return {
+// deno-lint-ignore no-explicit-any
+async function saveEodHistory(supabase: any, symbol: string, exchange: string, candles: any[]) {
+  if (!candles.length) return { saved: 0 };
+
+  const rows = candles.map((c) => ({
     symbol,
-    closes:  candles.map((d) => d.c),
-    highs:   candles.map((d) => d.h),
-    lows:    candles.map((d) => d.l),
-    volumes: candles.map((d) => d.v),
-    count:   candles.length,
-    source:  'vci-chart',
-  };
+    exchange,
+    trade_date: new Date(c.t * 1000).toISOString().slice(0, 10),
+    open:   c.o ?? c.c,
+    high:   c.h ?? c.c,
+    low:    c.l ?? c.c,
+    close:  c.c,
+    volume: c.v ?? 0,
+  }));
+
+  const { error } = await supabase
+    .from('price_history')
+    .upsert(rows, { onConflict: 'symbol,trade_date' });
+
+  if (error) throw new Error(`upsert price_history ${symbol}: ${error.message}`);
+  return { saved: rows.length };
+}
+
+async function runEodSnapshot(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  symbols: string[],
+  exchangeMap: Record<string, string>,
+  days = 90,
+) {
+  const results = await Promise.allSettled(
+    symbols.map(async (sym) => {
+      const candles  = await fetchVciOHLCV(sym, days);
+      const exchange = exchangeMap[sym] ?? 'HOSE';
+      const { saved } = await saveEodHistory(supabase, sym, exchange, candles);
+      return { sym, saved };
+    })
+  );
+
+  let success = 0, failed = 0;
+  // deno-lint-ignore no-explicit-any
+  const errors: any[] = [];
+
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      success++;
+    } else {
+      failed++;
+      errors.push({ symbol: symbols[i], error: String(r.reason) });
+    }
+  });
+
+  return { success, failed, errors };
 }
 
 serve(async (req) => {
@@ -259,9 +293,57 @@ serve(async (req) => {
     );
   }
 
-  // ── MODE: HISTORY ─────────────────────────────────────────────────────────
-  // Body: { mode: "history", symbols: ["SHS","QNS"], days?: 66 }
-  // Trả về OHLCV history cho HNX/UPCOM để tính indicators (MACD, RSI, BB...)
+  // ── MODE: EOD ──────────────────────────────────────────────────────────────
+  // Gọi sau 15:20 VN để lưu OHLCV EOD vào price_history.
+  // Body: { mode: "eod", days?: 90 }
+  // days=90 → backfill 3 tháng lần đầu; sau đó dùng days=5 để cập nhật hàng ngày.
+  if (mode === 'eod') {
+    const days: number = typeof body.days === 'number' ? body.days : 5;
+
+    // Lấy tất cả symbol từ watchlists + transactions (như mode cron)
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const supabase    = createClient(supabaseUrl, serviceKey);
+
+    const [watchRes, txRes] = await Promise.all([
+      supabase.from('watchlists').select('symbol'),
+      supabase.from('transactions').select('symbol'),
+    ]);
+
+    const allSymbols = [
+      ...new Set([
+        ...((watchRes.data ?? []).map((r: { symbol: string }) => r.symbol.toUpperCase())),
+        ...((txRes.data    ?? []).map((r: { symbol: string }) => r.symbol.toUpperCase())),
+      ])
+    ].filter((s: string) => s && s !== 'VNINDEX');
+
+    // Build exchange map từ data có sẵn (lấy từ price_snapshots)
+    const { data: snapRows } = await supabase
+      .from('price_snapshots')
+      .select('symbol, exchange')
+      .in('symbol', allSymbols);
+
+    const exchangeMap: Record<string, string> = {};
+    (snapRows ?? []).forEach((r: { symbol: string; exchange: string }) => {
+      exchangeMap[r.symbol] = r.exchange;
+    });
+
+    const eodResult = await runEodSnapshot(supabase, allSymbols, exchangeMap, days);
+
+    return new Response(
+      JSON.stringify({
+        mode:      'eod',
+        days,
+        symbols:   allSymbols.length,
+        ...eodResult,
+        updatedAt: new Date().toISOString(),
+      }),
+      { headers: { ...CORS, 'Content-Type': 'application/json' } },
+    );
+  }
+
+  // ── MODE: HISTORY (single symbol, dùng cho debug) ──────────────────────────
+  // Body: { mode: "history", symbols: ["SHS"], days?: 66 }
   if (mode === 'history') {
     const histSymbols: string[] = Array.isArray(body.symbols)
       ? body.symbols.map((s: unknown) => String(s).trim().toUpperCase()).filter(Boolean)
@@ -275,9 +357,19 @@ serve(async (req) => {
     }
 
     const days: number = typeof body.days === 'number' ? body.days : 66;
-
     const histResults = await Promise.allSettled(
-      histSymbols.map((sym) => fetchVciHistory(sym, days))
+      histSymbols.map(async (sym) => {
+        const candles = await fetchVciOHLCV(sym, days);
+        return {
+          symbol:  sym,
+          closes:  candles.map((d) => d.c),
+          highs:   candles.map((d) => d.h),
+          lows:    candles.map((d) => d.l),
+          volumes: candles.map((d) => d.v),
+          count:   candles.length,
+          source:  'vci-chart',
+        };
+      })
     );
 
     const history = histResults.map((r, i) =>
@@ -287,11 +379,7 @@ serve(async (req) => {
     );
 
     return new Response(
-      JSON.stringify({
-        history,
-        updatedAt: new Date().toISOString(),
-        provider:  'vci-history',
-      }),
+      JSON.stringify({ history, updatedAt: new Date().toISOString(), provider: 'vci-history' }),
       { headers: { ...CORS, 'Content-Type': 'application/json' } },
     );
   }
