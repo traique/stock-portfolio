@@ -326,4 +326,4 @@ export async function GET(request: NextRequest) {
     telegram:    telegramResult.status === 'fulfilled' ? telegramResult.value : { ok: false, error: String(telegramResult.reason) },
     cleanup:     cleanupResult.status  === 'fulfilled' ? cleanupResult.value  : { ok: false, error: String(cleanupResult.reason) },
   });
-    }
+      }
