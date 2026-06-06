@@ -1,5 +1,5 @@
 // supabase/functions/quick-task/index.ts
-//
+// lcta
 // VCI Edge Function — 4 modes:
 //   realtime : lấy giá hiện tại (mặc định)
 //   cron     : tự đọc mã từ DB → upsert price_snapshots
