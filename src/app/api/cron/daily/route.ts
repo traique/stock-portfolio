@@ -1,14 +1,15 @@
 // src/app/api/cron/daily/route.ts
 //
 // Cron duy nhất cho Vercel Free plan (chỉ cho phép 1 cron/ngày).
-// Chạy lúc 08:10 UTC = 15:10 giờ Việt Nam, thứ 2 → thứ 6.
+// Chạy lúc 08:20 UTC = 15:20 giờ Việt Nam, thứ 2 → thứ 6.
+// 15:20 thay vì 15:10 để đảm bảo VCI đã có đủ OHLCV EOD sau khi thị trường đóng 15:00.
 //
 // Thứ tự:
 //   1. Snapshot portfolio cho tất cả user (lưu data vẽ biểu đồ)
 //   2. Gửi báo cáo Telegram cho user đã bật notify_daily
 //
 // vercel.json:
-//   { "path": "/api/cron/daily", "schedule": "10 8 * * 1-5" }
+//   { "path": "/api/cron/daily", "schedule": "20 8 * * 1-5" }
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -244,6 +245,56 @@ async function runTelegram(supabase: SnapshotClient, now: Date) {
   return { ok: true, processed, sent, details };
 }
 
+
+// ─── PHẦN 3: EOD Price History ────────────────────────────────────────────────
+// Gọi VCI Edge Function mode "eod" để lưu OHLCV vào price_history.
+// Chạy sau snapshot để không block báo cáo Telegram.
+
+async function runEodHistory(supabase: SnapshotClient): Promise<{ ok: boolean; result?: unknown; error?: string }> {
+  const url     = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!url || !anonKey) return { ok: false, error: 'Missing Supabase env' };
+
+  try {
+    const edgeUrl = `${url.replace(/\/+$/, '')}/functions/v1/vci-prices`;
+    const res = await fetch(edgeUrl, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${anonKey}`,
+      },
+      // days=5: cập nhật 5 phiên gần nhất mỗi ngày (nhanh, đủ rolling)
+      body: JSON.stringify({ mode: 'eod', days: 5 }),
+    });
+
+    if (!res.ok) return { ok: false, error: `Edge HTTP ${res.status}` };
+    const result = await res.json();
+    return { ok: true, result };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+
+// ─── PHẦN 4: Cleanup price_history ───────────────────────────────────────────
+// Xóa data cũ hơn 90 ngày — đủ để tính tất cả indicators (SMA50, MACD, RSI...)
+// Chạy sau EOD để tránh xóa data vừa insert.
+
+async function runCleanupHistory(supabase: SnapshotClient): Promise<{ ok: boolean; deleted?: number; error?: string }> {
+  const cutoff = new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10);
+  try {
+    const { error, count } = await supabase
+      .from('price_history')
+      .delete({ count: 'exact' })
+      .lt('trade_date', cutoff);
+
+    if (error) return { ok: false, error: error.message };
+    return { ok: true, deleted: count ?? 0 };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
@@ -257,14 +308,22 @@ export async function GET(request: NextRequest) {
     timeZone: 'Asia/Ho_Chi_Minh',
   }).format(now); // YYYY-MM-DD
 
-  // Chạy tuần tự: snapshot trước để Telegram dùng được data mới nhất
-  const snapshotResult  = await runSnapshot(supabase, vnDate);
-  const telegramResult  = await runTelegram(supabase, now);
+  // Thứ tự: snapshot → EOD history → Telegram
+  // EOD history chạy song song với Telegram để tiết kiệm thời gian
+  const snapshotResult = await runSnapshot(supabase, vnDate);
+
+  const [eodResult, telegramResult, cleanupResult] = await Promise.allSettled([
+    runEodHistory(supabase),
+    runTelegram(supabase, now),
+    runCleanupHistory(supabase),
+  ]);
 
   return NextResponse.json({
-    ran_at:   now.toISOString(),
-    date:     vnDate,
-    snapshot: snapshotResult,
-    telegram: telegramResult,
+    ran_at:      now.toISOString(),
+    date:        vnDate,
+    snapshot:    snapshotResult,
+    eod_history: eodResult.status     === 'fulfilled' ? eodResult.value     : { ok: false, error: String(eodResult.reason) },
+    telegram:    telegramResult.status === 'fulfilled' ? telegramResult.value : { ok: false, error: String(telegramResult.reason) },
+    cleanup:     cleanupResult.status  === 'fulfilled' ? cleanupResult.value  : { ok: false, error: String(cleanupResult.reason) },
   });
-                                                       }
+    }
