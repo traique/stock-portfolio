@@ -282,7 +282,40 @@ async function fetchYahooHistory(ticker: string): Promise<PriceHistory> {
   throw lastError ?? new Error(`All Yahoo hosts failed for ${ticker}`);
 }
 
-// ─── VCI Edge history cho HNX / UPCOM ───────────────────────────────────────
+// ─── Supabase price_history (tất cả sàn) ────────────────────────────────────
+// price_history được populate bởi cron + VCI Edge Function sau 15:20 VN.
+// Dùng cho cả HOSE lẫn HNX/UPCOM — không phụ thuộc Yahoo hay VCI chart API.
+
+async function fetchSupabaseHistory(symbol: string, days = 90): Promise<PriceHistory> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!supabaseUrl || !anonKey) throw new Error('Missing Supabase env');
+
+  const from = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  const apiUrl = `${supabaseUrl.replace(/\/+$/, '')}/rest/v1/price_history` +
+    `?symbol=eq.${encodeURIComponent(symbol)}&trade_date=gte.${from}` +
+    `&order=trade_date.asc&select=close,high,low,volume`;
+
+  const res = await fetch(apiUrl, {
+    headers: {
+      'apikey':        anonKey,
+      'Authorization': `Bearer ${anonKey}`,
+    },
+  });
+
+  if (!res.ok) throw new Error(`price_history HTTP ${res.status}`);
+  const rows: Array<{ close: number; high: number; low: number; volume: number }> = await res.json();
+  if (!rows.length) throw new Error(`price_history empty for ${symbol}`);
+
+  return {
+    close:  rows.map(r => Number(r.close)),
+    volume: rows.map(r => Number(r.volume)),
+    high:   rows.map(r => Number(r.high)),
+    low:    rows.map(r => Number(r.low)),
+  };
+}
+
+// Fallback: gọi VCI Edge Function nếu Supabase chưa có data (lần đầu backfill)
 async function fetchVciEdgeHistory(symbol: string): Promise<PriceHistory> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
   const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -291,14 +324,11 @@ async function fetchVciEdgeHistory(symbol: string): Promise<PriceHistory> {
   const edgeUrl = `${supabaseUrl.replace(/\/+$/, '')}/functions/v1/vci-prices`;
   const res = await fetch(edgeUrl, {
     method:  'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': `Bearer ${anonKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${anonKey}` },
     body: JSON.stringify({ mode: 'history', symbols: [symbol], days: 66 }),
   });
 
-  if (!res.ok) throw new Error(`VCI Edge history HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`VCI Edge HTTP ${res.status}`);
   const data = await res.json();
   const hist = (data.history ?? []).find((h: { symbol: string }) => h.symbol === symbol);
   if (!hist || !(hist.closes as number[])?.length) throw new Error(`No history for ${symbol}`);
@@ -312,22 +342,33 @@ async function fetchVciEdgeHistory(symbol: string): Promise<PriceHistory> {
 }
 
 async function fetchHistory(symbol: string): Promise<PriceHistory> {
-  // Dùng EXCHANGE_MAP để route đúng nguồn data theo sàn
+  if (symbol === 'VNINDEX') {
+    // VNINDEX chỉ cần trend, dùng Yahoo
+    try { return await fetchYahooHistory('^VNINDEX'); } catch { /* fallthrough */ }
+    return { close: [], volume: [], high: [], low: [] };
+  }
+
   const exchange = getExchange(symbol);
 
+  // Bước 1: thử Supabase price_history (nhanh, có cả HOSE + HNX + UPCOM)
+  try {
+    const hist = await fetchSupabaseHistory(symbol, 90);
+    if (hist.close.length >= 20) return hist; // đủ data để tính indicators
+  } catch { /* fallthrough sang backup */ }
+
+  // Bước 2: HNX/UPCOM → VCI Edge Function (nếu Supabase chưa có)
   if (exchange === 'HNX' || exchange === 'UPCOM') {
     try {
       return await fetchVciEdgeHistory(symbol);
     } catch (err) {
-      console.error(`[fetchHistory] VCI Edge failed for ${symbol} (${exchange}):`, err);
+      console.error(`[fetchHistory] VCI Edge failed for ${symbol}:`, err);
       return { close: [], volume: [], high: [], low: [] };
     }
   }
 
-  // HOSE + VNINDEX + unknown → Yahoo Finance
-  const ticker = symbol === 'VNINDEX' ? '^VNINDEX' : `${symbol}.VN`;
+  // Bước 3: HOSE → Yahoo Finance (fallback cuối)
   try {
-    return await fetchYahooHistory(ticker);
+    return await fetchYahooHistory(`${symbol}.VN`);
   } catch (err) {
     console.error(`[fetchHistory] Yahoo failed for ${symbol}:`, err);
     return { close: [], volume: [], high: [], low: [] };
