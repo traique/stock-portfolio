@@ -1,5 +1,5 @@
 // supabase/functions/quick-task/index.ts
-// lcta
+//
 // VCI Edge Function — 4 modes:
 //   realtime : lấy giá hiện tại (mặc định)
 //   cron     : tự đọc mã từ DB → upsert price_snapshots
@@ -351,41 +351,39 @@ serve(async (req) => {
       }
 
       const endpoints = [
-        {
-          name: '1-tcbs-HOSE-HPG',
-          method: 'GET',
-          url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=HPG&type=stock&resolution=D&from=${from}&to=${to}`,
-          body: undefined,
-        },
-        {
-          name: '2-tcbs-HNX-SHS',
-          method: 'GET',
-          url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=SHS&type=stock&resolution=D&from=${from}&to=${to}`,
-          body: undefined,
-        },
-        {
-          name: '3-tcbs-symbol-from-body',
-          method: 'GET',
-          url: `https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker=${sym}&type=stock&resolution=D&from=${from}&to=${to}`,
-          body: undefined,
-        },
-      ];
+        // KBS broker — vnstock dùng source KBS
+        { name: '1-kbs-quote',       url: `https://api.kbsec.com.vn/api/kbsquote/getStockHistory?symbol=${sym}&startDate=${new Date(from*1000).toISOString().slice(0,10)}&endDate=${new Date(to*1000).toISOString().slice(0,10)}` },
+        // Vietstock — foreign flow + OHLCV
+        { name: '2-vietstock-ohlcv', url: `https://finance.vietstock.vn/data/stockhistories?symbol=${sym}&fromDate=${new Date(from*1000).toISOString().slice(0,10)}&toDate=${new Date(to*1000).toISOString().slice(0,10)}&sortBy=tradingDate&sortDir=asc&pageSize=10&page=1` },
+        // DNSE public API
+        { name: '3-dnse-candles',    url: `https://api.dnse.com.vn/market/securities/${sym}/candles?resolution=1D&from=${from}&to=${to}` },
+        // Yahoo Finance từ Deno (khác với từ Vercel)
+        { name: '4-yahoo-q1',        url: `https://query1.finance.yahoo.com/v8/finance/chart/${sym}.VN?interval=1d&range=5d` },
+        { name: '5-yahoo-q2',        url: `https://query2.finance.yahoo.com/v8/finance/chart/${sym}.VN?interval=1d&range=5d` },
+      ].map(e => ({ ...e, method: 'GET', body: undefined }));
 
       // Chạy tuần tự để dễ debug, không song song
+      const TCBS_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+        'Origin': 'https://tcinvest.tcbs.com.vn',
+        'Referer': 'https://tcinvest.tcbs.com.vn/',
+      };
+
       const results = [];
       for (const ep of endpoints) {
         try {
           const r = await fetchWithTimeout(ep.url, {
             method: ep.method,
-            headers: VCI_HEADERS,
+            headers: ep.url.includes('tcbs') ? TCBS_HEADERS : VCI_HEADERS,
             body: ep.body,
-          }, 5000);
+          }, 8000);
           const text = await r.text();
           results.push({
             name:    ep.name,
             status:  r.status,
             ok:      r.ok,
-            preview: text.slice(0, 200),
+            preview: text.slice(0, 300),
           });
         } catch(e) {
           results.push({
