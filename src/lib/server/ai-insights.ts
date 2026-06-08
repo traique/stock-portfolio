@@ -37,6 +37,7 @@ export type TechnicalSignal = {
 };
 
 type PriceHistory = {
+  open:   number[];  // Fix: extract từ Yahoo q.open[] thay vì dùng high làm proxy
   close:  number[];
   volume: number[];
   high:   number[];  // ✨ mozy lesson 2 — support/resistance
@@ -268,12 +269,18 @@ async function fetchYahooHistory(ticker: string): Promise<PriceHistory> {
         .map(Number)
         .filter((v: number) => Number.isFinite(v) && v > 0);
 
+      // Fix: Yahoo v8 có q.open[] — extract trực tiếp, không dùng high làm proxy
+      const rawOpen: number[] = (q.open ?? []).map(Number);
+      const open: number[] = rawOpen.map((v: number, i: number) =>
+        Number.isFinite(v) && v > 0 ? v : (close[i] ?? 0)
+      );
+
       if (close.length === 0) {
         lastError = new Error(`Empty close data from ${host}`);
         continue;
       }
 
-      return { close, volume, high, low };
+      return { open, close, volume, high, low };
     } catch (err) {
       lastError = err;
     }
@@ -294,7 +301,7 @@ async function fetchSupabaseHistory(symbol: string, days = 90): Promise<PriceHis
   const from = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
   const apiUrl = `${supabaseUrl.replace(/\/+$/, '')}/rest/v1/price_history` +
     `?symbol=eq.${encodeURIComponent(symbol)}&trade_date=gte.${from}` +
-    `&order=trade_date.asc&select=close,high,low,volume`;
+    `&order=trade_date.asc&select=open,close,high,low,volume`;
 
   const res = await fetch(apiUrl, {
     headers: {
@@ -304,10 +311,11 @@ async function fetchSupabaseHistory(symbol: string, days = 90): Promise<PriceHis
   });
 
   if (!res.ok) throw new Error(`price_history HTTP ${res.status}`);
-  const rows: Array<{ close: number; high: number; low: number; volume: number }> = await res.json();
+  const rows: Array<{ open: number; close: number; high: number; low: number; volume: number }> = await res.json();
   if (!rows.length) throw new Error(`price_history empty for ${symbol}`);
 
   return {
+    open:   rows.map(r => Number(r.open ?? r.close)),
     close:  rows.map(r => Number(r.close)),
     volume: rows.map(r => Number(r.volume)),
     high:   rows.map(r => Number(r.high)),
@@ -323,31 +331,31 @@ async function saveHistoryToSupabase(symbol: string, exchange: string, history: 
     const anonKey     = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
     if (!supabaseUrl || !anonKey || history.close.length === 0) return;
 
-    // Build rows từ parallel arrays — Yahoo không có dates nên dùng index
-    // Tính approximate trade_date từ hôm nay lùi về
+    // Build rows từ parallel arrays — Yahoo v8 có đủ OHLCV
+    // Tính trade_date bằng cách skip weekends lùi từ hôm nay
     const today = new Date();
-    const rows = history.close.map((close, i) => {
-      const daysAgo = history.close.length - 1 - i;
-      const d = new Date(today);
-      // Skip weekends khi tính ngày
-      let tradingDaysBack = 0;
-      let date = new Date(today);
-      while (tradingDaysBack < daysAgo) {
-        date.setDate(date.getDate() - 1);
-        const dow = date.getDay();
-        if (dow !== 0 && dow !== 6) tradingDaysBack++;
+
+    // Pre-compute tất cả trading dates một lần để tránh lặp O(n²)
+    const tradingDates: string[] = [];
+    let cursor = new Date(today);
+    while (tradingDates.length < history.close.length) {
+      cursor.setDate(cursor.getDate() - 1);
+      const dow = cursor.getDay();
+      if (dow !== 0 && dow !== 6) {
+        tradingDates.unshift(cursor.toISOString().slice(0, 10));
       }
-      return {
-        symbol,
-        exchange,
-        trade_date: date.toISOString().slice(0, 10),
-        open:   history.high[i] ?? close,  // Yahoo không có open riêng, dùng high làm proxy
-        high:   history.high[i]   ?? close,
-        low:    history.low[i]    ?? close,
-        close,
-        volume: history.volume[i] ?? 0,
-      };
-    });
+    }
+
+    const rows = history.close.map((close, i) => ({
+      symbol,
+      exchange,
+      trade_date: tradingDates[i] ?? today.toISOString().slice(0, 10),
+      open:   history.open[i]   ?? close,  // Fix: dùng open thật từ Yahoo q.open[]
+      high:   history.high[i]   ?? close,
+      low:    history.low[i]    ?? close,
+      close,
+      volume: history.volume[i] ?? 0,
+    }));
 
     await fetch(
       `${supabaseUrl.replace(/\/+$/, '')}/rest/v1/price_history`,
@@ -368,7 +376,7 @@ async function saveHistoryToSupabase(symbol: string, exchange: string, history: 
 async function fetchHistory(symbol: string): Promise<PriceHistory> {
   if (symbol === 'VNINDEX') {
     try { return await fetchYahooHistory('^VNINDEX'); } catch { /* fallthrough */ }
-    return { close: [], volume: [], high: [], low: [] };
+    return { open: [], close: [], volume: [], high: [], low: [] };
   }
 
   const exchange = getExchange(symbol);
@@ -396,7 +404,7 @@ async function fetchHistory(symbol: string): Promise<PriceHistory> {
   // Bước 3: HNX/UPCOM — chờ cron EOD (15:20) lưu vào price_history
   // Tạm thời trả empty → indicators sẽ không tính được, nhưng không crash
   console.warn(`[fetchHistory] No history for ${symbol} (${exchange}) — cron EOD chưa chạy?`);
-  return { close: [], volume: [], high: [], low: [] };
+  return { open: [], close: [], volume: [], high: [], low: [] };
 }
 
 // ================= RSI =================
@@ -636,6 +644,36 @@ function decideAction(
 
 // ================= MAIN =================
 
+// ── Concurrency limiter ──────────────────────────────────────────────────────
+// Thay vì Promise.allSettled(60 fetches đồng thời), giới hạn tối đa CONCURRENCY
+// tasks chạy cùng lúc. Giảm đáng kể risk timeout Vercel 10s với watchlist lớn.
+// Không dùng npm package — implement thuần TS để giữ bundle nhỏ.
+
+const FETCH_CONCURRENCY = 10; // Max concurrent symbol fetches
+
+async function pLimit<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency = FETCH_CONCURRENCY,
+): Promise<Array<{ status: 'fulfilled'; value: T } | { status: 'rejected'; reason: unknown }>> {
+  const results: Array<{ status: 'fulfilled'; value: T } | { status: 'rejected'; reason: unknown }> =
+    new Array(tasks.length);
+  let next = 0;
+
+  async function worker() {
+    while (next < tasks.length) {
+      const idx = next++;
+      try {
+        results[idx] = { status: 'fulfilled', value: await tasks[idx]() };
+      } catch (reason) {
+        results[idx] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  return results;
+}
+
 export async function buildTechnicalSignals(
   symbols: string[],
 ): Promise<TechnicalSignal[]> {
@@ -649,8 +687,11 @@ export async function buildTechnicalSignals(
     ? ((vnindexHistory.close.at(-1)! - vnindexHistory.close[0]) / vnindexHistory.close[0]) * 100
     : 0;
 
-  const results = await Promise.allSettled(
-    symbols.map(async (symbol): Promise<TechnicalSignal> => {
+  // Fix: dùng pLimit thay Promise.allSettled để giới hạn concurrent fetches
+  // 60 symbols × (Yahoo OHLCV + Google News) = 120 HTTP calls đồng thời → timeout risk
+  // pLimit(FETCH_CONCURRENCY=10) → tối đa 10 symbols xử lý song song
+  const results = await pLimit(
+    symbols.map((symbol) => async (): Promise<TechnicalSignal> => {
       const price = Number(payload.prices[symbol] ?? 0);
 
       const [history, news] = await Promise.all([
@@ -708,6 +749,78 @@ export async function buildTechnicalSignals(
 import { getModelMeta, isValidModelKey, FALLBACK_MODEL, AiModelKey } from '@/lib/server/ai-models';
 import { envServer } from '@/lib/env-server';
 
+// ── AI response validation ───────────────────────────────────────────────────
+// JSON.parse(aiText) as T không đủ an toàn — LLM có thể bỏ field, đổi tên,
+// hoặc trả text thay number (đặc biệt sniper_points).
+// parseAiJson() dùng Zod nếu schema được cung cấp, fallback về raw parse nếu không.
+
+import { z } from 'zod';
+
+// Schema dùng chung cho sniper_points — AI hay trả string thay number
+export const SniperPointsSchema = z.object({
+  ideal_buy:     z.union([z.number(), z.string().transform(s => parseFloat(s.replace(/[^0-9.]/g, '')))]),
+  secondary_buy: z.union([z.number(), z.string().transform(s => parseFloat(s.replace(/[^0-9.]/g, '')))]),
+  stop_loss:     z.union([z.number(), z.string().transform(s => parseFloat(s.replace(/[^0-9.]/g, '')))]),
+  take_profit:   z.union([z.number(), z.string().transform(s => parseFloat(s.replace(/[^0-9.]/g, '')))]),
+}).partial();
+
+export const AiPickSchema = z.object({
+  symbol:           z.string(),
+  score:            z.number().min(0).max(100).catch(50),
+  reason:           z.string().catch(''),
+  entry:            z.number().optional(),
+  tp:               z.number().optional(),
+  sl:               z.number().optional(),
+  time_sensitivity: z.string().optional(),
+  position_advice:  z.record(z.string()).optional(),
+  action_checklist: z.array(z.string()).optional(),
+  sniper_points:    SniperPointsSchema.optional(),
+  trend_score:      z.number().optional(),
+  bias_status:      z.string().optional(),
+  ma_alignment:     z.string().optional(),
+}).passthrough();
+
+export const WatchlistScanResponseSchema = z.object({
+  summary: z.string().catch(''),
+  picks:   z.array(AiPickSchema).catch([]),
+  avoid:   z.array(z.union([z.string(), z.object({ symbol: z.string() }).transform(o => o.symbol)])).catch([]),
+}).passthrough();
+
+export const PortfolioAiResponseSchema = z.object({
+  summary: z.string().catch(''),
+  actions: z.array(z.object({
+    symbol:     z.string(),
+    action:     z.enum(['BUY', 'HOLD', 'REDUCE', 'SELL', 'WATCH']).catch('HOLD' as const),
+    reason:     z.string().catch(''),
+    confidence: z.enum(['LOW', 'MEDIUM', 'HIGH']).catch('LOW' as const),
+    tp:         z.number().optional(),
+    sl:         z.number().optional(),
+  })).catch([]),
+  risks: z.array(z.string()).catch([]),
+}).passthrough();
+
+// parseAiJson: parse JSON text từ LLM, optionally validate với Zod schema
+// Nếu parse/validate fail → log warning và trả fallback (không crash)
+function parseAiJson<T>(text: string, schema: z.ZodType<T> | null, fallback: T): T {
+  let raw: unknown;
+  try {
+    const clean = text.replace(/\`\`\`(?:json)?|\`\`\`/g, '').trim();
+    raw = JSON.parse(clean);
+  } catch (err) {
+    console.warn('[parseAiJson] JSON.parse failed:', err);
+    return fallback;
+  }
+
+  if (!schema) return raw as T;
+
+  const result = schema.safeParse(raw);
+  if (result.success) return result.data;
+
+  // Partial success: log lỗi nhưng trả raw nếu có enough structure
+  console.warn('[parseAiJson] Schema validation failed:', result.error.issues.slice(0, 3));
+  return raw as T; // vẫn trả raw — tốt hơn fallback nếu AI có output gần đúng
+}
+
 export type AiCallResult<T> = {
   data:            T;
   modelUsed:       string;
@@ -723,6 +836,7 @@ async function callGroq<T>(
   systemPrompt: string,
   userPrompt: string,
   fallback: T,
+  schema: z.ZodType<T> | null = null,
 ): Promise<T> {
   const apiKey = envServer.OPENROUTER_API_KEY;
   if (!apiKey) return fallback;
@@ -764,8 +878,8 @@ async function callGroq<T>(
       const text: string | undefined = json?.choices?.[0]?.message?.content;
       if (!text) return fallback;
 
-      const clean = text.replace(/```(?:json)?|```/g, '').trim();
-      return JSON.parse(clean) as T;
+      // Fix: dùng parseAiJson thay JSON.parse trực tiếp — validate schema, không crash khi AI sai format
+      return parseAiJson<T>(text, schema, fallback);
     } catch (err) {
       if (attempt === MAX_RETRIES) {
         console.error('[callGroq] failed after retries:', err);
@@ -785,6 +899,7 @@ async function callGemini<T>(
   systemPrompt: string,
   userPrompt: string,
   fallback: T,
+  schema: z.ZodType<T> | null = null,
 ): Promise<T> {
   const apiKey = envServer.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY not configured — set it in Vercel env vars');
@@ -824,8 +939,8 @@ async function callGemini<T>(
 
   if (!text) throw new Error('GEMINI_EMPTY_RESPONSE');
 
-  const clean = text.replace(/```(?:json)?|```/g, '').trim();
-  return JSON.parse(clean) as T;
+  // Fix: dùng parseAiJson thay JSON.parse trực tiếp
+  return parseAiJson<T>(text, schema, fallback);
 }
 
 // ================= UNIFIED CALL WITH FALLBACK =================
@@ -835,6 +950,7 @@ export async function callAiWithFallback<T>(
   systemPrompt: string,
   userPrompt: string,
   fallback: T,
+  schema: z.ZodType<T> | null = null,
 ): Promise<AiCallResult<T>> {
   const key  = isValidModelKey(modelKey) ? modelKey : FALLBACK_MODEL;
   const meta = getModelMeta(key);
@@ -842,7 +958,7 @@ export async function callAiWithFallback<T>(
   // --- Try selected model ---
   if (meta.provider === 'gemini') {
     try {
-      const data = await callGemini<T>(key, systemPrompt, userPrompt, fallback);
+      const data = await callGemini<T>(key, systemPrompt, userPrompt, fallback, schema);
       return { data, modelUsed: key, providerUsed: 'gemini', fallbackUsed: false };
     } catch (err) {
       const reason = err instanceof Error ? err.message : 'Unknown error';
@@ -851,7 +967,7 @@ export async function callAiWithFallback<T>(
       console.warn(`[callAiWithFallback] Gemini failed (${reason}), falling back to Groq`);
 
       // Fallback to Groq
-      const data = await callGroq<T>(FALLBACK_MODEL, systemPrompt, userPrompt, fallback);
+      const data = await callGroq<T>(FALLBACK_MODEL, systemPrompt, userPrompt, fallback, schema);
       return {
         data,
         modelUsed:       FALLBACK_MODEL,
@@ -865,7 +981,7 @@ export async function callAiWithFallback<T>(
   }
 
   // --- Groq path ---
-  const data = await callGroq<T>(key, systemPrompt, userPrompt, fallback);
+  const data = await callGroq<T>(key, systemPrompt, userPrompt, fallback, schema);
   return { data, modelUsed: key, providerUsed: 'groq', fallbackUsed: false };
 }
 
