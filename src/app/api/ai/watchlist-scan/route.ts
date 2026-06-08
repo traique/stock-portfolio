@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildTechnicalSignals, callAiWithFallback, TechnicalSignal } from '@/lib/server/ai-insights';
+import { buildTechnicalSignals, callAiWithFallback, TechnicalSignal, WatchlistScanResponseSchema } from '@/lib/server/ai-insights';
 import { isValidModelKey, DEFAULT_MODEL } from '@/lib/server/ai-models';
 import { getBearerToken, validationErrorResponse } from '@/lib/server/api-utils';
 import { getSupabaseUserClient } from '@/lib/server/supabase-user';
@@ -606,11 +606,13 @@ export async function POST(request: NextRequest) {
     ? parsed.data.model
     : DEFAULT_MODEL;
 
+  // Fix: truyền WatchlistScanResponseSchema để validate AI output, tránh crash khi LLM hallucinate format
   const aiCallResult = await callAiWithFallback<WatchlistScanResponse>(
     requestedModel,
     buildSystemPrompt(parsed.data.risk_profile),
     JSON.stringify({ watchlistContext: aiPayload, risk_profile: parsed.data.risk_profile }),
     fallback,
+    WatchlistScanResponseSchema,
   );
 
   const finalResponse: WatchlistScanResponse = {
@@ -624,4 +626,4 @@ export async function POST(request: NextRequest) {
   await setAiCache(cacheKey, finalResponse, WATCHLIST_AI_CACHE_TTL_MS);
 
   return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
-}
+  }
