@@ -273,7 +273,14 @@ serve(async (req) => {
         else { failed++; errors.push({ symbol: allSymbols[i], error: String(r.reason) }); }
       });
 
-      return json({ mode: 'eod', days, symbols: allSymbols.length, success, failed, errors, updatedAt: new Date().toISOString() });
+      return json({
+        mode: 'eod', days,
+        symbols_total:    allSymbols.length,
+        symbols_hose:     hoseSymbols.length,
+        skipped_hnx_upcom: skipped,
+        ...eodResult,
+        updatedAt: new Date().toISOString(),
+      });
     }
 
     // ── HISTORY ───────────────────────────────────────────────────────────────
