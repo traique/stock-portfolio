@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { getBearerToken, validationErrorResponse } from '@/lib/server/api-utils';
 import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 import { logger } from '@/lib/server/logger';
-import { buildTechnicalSignals, callAiWithFallback, TechnicalSignal } from '@/lib/server/ai-insights';
+import { buildTechnicalSignals, callAiWithFallback, TechnicalSignal, PortfolioAiResponseSchema } from '@/lib/server/ai-insights';
 import { isValidModelKey, DEFAULT_MODEL } from '@/lib/server/ai-models';
 import { derivePortfolio, PositionGroup, Transaction } from '@/lib/calculations';
 import { envServer } from '@/lib/env-server';
@@ -333,11 +333,13 @@ export async function POST(request: NextRequest) {
     ? parsed.data.model
     : DEFAULT_MODEL;
 
+  // Fix: truyền PortfolioAiResponseSchema để validate AI output
   const aiCallResult = await callAiWithFallback<AiPortfolioResponse>(
     requestedModel,
     buildSystemPrompt(parsed.data.risk_profile),
     JSON.stringify(trimPayloadForAI(portfolioContext)),
     fallback,
+    PortfolioAiResponseSchema,
   );
 
   const finalResponse: AiPortfolioResponse = {
@@ -354,4 +356,4 @@ export async function POST(request: NextRequest) {
   await setAiCache(cacheKey, finalResponse, PORTFOLIO_AI_CACHE_TTL_MS);
 
   return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS) });
-                                      }
+      }
