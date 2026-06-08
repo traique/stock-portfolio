@@ -88,4 +88,4 @@ export async function GET(
     { error: `Yahoo fail cho ${ticker}`, symbol: sym },
     { status: 502 }
   );
-}
+      }
