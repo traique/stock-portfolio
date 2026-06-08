@@ -162,10 +162,13 @@ async function fetchOHLCV(symbol: string, days = 90): Promise<any[]> {
     const data = await res.json();
     if (!data.timestamps?.length) throw new Error(`Vercel proxy empty for ${symbol}`);
 
+    // count = 0 → HNX/UPCOM hoặc Yahoo fail → skip (không crash)
+    if (!data.count || !data.timestamps?.length) return [];
+
     // deno-lint-ignore no-explicit-any
     return (data.timestamps as number[]).map((t: number, i: number) => ({
       t,
-      o: data.closes[i],   // Yahoo không có open riêng — dùng close làm proxy
+      o: data.closes[i],
       h: data.highs[i],
       l: data.lows[i],
       c: data.closes[i],
@@ -274,11 +277,12 @@ serve(async (req) => {
       });
 
       return json({
-        mode: 'eod', days,
-        symbols_total:    allSymbols.length,
-        symbols_hose:     hoseSymbols.length,
-        skipped_hnx_upcom: skipped,
-        ...eodResult,
+        mode:      'eod',
+        days,
+        symbols:   allSymbols.length,
+        success,
+        failed,
+        errors,
         updatedAt: new Date().toISOString(),
       });
     }
