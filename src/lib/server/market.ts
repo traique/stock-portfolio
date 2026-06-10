@@ -7,6 +7,9 @@ import {
 	type MarketData,
 } from './providers/yahoo';
 
+// NEW: dùng VCI Edge realtime cho HOSE/HNX/UPCOM (đặc biệt HNX/UPCOM không có trên Yahoo)
+import { getVciEdgeBatch } from './providers/vci-edge';
+
 import {
 	normalizeSymbol,
 } from './exchanges/exchange';
@@ -26,11 +29,11 @@ export type PricesPayload = {
 
 // ---------------------------------------------------------------------------
 // MarketHealth — tổng hợp tình trạng lấy giá của mỗi request.
-// Dùng để phát hiện khi nguồn (Yahoo/VCI snapshot) lỗi diện rộng.
 // ---------------------------------------------------------------------------
 export type MarketHealth = {
 	requested: number;
 	yahooOk: number;
+	vciOk: number;
 	snapshotOk: number;
 	failed: number;
 	failedSymbols: string[];
@@ -54,6 +57,13 @@ function toFiniteNumber(value: unknown): number | null {
 /** Parse number với giá trị mặc định khi không hợp lệ (dùng cho field phụ). */
 function toFiniteOr(value: unknown, fallback = 0): number {
 	return toFiniteNumber(value) ?? fallback;
+}
+
+/** Một MarketData được coi là "có giá" khi price là số hữu hạn > 0. */
+function hasValidPrice(data: MarketData | undefined | null): data is MarketData {
+	if (!data) return false;
+	const price = toFiniteNumber(data.price);
+	return price !== null && price > 0;
 }
 
 function buildErrorResult(symbol: string): MarketData {
@@ -97,7 +107,6 @@ async function getSnapshotBatch(symbols: string[]): Promise<Map<string, MarketDa
 		if (!symbol) continue;
 
 		// GUARD: snapshot bắt buộc phải có giá là số hữu hạn > 0.
-		// Nếu không → bỏ qua, tránh đưa NaN/0 vào tính toán danh mục.
 		const price = toFiniteNumber(row.price);
 		if (price === null || price <= 0) {
 			skipped += 1;
@@ -105,7 +114,6 @@ async function getSnapshotBatch(symbols: string[]): Promise<Map<string, MarketDa
 			continue;
 		}
 
-		// fetched_at có thể null/sai định dạng → marketTime = null thay vì NaN.
 		const fetchedAt = row.fetched_at ? new Date(row.fetched_at).getTime() : NaN;
 
 		map.set(symbol, {
@@ -134,8 +142,6 @@ async function getSnapshotBatch(symbols: string[]): Promise<Map<string, MarketDa
 }
 
 // Mọi symbol đều có thể fallback snapshot nếu có trong DB.
-// Không giới hạn bởi EXCHANGE_MAP — user có thể tự thêm mã mới vào watchlist
-// mà chưa có trong map tĩnh.
 function canUseSnapshot(_symbol: string): boolean {
 	return true;
 }
@@ -150,34 +156,56 @@ function getYahooPrice(
 }
 
 export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayload> {
-	// Bước 1: thử Yahoo cho tất cả song song
+	// ── Bước 1: Yahoo song song — tốt cho HOSE + VNINDEX ────────────────────
 	const yahooSettled = await Promise.allSettled(
 		symbols.map(s => getYahooMarketData(s)),
 	);
 
-	// Ghi lại từng lỗi Yahoo để có dấu vết khi debug (không nuốt lỗi).
+	// Ghi lại từng lỗi Yahoo để có dấu vết (không nuốt lỗi).
 	yahooSettled.forEach((r, i) => {
 		if (r.status === 'rejected') {
 			console.warn(`[Yahoo Fail] ${symbols[i]}:`, r.reason);
 		}
 	});
 
-	// Bước 2: mã nào Yahoo không có giá hợp lệ → fallback snapshot
-	const missedSymbols = symbols.filter((s, i) => {
-		return getYahooPrice(yahooSettled[i]) === null && canUseSnapshot(s);
-	});
+	// Mã nào Yahoo không có giá hợp lệ → HNX/UPCOM luôn rơi vào đây.
+	const missedAfterYahoo = symbols.filter(
+		(_s, i) => getYahooPrice(yahooSettled[i]) === null,
+	);
 
-	const snapshotMap = await getSnapshotBatch(missedSymbols).catch(err => {
-		console.error('[Snapshot Fallback Fail]', err);
-		Sentry.captureException(err, {
-			tags: { module: 'market', stage: 'snapshot-fallback' },
-			extra: { missedSymbols },
-		});
-		return new Map<string, MarketData>();
-	});
+	// ── Bước 2: VCI Edge REALTIME cho các mã Yahoo thiếu ────────────────────
+	// Đây là mắt xích bị thiếu trước đây: lấy giá HNX/UPCOM NGAY, không phải
+	// đợi cron 30 phút bơm vào price_snapshots.
+	const vciMap = missedAfterYahoo.length
+		? await getVciEdgeBatch(missedAfterYahoo).catch(err => {
+				console.error('[VCI Edge Fail]', err);
+				Sentry.captureException(err, {
+					tags: { module: 'market', stage: 'vci-edge' },
+					extra: { missedAfterYahoo },
+				});
+				return new Map<string, MarketData>();
+		  })
+		: new Map<string, MarketData>();
 
-	// Bước 3: gộp — Yahoo ưu tiên, snapshot bù vào chỗ thiếu, và theo dõi sức khỏe.
+	// ── Bước 3: mã VẪN thiếu sau VCI Edge → fallback snapshot (DB, do cron bơm)
+	const missedAfterVci = missedAfterYahoo.filter(
+		s => canUseSnapshot(s) && !hasValidPrice(vciMap.get(s)),
+	);
+
+	const snapshotMap = missedAfterVci.length
+		? await getSnapshotBatch(missedAfterVci).catch(err => {
+				console.error('[Snapshot Fallback Fail]', err);
+				Sentry.captureException(err, {
+					tags: { module: 'market', stage: 'snapshot-fallback' },
+					extra: { missedAfterVci },
+				});
+				return new Map<string, MarketData>();
+		  })
+		: new Map<string, MarketData>();
+
+	// ── Bước 4: gộp theo thứ tự ưu tiên Yahoo → VCI Edge → snapshot ─────────
 	let yahooOk = 0;
+	let vciOk = 0;
 	let snapshotOk = 0;
 	const failedSymbols: string[] = [];
 
@@ -186,6 +214,12 @@ export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayloa
 		if (getYahooPrice(yahoo) !== null) {
 			yahooOk += 1;
 			return (yahoo as PromiseFulfilledResult<MarketData>).value;
+		}
+
+		const vci = vciMap.get(symbol);
+		if (hasValidPrice(vci)) {
+			vciOk += 1;
+			return vci;
 		}
 
 		const snap = snapshotMap.get(symbol);
@@ -207,6 +241,7 @@ export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayloa
 	const health: MarketHealth = {
 		requested: symbols.length,
 		yahooOk,
+		vciOk,
 		snapshotOk,
 		failed: failedSymbols.length,
 		failedSymbols,
@@ -227,15 +262,14 @@ export async function fetchMarketPrices(symbols: string[]): Promise<PricesPayloa
 			},
 		);
 	} else if (failedSymbols.length > 0) {
-		// Lỗi cục bộ vài mã: ghi cảnh báo nhẹ, không spam Sentry.
 		console.warn('[Market Partial Fail]', { failedSymbols });
 	}
 
 	return {
 		prices,
 		updatedAt: new Date().toISOString(),
-		provider: 'yahoo+snapshot',
+		provider: 'yahoo+vci+snapshot',
 		debug: results,
 		health,
 	};
-    }
+}
