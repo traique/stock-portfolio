@@ -8,8 +8,9 @@
 
 import { normalizeSymbol, isVnIndexSymbol } from '../exchanges/exchange';
 
+// Endpoint chart đúng nằm ở host mt.vietcap.com.vn (KHÔNG phải trading.vietcap.com.vn)
 const VCI_CHART_URL =
-	'https://trading.vietcap.com.vn/api/chart/OHLCChart/gappless';
+	'https://mt.vietcap.com.vn/api/chart/OHLCChart/gappless';
 
 const VCI_HEADERS = {
 	'Content-Type': 'application/json',
@@ -135,4 +136,4 @@ export async function getVciChartOHLCV(
 			new Date(b.t * 1000).toISOString().slice(0, 10),
 		),
 	};
-    }
+}
