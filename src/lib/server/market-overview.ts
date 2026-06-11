@@ -42,7 +42,12 @@ type DailyHistory = { closes: number[]; dates: string[] };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const YAHOO_HOSTS = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'] as const;
+// Base URL viết dạng chuỗi thường (KHÔNG nối 'https://' + biến trong template)
+// để tránh bị các trình hiển thị bọc nhầm thành  ... .
+const YAHOO_BASES = [
+	'https://query1.finance.yahoo.com',
+	'https://query2.finance.yahoo.com',
+] as const;
 const USER_AGENT =
 	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 const HISTORY_CACHE_SECS = 900;
@@ -50,7 +55,13 @@ const TIMEOUT_MS = 8000;
 
 // ─── Network ──────────────────────────────────────────────────────────────────
 
-async function fetchJson(url: string): Promise<any> {
+type YahooChartResult = {
+	timestamp?: number[];
+	indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+};
+type YahooChartResponse = { chart?: { result?: YahooChartResult[] } };
+
+async function fetchJson(url: string): Promise<YahooChartResponse> {
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 	try {
@@ -60,7 +71,7 @@ async function fetchJson(url: string): Promise<any> {
 			signal: controller.signal,
 		} as RequestInit);
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		return await res.json();
+		return (await res.json()) as YahooChartResponse;
 	} finally {
 		clearTimeout(timer);
 	}
@@ -69,22 +80,22 @@ async function fetchJson(url: string): Promise<any> {
 // VN-Index daily 1 năm (range=1y) để đủ MA200 + YTD + drawdown
 async function fetchVnindexDaily(): Promise<DailyHistory> {
 	let lastErr: unknown;
-	for (const host of YAHOO_HOSTS) {
+	for (const base of YAHOO_BASES) {
 		try {
-			const url = `https://${host}/v8/finance/chart/%5EVNINDEX?interval=1d&range=1y`;
+			const url = `${base}/v8/finance/chart/%5EVNINDEX?interval=1d&range=1y`;
 			const json = await fetchJson(url);
 			const result = json?.chart?.result?.[0];
-			const q = result?.indicators?.quote?.[0] ?? {};
+			const q = result?.indicators?.quote?.[0];
 			const ts: number[] = result?.timestamp ?? [];
 			const closes: number[] = [];
 			const dates: string[] = [];
 			for (let i = 0; i < ts.length; i++) {
-				const c = Number(q.close?.[i]);
+				const c = Number(q?.close?.[i]);
 				if (!Number.isFinite(c) || c <= 0) continue;
 				closes.push(c);
 				dates.push(new Date(ts[i] * 1000).toISOString().slice(0, 10));
 			}
-			if (closes.length === 0) { lastErr = new Error(`Empty ^VNINDEX from ${host}`); continue; }
+			if (closes.length === 0) { lastErr = new Error(`Empty ^VNINDEX from ${base}`); continue; }
 			return { closes, dates };
 		} catch (err) {
 			lastErr = err;
@@ -215,4 +226,4 @@ export async function buildMarketOverview(): Promise<MarketOverview> {
 		health: { degraded, provider },
 		generatedAt: new Date().toISOString(),
 	};
-}
+		}
