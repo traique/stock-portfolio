@@ -359,6 +359,8 @@ export default function BacktestPage() {
 
   const signal = scanData?.signal ?? null;
   const plan = scanData?.plan ?? null;
+  // TT chứng khoán VN không bán khống -> chỉ tín hiệu MUA mới có kế hoạch vào lệnh.
+  const isBuySignal = signal?.raw_type === 'BUY';
 
   return (
     <main className="ab-page">
@@ -441,6 +443,9 @@ export default function BacktestPage() {
                       {signal.type ?? signal.raw_type ?? '—'}
                     </span>
                     <span style={SIGNAL_SUB}>Xác nhận tại {fmtPrice(signal.confirmed_at)}</span>
+                    {!isBuySignal ? (
+                      <span style={SIGNAL_SUB}>Tín hiệu bán — không có kế hoạch vào lệnh (TT Việt Nam không bán khống).</span>
+                    ) : null}
                   </>
                 ) : (
                   <span style={SIGNAL_SUB}>Chưa có tín hiệu cho mã này.</span>
@@ -448,8 +453,8 @@ export default function BacktestPage() {
               </div>
             </div>
 
-            {/* Kế hoạch giao dịch */}
-            {plan ? (
+            {/* Kế hoạch giao dịch — chỉ hiện với tín hiệu MUA (SELL không có) */}
+            {plan && isBuySignal ? (
               <div>
                 <div style={SIGNAL_LABEL}>Kế hoạch giao dịch</div>
                 <div style={PLAN_GRID}>
