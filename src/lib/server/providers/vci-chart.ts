@@ -1,22 +1,22 @@
 // src/lib/server/providers/vci-chart.ts
 //
-// Lấy OHLCV lịch sử từ VCI (Vietcap) chart API — có đủ HOSE / HNX / UPCOM.
+// OHLCV lịch sử cho HOSE / HNX / UPCOM / VNINDEX.
 //
-// ⚠️ QUAN TRỌNG: VCI chart bị geo-block ở Supabase Edge Function (Singapore).
-//    => CHỈ gọi file này từ phía Vercel (Washington DC), tức từ route
-//       src/app/api/history/[symbol]/route.ts. KHÔNG import vào Edge Function.
+// Nguồn: DNSE Entrade chart-api (public, không cần auth, không bị geo-block,
+//        chạy tốt từ Vercel). Thay cho VCI chart cũ (bị 404 / fetch failed do
+//        anti-bot + chặn IP datacenter nước ngoài).
+//
+// Giữ nguyên tên hàm getVciChartOHLCV + type OhlcvSeries để route history và
+// Edge Function không phải sửa gì.
 
 import { normalizeSymbol, isVnIndexSymbol } from '../exchanges/exchange';
 
-// Endpoint chart đúng nằm ở host mt.vietcap.com.vn (KHÔNG phải trading.vietcap.com.vn)
-const VCI_CHART_URL =
-	'https://mt.vietcap.com.vn/api/chart/OHLCChart/gappless';
+// resolution=1D => nến ngày. Endpoint trả { t, o, h, l, c, v, nextTime }.
+const DNSE_OHLC_URL =
+	'https://services.entrade.com.vn/chart-api/v2/ohlcs/stock';
 
-const VCI_HEADERS = {
-	'Content-Type': 'application/json',
+const REQUEST_HEADERS = {
 	Accept: 'application/json',
-	Referer: 'https://trading.vietcap.com.vn/',
-	Origin: 'https://trading.vietcap.com.vn',
 	'User-Agent':
 		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
 };
@@ -37,7 +37,7 @@ function toNumberArray(v: unknown): number[] {
 	return Array.isArray(v) ? v.map((x) => Number(x)) : [];
 }
 
-// VCI có thể trả timestamp ở giây hoặc mili-giây → chuẩn hoá về giây.
+// DNSE trả timestamp ở giây; vẫn chuẩn hoá phòng trường hợp ms.
 function toSeconds(ts: number): number {
 	return ts > 1e12 ? Math.floor(ts / 1000) : ts;
 }
@@ -57,7 +57,7 @@ function emptySeries(symbol: string): OhlcvSeries {
 }
 
 /**
- * Lấy OHLCV ngày (1D) cho 1 mã qua VCI chart.
+ * Lấy OHLCV ngày (1D) cho 1 mã qua DNSE Entrade.
  * @param symbol Mã CK (HPG, SHS, BSR, VNINDEX...)
  * @param days   Số nến gần nhất cần lấy (mặc định 90)
  */
@@ -66,48 +66,39 @@ export async function getVciChartOHLCV(
 	days = 90,
 ): Promise<OhlcvSeries> {
 	const sym = normalizeSymbol(symbol);
-	const vciSymbol = isVnIndexSymbol(sym) ? 'VNINDEX' : sym;
+	const dnseSymbol = isVnIndexSymbol(sym) ? 'VNINDEX' : sym;
 
 	const to = Math.floor(Date.now() / 1000);
-	// Đệm thêm cho cuối tuần + nghỉ lễ để chắc chắn đủ `days` phiên giao dịch.
+	// Đệm thêm cuối tuần + nghỉ lễ để chắc chắn đủ `days` phiên giao dịch.
 	const from = to - Math.ceil(days * 1.6 + 10) * 86400;
 
-	const res = await fetch(VCI_CHART_URL, {
-		method: 'POST',
-		headers: VCI_HEADERS,
-		body: JSON.stringify({
-			timeFrame: 'ONE_DAY',
-			symbols: [vciSymbol],
-			from,
-			to,
-		}),
+	const url =
+		`${DNSE_OHLC_URL}?from=${from}&to=${to}` +
+		`&symbol=${encodeURIComponent(dnseSymbol)}&resolution=1D`;
+
+	const res = await fetch(url, {
+		method: 'GET',
+		headers: REQUEST_HEADERS,
 		cache: 'no-store',
 	});
 
 	if (!res.ok) {
 		const body = await res.text().catch(() => '');
-		throw new Error(`VCI chart HTTP ${res.status}: ${body.slice(0, 200)}`);
+		throw new Error(`DNSE OHLC HTTP ${res.status}: ${body.slice(0, 200)}`);
 	}
 
 	const data = await res.json();
 
-	// Response là mảng, mỗi phần tử là 1 symbol với các mảng o/h/l/c/v/t.
-	const item = Array.isArray(data)
-		? data.find((d) => String(d?.symbol).toUpperCase() === vciSymbol) ?? data[0]
-		: null;
+	const t = toNumberArray(data?.t);
+	if (t.length === 0) return emptySeries(sym);
 
-	if (!item || !Array.isArray(item.t) || item.t.length === 0) {
-		return emptySeries(sym);
-	}
+	const o = toNumberArray(data.o);
+	const h = toNumberArray(data.h);
+	const l = toNumberArray(data.l);
+	const c = toNumberArray(data.c);
+	const v = toNumberArray(data.v);
 
-	const t = toNumberArray(item.t);
-	const o = toNumberArray(item.o);
-	const h = toNumberArray(item.h);
-	const l = toNumberArray(item.l);
-	const c = toNumberArray(item.c);
-	const v = toNumberArray(item.v);
-
-	// Ghép thành nến + loại nến không hợp lệ (close <= 0 hoặc NaN) + sắp tăng dần.
+	// Ghép nến + loại nến không hợp lệ (close <= 0 / NaN) + sắp xếp tăng dần.
 	const bars = t
 		.map((ts, i) => ({
 			t: toSeconds(ts),
@@ -136,4 +127,4 @@ export async function getVciChartOHLCV(
 			new Date(b.t * 1000).toISOString().slice(0, 10),
 		),
 	};
-		}
+}
