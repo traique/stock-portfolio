@@ -7,9 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
 	req: NextRequest,
-	{ params }: { params: { symbol: string } },
+	{ params }: { params: Promise<{ symbol: string }> }, // ✅ Next.js 15: params là Promise
 ) {
-	const sym = normalizeSymbol(params.symbol);
+	const { symbol } = await params;                       // ✅ phải await
+	const sym = normalizeSymbol(symbol);
+
 	const days = Math.min(
 		Number(req.nextUrl.searchParams.get('days') ?? '90') || 90,
 		90,
