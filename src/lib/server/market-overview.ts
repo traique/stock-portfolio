@@ -43,9 +43,10 @@ type DailyHistory = { closes: number[]; dates: string[] };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-// DNSE (entrade) OHLC — cùng endpoint provider dnse-realtime đang dùng.
-// '/ohlcs/stock' chấp nhận cả symbol chỉ số như VNINDEX.
-const DNSE_OHLC_URL = 'https://services.entrade.com.vn/chart-api/v2/ohlcs/stock';
+// DNSE (entrade) OHLC — CHỈ SỐ phải dùng endpoint '/ohlcs/index'.
+// (Đã test: '/ohlcs/stock?symbol=VNINDEX&resolution=1D' trả HTTP 400;
+//  '/ohlcs/index' trả đủ t/o/h/l/c/v cho VNINDEX.)
+const DNSE_OHLC_URL = 'https://services.entrade.com.vn/chart-api/v2/ohlcs/index';
 const HISTORY_CACHE_SECS = 900;
 const TIMEOUT_MS = 8000;
 
@@ -228,4 +229,4 @@ export async function buildMarketOverview(): Promise<MarketOverview> {
 		health: { degraded, provider },
 		generatedAt: new Date().toISOString(),
 	};
-				   }
+	}
