@@ -3,9 +3,13 @@
 // VCI Edge Function — 5 modes:
 //   realtime : lấy giá hiện tại (mặc định)
 //   cron     : tự đọc mã từ DB → upsert price_snapshots
-//   eod      : lưu OHLCV EOD vào price_history (chạy sau 15:20 VN)
+//   eod      : lưu OHLCV EOD vào price_history (chạy sau 15:20 VN, incremental 7 ngày)
 //   history  : trả OHLCV nhiều symbol
 //   probe    : dò endpoint chart đúng (debug)
+//
+// Universe (cron/eod/realtime) = watchlists ∪ mã đang nắm giữ (net BUY-SELL > 0) ∪ VNINDEX.
+// OHLCV lịch sử lấy qua Vercel proxy /api/history/[symbol] — đã thống nhất nguồn DNSE
+// (VND thô, đồng nhất đơn vị cho mọi sàn HOSE/HNX/UPCOM/VNINDEX).
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import {
@@ -163,28 +167,52 @@ async function fetchFromVci(symbols: string[]): Promise<VciRow[]> {
 	return results;
 }
 
-async function getActiveSymbols(sb: SupabaseClient): Promise<string[]> {
+// ─── Universe: watchlists ∪ mã đang nắm giữ (net qty > 0) ─────────────────────
+//
+// Thay cho getActiveSymbols cũ (gom MỌI mã trong transactions, kể cả đã bán hết).
+// Giờ chỉ giữ mã CÒN nắm giữ → khớp với pg_cron cleanup, nhẹ Supabase.
+
+async function getUniverse(
+	sb: SupabaseClient,
+	opts: { includeIndex?: boolean } = {},
+): Promise<string[]> {
+	const includeIndex = opts.includeIndex ?? true;
+
 	const [watchRes, txRes] = await Promise.all([
 		sb.from('watchlists').select('symbol'),
-		sb.from('transactions').select('symbol'),
+		sb.from('transactions').select('symbol, transaction_type, quantity'),
 	]);
-	const symbols = new Set<string>();
+
+	const set = new Set<string>();
+
 	for (const row of watchRes.data ?? []) {
-		if (row.symbol) symbols.add(String(row.symbol).toUpperCase().trim());
+		if (row?.symbol) set.add(String(row.symbol).toUpperCase().trim());
 	}
+
+	// Vị thế mở: tổng BUY - tổng SELL > 0
+	const net: Record<string, number> = {};
 	for (const row of txRes.data ?? []) {
-		if (row.symbol) symbols.add(String(row.symbol).toUpperCase().trim());
+		if (!row?.symbol) continue;
+		const s = String(row.symbol).toUpperCase().trim();
+		const q = Number(row.quantity) || 0;
+		net[s] = (net[s] ?? 0) + (row.transaction_type === 'BUY' ? q : -q);
 	}
-	symbols.add('VNINDEX');
-	return [...symbols].filter(Boolean).sort();
+	for (const [s, q] of Object.entries(net)) {
+		if (q > 0) set.add(s);
+	}
+
+	if (includeIndex) set.add('VNINDEX');
+
+	return [...set].filter(Boolean).sort();
 }
 
 // ─── OHLCV via Vercel proxy ──────────────────────────────────────────────────
 //
 // Supabase Singapore bị block bởi Yahoo, TCBS, VCI chart.
-// Giải pháp: gọi Vercel (Washington DC) làm proxy → Vercel fetch Yahoo/VCI OK.
+// Giải pháp: gọi Vercel (Washington DC) làm proxy → Vercel fetch DNSE OK.
 //
-// Flow: Edge Function (Singapore) → lcta.vercel.app/api/history/[sym] → Yahoo|VCI
+// Flow: Edge Function (Singapore) → lcta.vercel.app/api/history/[sym] → DNSE Entrade
+// Proxy trả giá VND thô (đã ×1000) cho mọi sàn → đơn vị thống nhất.
 
 const VERCEL_URL = Deno.env.get('VERCEL_APP_URL') ?? 'https://lcta.vercel.app';
 
@@ -210,12 +238,12 @@ async function fetchOHLCV(symbol: string, days = 90): Promise<Candle[]> {
 
 		const data = await res.json();
 
-		// count = 0 → proxy không có data (vd VCI rỗng) → skip (không crash)
+		// count = 0 → proxy không có data → skip (không crash)
 		if (!data.count || !data.timestamps?.length) return [];
 
 		return (data.timestamps as number[]).map((t: number, i: number) => ({
 			t,
-			o: data.opens?.[i] ?? data.closes[i], // ✅ dùng open thật từ proxy
+			o: data.opens?.[i] ?? data.closes[i], // ✅ open thật từ proxy
 			h: data.highs[i],
 			l: data.lows[i],
 			c: data.closes[i],
@@ -227,7 +255,7 @@ async function fetchOHLCV(symbol: string, days = 90): Promise<Candle[]> {
 	}
 }
 
-// Proxy đã tự route HOSE→Yahoo, HNX/UPCOM→VCI chart, nên chỉ cần 1 hàm chung.
+// Proxy đã thống nhất nguồn DNSE cho mọi sàn → chỉ cần 1 hàm chung.
 const fetchVciOHLCV = fetchOHLCV;
 
 async function saveEodHistory(
@@ -274,7 +302,7 @@ serve(async (req) => {
 
 		// ── CRON ─────────────────────────────────────────────────────────────────
 		if (mode === 'cron') {
-			const activeSymbols = await getActiveSymbols(sb);
+			const activeSymbols = await getUniverse(sb, { includeIndex: true });
 			if (!activeSymbols.length) {
 				return json({ ok: true, count: 0, message: 'Không có mã nào đang active' });
 			}
@@ -293,25 +321,14 @@ serve(async (req) => {
 		}
 
 		// ── EOD ──────────────────────────────────────────────────────────────────
+		// Incremental: mặc định chỉ lấy 7 ngày gần nhất.
+		// Lần nạp đầu tiên (hoặc backfill mã mới) gọi với { mode:"eod", days:90 }.
 		if (mode === 'eod') {
-			const days: number = typeof body.days === 'number' ? body.days : 5;
+			const days: number = typeof body.days === 'number' ? body.days : 7;
 
-			const [watchRes, txRes] = await Promise.all([
-				sb.from('watchlists').select('symbol'),
-				sb.from('transactions').select('symbol'),
-			]);
+			const allSymbols = await getUniverse(sb, { includeIndex: true });
 
-			const allSymbols = [
-				...new Set([
-					...(watchRes.data ?? []).map((r: { symbol: string }) =>
-						r.symbol.toUpperCase(),
-					),
-					...(txRes.data ?? []).map((r: { symbol: string }) =>
-						r.symbol.toUpperCase(),
-					),
-				]),
-			].filter((s: string) => s && s !== 'VNINDEX');
-
+			// Lấy exchange đã biết từ price_snapshots (nếu có) để ghi kèm.
 			const { data: snapRows } = await sb
 				.from('price_snapshots')
 				.select('symbol, exchange')
@@ -322,8 +339,8 @@ serve(async (req) => {
 				exchangeMap[r.symbol] = r.exchange;
 			});
 
-			// Pass 1: VCI realtime snapshot cho TẤT CẢ symbol — fallback cuối cùng
-			// khi proxy không trả OHLCV (hiếm, vì proxy đã có VCI chart cho HNX/UPCOM).
+			// Pass 1: VCI realtime snapshot — fallback cuối cùng khi proxy chưa có OHLCV
+			// (vd nến hôm nay chưa xuất hiện ngay sau giờ đóng cửa).
 			const realtimeMap = new Map<string, VciRow>();
 			try {
 				const realtimeResults = await fetchFromVci(allSymbols);
@@ -334,24 +351,25 @@ serve(async (req) => {
 				console.warn('[eod] VCI realtime fetch failed (non-fatal):', e);
 			}
 
-			// Ngày giao dịch hiện tại theo giờ VN
 			const vnToday = new Intl.DateTimeFormat('sv-SE', {
 				timeZone: 'Asia/Ho_Chi_Minh',
 			}).format(new Date()); // YYYY-MM-DD
 
-			// Pass 2: Lưu OHLCV — proxy đã tự chọn Yahoo (HOSE) hoặc VCI chart (HNX/UPCOM)
+			// Pass 2: Lưu OHLCV — proxy (DNSE) đã thống nhất đơn vị VND thô.
 			const settled = await Promise.allSettled(
 				allSymbols.map(async (sym: string) => {
 					const exchange = exchangeMap[sym] ?? 'HOSE';
 
-					const candles = await fetchVciOHLCV(sym, days).catch(() => [] as Candle[]);
+					const candles = await fetchVciOHLCV(sym, days).catch(
+						() => [] as Candle[],
+					);
 
 					if (!candles.length) {
-						// Fallback cuối: dùng VCI realtime snapshot làm 1 nến EOD.
+						// Fallback cuối: dùng VCI realtime snapshot làm 1 nến EOD hôm nay.
 						const snap = realtimeMap.get(sym);
 						if (snap && snap.price > 0) {
 							const row = {
-								symbol: sym, // ✅ FIX: trước đây dùng `symbol` (undefined)
+								symbol: sym,
 								exchange,
 								trade_date: vnToday,
 								open: snap.ref || snap.price,
@@ -370,7 +388,7 @@ serve(async (req) => {
 					}
 
 					const { saved } = await saveEodHistory(sb, sym, exchange, candles);
-					return { sym, saved, source: 'proxy' };
+					return { sym, saved, source: 'dnse' };
 				}),
 			);
 
@@ -421,7 +439,7 @@ serve(async (req) => {
 						lows: candles.map((d) => d.l),
 						volumes: candles.map((d) => d.v),
 						count: candles.length,
-						source: 'proxy',
+						source: 'dnse',
 					};
 				}),
 			);
@@ -441,7 +459,7 @@ serve(async (req) => {
 					  },
 			);
 
-			return json({ history, updatedAt: new Date().toISOString(), provider: 'proxy' });
+			return json({ history, updatedAt: new Date().toISOString(), provider: 'dnse' });
 		}
 
 		// ── PROBE — tìm endpoint chart đúng (timeout mỗi endpoint) ───────────────
@@ -468,8 +486,8 @@ serve(async (req) => {
 
 			const endpoints = [
 				{
-					name: '1-kbs-quote',
-					url: `https://api.kbsec.com.vn/api/kbsquote/getStockHistory?symbol=${sym}&startDate=${fromDate}&endDate=${toDate}`,
+					name: '1-dnse-entrade',
+					url: `https://services.entrade.com.vn/chart-api/v2/ohlcs/stock?from=${from}&to=${to}&symbol=${sym}&resolution=1D`,
 				},
 				{
 					name: '2-vietstock-ohlcv',
@@ -526,7 +544,7 @@ serve(async (req) => {
 		// ── REALTIME (default) ────────────────────────────────────────────────────
 		const symbols: string[] = Array.isArray(body.symbols)
 			? body.symbols.map((s: unknown) => String(s).trim().toUpperCase()).filter(Boolean)
-			: await getActiveSymbols(sb);
+			: await getUniverse(sb, { includeIndex: true });
 
 		const results = await fetchFromVci(symbols);
 		const prices: Record<string, number> = {};
