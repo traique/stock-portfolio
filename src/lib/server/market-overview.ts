@@ -1,8 +1,9 @@
 // src/lib/server/market-overview.ts
 //
 // ITEM 3 — Market Overview engine cho trang /market
-// Tính các chỉ số tổng quan VN-Index từ dữ liệu daily (Yahoo ^VNINDEX)
-// + giá realtime mới nhất (DNSE/Yahoo qua fetchMarketPrices).
+// Lấy lịch sử daily VN-Index từ DNSE (entrade) — cùng nguồn đang chạy ổn cho
+// giá danh mục, tránh việc Yahoo chặn IP server. Giá realtime VN-Index vẫn lấy
+// qua fetchMarketPrices (DNSE → Yahoo → VCI → snapshot).
 // Tái dùng technical-indicators cho MA / MACD / MA-alignment / trendScore.
 
 import { fetchMarketPrices } from '@/lib/server/market';
@@ -42,66 +43,67 @@ type DailyHistory = { closes: number[]; dates: string[] };
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-// Base URL viết dạng chuỗi thường (KHÔNG nối 'https://' + biến trong template)
-// để tránh bị các trình hiển thị bọc nhầm thành  ... .
-const YAHOO_BASES = [
-	'https://query1.finance.yahoo.com',
-	'https://query2.finance.yahoo.com',
-] as const;
-const USER_AGENT =
-	'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+// DNSE (entrade) OHLC — cùng endpoint provider dnse-realtime đang dùng.
+// '/ohlcs/stock' chấp nhận cả symbol chỉ số như VNINDEX.
+const DNSE_OHLC_URL = 'https://services.entrade.com.vn/chart-api/v2/ohlcs/stock';
 const HISTORY_CACHE_SECS = 900;
 const TIMEOUT_MS = 8000;
 
-// ─── Network ──────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type YahooChartResult = {
-	timestamp?: number[];
-	indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+// unix giây → ngày theo giờ VN (YYYY-MM-DD). sv-SE cho định dạng 'YYYY-MM-DD'.
+function vnDate(unixSec: number): string {
+	return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Ho_Chi_Minh' }).format(
+		new Date(unixSec * 1000),
+	);
+}
+
+// ─── Network (DNSE daily) ──────────────────────────────────────────────────────
+
+type DnseOhlcResponse = {
+	t?: number[];
+	c?: Array<number | null>;
+	o?: Array<number | null>;
+	h?: Array<number | null>;
+	l?: Array<number | null>;
+	v?: Array<number | null>;
 };
-type YahooChartResponse = { chart?: { result?: YahooChartResult[] } };
 
-async function fetchJson(url: string): Promise<YahooChartResponse> {
+// VN-Index daily ~400 ngày lịch (đủ ~250 phiên + MA200 + YTD + drawdown).
+// VNINDEX là CHỈ SỐ → close trả thẳng theo điểm, KHÔNG nhân 1000.
+async function fetchVnindexDaily(): Promise<DailyHistory> {
+	const to = Math.floor(Date.now() / 1000);
+	const from = to - 400 * 86400;
+	const url =
+		`${DNSE_OHLC_URL}?symbol=VNINDEX&from=${from}&to=${to}&resolution=1D`;
+
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+	let json: DnseOhlcResponse;
 	try {
 		const res = await fetch(url, {
-			headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
+			headers: { Accept: 'application/json' },
 			next: { revalidate: HISTORY_CACHE_SECS },
 			signal: controller.signal,
 		} as RequestInit);
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		return (await res.json()) as YahooChartResponse;
+		if (!res.ok) throw new Error(`DNSE HTTP ${res.status}`);
+		json = (await res.json()) as DnseOhlcResponse;
 	} finally {
 		clearTimeout(timer);
 	}
-}
 
-// VN-Index daily 1 năm (range=1y) để đủ MA200 + YTD + drawdown
-async function fetchVnindexDaily(): Promise<DailyHistory> {
-	let lastErr: unknown;
-	for (const base of YAHOO_BASES) {
-		try {
-			const url = `${base}/v8/finance/chart/%5EVNINDEX?interval=1d&range=1y`;
-			const json = await fetchJson(url);
-			const result = json?.chart?.result?.[0];
-			const q = result?.indicators?.quote?.[0];
-			const ts: number[] = result?.timestamp ?? [];
-			const closes: number[] = [];
-			const dates: string[] = [];
-			for (let i = 0; i < ts.length; i++) {
-				const c = Number(q?.close?.[i]);
-				if (!Number.isFinite(c) || c <= 0) continue;
-				closes.push(c);
-				dates.push(new Date(ts[i] * 1000).toISOString().slice(0, 10));
-			}
-			if (closes.length === 0) { lastErr = new Error(`Empty ^VNINDEX from ${base}`); continue; }
-			return { closes, dates };
-		} catch (err) {
-			lastErr = err;
-		}
+	const ts: number[] = Array.isArray(json?.t) ? json.t : [];
+	const rawCloses = Array.isArray(json?.c) ? json.c : [];
+	const closes: number[] = [];
+	const dates: string[] = [];
+	for (let i = 0; i < ts.length; i++) {
+		const c = Number(rawCloses[i]);
+		if (!Number.isFinite(c) || c <= 0) continue;
+		closes.push(c);              // giữ nguyên điểm số (chỉ số)
+		dates.push(vnDate(ts[i]));
 	}
-	throw lastErr ?? new Error('All Yahoo hosts failed for ^VNINDEX');
+	if (closes.length === 0) throw new Error('Empty VNINDEX history from DNSE');
+	return { closes, dates };
 }
 
 // ─── Indicators ────────────────────────────────────────────────────────────────
@@ -175,9 +177,9 @@ export async function buildMarketOverview(): Promise<MarketOverview> {
 	const lastClose = closes.at(-1) ?? 0;
 	const prevClose = closes.at(-2) ?? lastClose;
 
-	// Realtime VN-Index (best-effort)
+	// Realtime VN-Index (best-effort, qua DNSE/Yahoo/VCI/snapshot)
 	let value = lastClose;
-	let provider = 'yahoo-daily';
+	let provider = 'dnse-daily';
 	let isRealtime = false;
 	let degraded = false;
 	let updatedAt = new Date().toISOString();
@@ -226,4 +228,4 @@ export async function buildMarketOverview(): Promise<MarketOverview> {
 		health: { degraded, provider },
 		generatedAt: new Date().toISOString(),
 	};
-		}
+				   }
