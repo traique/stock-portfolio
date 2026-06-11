@@ -1,17 +1,14 @@
 // src/lib/server/providers/vci-chart.ts
 //
-// OHLCV lịch sử cho HOSE / HNX / UPCOM / VNINDEX.
-//
-// Nguồn: DNSE Entrade chart-api (public, không auth, không bị geo-block).
-// DNSE trả giá theo NGHÌN VND (vd 18.3) -> nhân PRICE_SCALE để ra VND thô
-// (18300), đồng nhất với Yahoo (HOSE ~24636) và giá realtime VCI (matchPrice).
+// OHLCV lịch sử cho HOSE / HNX / UPCOM / VNINDEX qua DNSE Entrade
+// (public, không auth, không bị geo-block, chạy tốt từ Vercel).
+// DNSE trả giá theo NGHÌN VND (18.3) -> nhân PRICE_SCALE để ra VND thô (18300).
 
 import { normalizeSymbol, isVnIndexSymbol } from '../exchanges/exchange';
 
 const DNSE_OHLC_URL =
 	'https://services.entrade.com.vn/chart-api/v2/ohlcs/stock';
 
-// DNSE trả giá theo nghìn VND. App dùng VND thô => quy đổi ×1000.
 const PRICE_SCALE = 1000;
 
 const REQUEST_HEADERS = {
@@ -40,7 +37,6 @@ function toSeconds(ts: number): number {
 	return ts > 1e12 ? Math.floor(ts / 1000) : ts;
 }
 
-// Quy giá nghìn VND -> VND thô, làm tròn để khử nhiễu số thực.
 function toVnd(price: number): number {
 	return Math.round(price * PRICE_SCALE);
 }
@@ -60,9 +56,7 @@ function emptySeries(symbol: string): OhlcvSeries {
 }
 
 /**
- * Lấy OHLCV ngày (1D) cho 1 mã qua DNSE Entrade. Giá trả về ở đơn vị VND thô.
- * @param symbol Mã CK (HPG, SHS, BSR, VNINDEX...)
- * @param days   Số nến gần nhất cần lấy (mặc định 90)
+ * Lấy OHLCV ngày (1D) cho 1 mã. Giá trả về ở đơn vị VND thô.
  */
 export async function getVciChartOHLCV(
 	symbol: string,
@@ -118,7 +112,6 @@ export async function getVciChartOHLCV(
 		symbol: sym,
 		count: sliced.length,
 		timestamps: sliced.map((b) => b.t),
-		// ⬇️ ×1000 -> VND thô, đồng nhất với Yahoo & realtime VCI
 		opens: sliced.map((b) => toVnd(Number.isFinite(b.o) && b.o > 0 ? b.o : b.c)),
 		highs: sliced.map((b) => toVnd(Number.isFinite(b.h) && b.h > 0 ? b.h : b.c)),
 		lows: sliced.map((b) => toVnd(Number.isFinite(b.l) && b.l > 0 ? b.l : b.c)),
@@ -128,4 +121,4 @@ export async function getVciChartOHLCV(
 			new Date(b.t * 1000).toISOString().slice(0, 10),
 		),
 	};
-}
+		}
