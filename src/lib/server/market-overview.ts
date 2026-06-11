@@ -229,4 +229,4 @@ export async function buildMarketOverview(): Promise<MarketOverview> {
 		health: { degraded, provider },
 		generatedAt: new Date().toISOString(),
 	};
-	}
+}
