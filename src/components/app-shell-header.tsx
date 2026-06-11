@@ -183,7 +183,7 @@ export default function AppShellHeader({
   };
 
   const WeatherIcon  = useMemo(() => getWeatherIcon(weatherCode), [weatherCode]);
-  const isToolActive = useMemo(() => ['gold','oil','system-live','backtest'].includes(currentTab), [currentTab]);
+  const isToolActive = useMemo(() => ['gold','oil','system-live','backtest','market'].includes(currentTab), [currentTab]);
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
     padding: '7px 14px',
@@ -361,7 +361,6 @@ export default function AppShellHeader({
         <nav style={ { display: 'flex', gap: 2, alignItems: 'center' } }>
           <Link href="/"          style={tabStyle(currentTab === 'home')}>HOME</Link>
           <Link href="/dashboard" style={tabStyle(currentTab === 'dashboard')}>DANH MỤC</Link>
-          <Link href="/market"    style={tabStyle(currentTab === 'market')}>THỊ TRƯỜNG</Link>
 
           {/* Tools — overflow visible, KHÔNG bọc bằng container có overflow:hidden */}
           <div ref={toolsRef} style={ { position: 'relative' } }>
@@ -386,6 +385,7 @@ export default function AppShellHeader({
             {toolsOpen && (
               <div style={ { ...DROPDOWN, left: 0, minWidth: 156 } }>
                 {[
+                  { href: '/market',      label: '📈 THỊ TRƯỜNG'    },
                   { href: '/system-live', label: '📊 TOP BUY/SELL' },
                   { href: '/backtest',    label: '🔬 BACKTEST'      },
                   { href: '/gold',        label: '🪙 GIÁ VÀNG'      },
