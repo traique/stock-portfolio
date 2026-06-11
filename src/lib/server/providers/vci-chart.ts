@@ -136,4 +136,4 @@ export async function getVciChartOHLCV(
 			new Date(b.t * 1000).toISOString().slice(0, 10),
 		),
 	};
-}
+		}
