@@ -2,18 +2,17 @@
 //
 // OHLCV lịch sử cho HOSE / HNX / UPCOM / VNINDEX.
 //
-// Nguồn: DNSE Entrade chart-api (public, không cần auth, không bị geo-block,
-//        chạy tốt từ Vercel). Thay cho VCI chart cũ (bị 404 / fetch failed do
-//        anti-bot + chặn IP datacenter nước ngoài).
-//
-// Giữ nguyên tên hàm getVciChartOHLCV + type OhlcvSeries để route history và
-// Edge Function không phải sửa gì.
+// Nguồn: DNSE Entrade chart-api (public, không auth, không bị geo-block).
+// DNSE trả giá theo NGHÌN VND (vd 18.3) -> nhân PRICE_SCALE để ra VND thô
+// (18300), đồng nhất với Yahoo (HOSE ~24636) và giá realtime VCI (matchPrice).
 
 import { normalizeSymbol, isVnIndexSymbol } from '../exchanges/exchange';
 
-// resolution=1D => nến ngày. Endpoint trả { t, o, h, l, c, v, nextTime }.
 const DNSE_OHLC_URL =
 	'https://services.entrade.com.vn/chart-api/v2/ohlcs/stock';
+
+// DNSE trả giá theo nghìn VND. App dùng VND thô => quy đổi ×1000.
+const PRICE_SCALE = 1000;
 
 const REQUEST_HEADERS = {
 	Accept: 'application/json',
@@ -37,9 +36,13 @@ function toNumberArray(v: unknown): number[] {
 	return Array.isArray(v) ? v.map((x) => Number(x)) : [];
 }
 
-// DNSE trả timestamp ở giây; vẫn chuẩn hoá phòng trường hợp ms.
 function toSeconds(ts: number): number {
 	return ts > 1e12 ? Math.floor(ts / 1000) : ts;
+}
+
+// Quy giá nghìn VND -> VND thô, làm tròn để khử nhiễu số thực.
+function toVnd(price: number): number {
+	return Math.round(price * PRICE_SCALE);
 }
 
 function emptySeries(symbol: string): OhlcvSeries {
@@ -57,7 +60,7 @@ function emptySeries(symbol: string): OhlcvSeries {
 }
 
 /**
- * Lấy OHLCV ngày (1D) cho 1 mã qua DNSE Entrade.
+ * Lấy OHLCV ngày (1D) cho 1 mã qua DNSE Entrade. Giá trả về ở đơn vị VND thô.
  * @param symbol Mã CK (HPG, SHS, BSR, VNINDEX...)
  * @param days   Số nến gần nhất cần lấy (mặc định 90)
  */
@@ -69,7 +72,6 @@ export async function getVciChartOHLCV(
 	const dnseSymbol = isVnIndexSymbol(sym) ? 'VNINDEX' : sym;
 
 	const to = Math.floor(Date.now() / 1000);
-	// Đệm thêm cuối tuần + nghỉ lễ để chắc chắn đủ `days` phiên giao dịch.
 	const from = to - Math.ceil(days * 1.6 + 10) * 86400;
 
 	const url =
@@ -98,7 +100,6 @@ export async function getVciChartOHLCV(
 	const c = toNumberArray(data.c);
 	const v = toNumberArray(data.v);
 
-	// Ghép nến + loại nến không hợp lệ (close <= 0 / NaN) + sắp xếp tăng dần.
 	const bars = t
 		.map((ts, i) => ({
 			t: toSeconds(ts),
@@ -111,17 +112,17 @@ export async function getVciChartOHLCV(
 		.filter((b) => Number.isFinite(b.c) && b.c > 0)
 		.sort((a, b) => a.t - b.t);
 
-	// Chỉ giữ `days` nến gần nhất.
 	const sliced = bars.slice(-days);
 
 	return {
 		symbol: sym,
 		count: sliced.length,
 		timestamps: sliced.map((b) => b.t),
-		opens: sliced.map((b) => (Number.isFinite(b.o) && b.o > 0 ? b.o : b.c)),
-		highs: sliced.map((b) => (Number.isFinite(b.h) && b.h > 0 ? b.h : b.c)),
-		lows: sliced.map((b) => (Number.isFinite(b.l) && b.l > 0 ? b.l : b.c)),
-		closes: sliced.map((b) => b.c),
+		// ⬇️ ×1000 -> VND thô, đồng nhất với Yahoo & realtime VCI
+		opens: sliced.map((b) => toVnd(Number.isFinite(b.o) && b.o > 0 ? b.o : b.c)),
+		highs: sliced.map((b) => toVnd(Number.isFinite(b.h) && b.h > 0 ? b.h : b.c)),
+		lows: sliced.map((b) => toVnd(Number.isFinite(b.l) && b.l > 0 ? b.l : b.c)),
+		closes: sliced.map((b) => toVnd(b.c)),
 		volumes: sliced.map((b) => (Number.isFinite(b.v) ? b.v : 0)),
 		trade_dates: sliced.map((b) =>
 			new Date(b.t * 1000).toISOString().slice(0, 10),
