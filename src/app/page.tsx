@@ -751,4 +751,4 @@ export default function HomePage() {
       <NewsModal modal={newsModal} onClose={closeNewsModal} />
     </main>
   );
-          }
+        }
