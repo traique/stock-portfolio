@@ -5,7 +5,7 @@ import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 import { logger } from '@/lib/server/logger';
 import { buildTechnicalSignals, callAiWithFallback, TechnicalSignal } from '@/lib/server/ai-insights';
 import { isValidModelKey, DEFAULT_MODEL } from '@/lib/server/ai-models';
-import { derivePortfolio, PositionGroup, Transaction } from '@/lib/calculations';
+import { derivePortfolio, calcPortfolioRisk, PositionGroup, Transaction, PortfolioRisk } from '@/lib/calculations'; // ✨ Phase 3 — calcPortfolioRisk + PortfolioRisk
 import { envServer } from '@/lib/env-server';
 import { buildAiCacheMeta, checkAiRateLimit, getAiCache, getRateLimitResetSeconds, setAiCache } from '@/lib/server/ai-cache';
 
@@ -14,7 +14,7 @@ import { buildAiCacheMeta, checkAiRateLimit, getAiCache, getRateLimitResetSecond
 const bodySchema = z.object({
   risk_profile: z.enum(['conservative', 'balanced', 'aggressive']).optional().default('balanced'),
   force_refresh: z.boolean().optional(),
-  model: z.string().optional(),   // AI model key từ client
+  model: z.string().optional(), // AI model key từ client
 });
 
 type RiskProfile = z.infer<typeof bodySchema>['risk_profile'];
@@ -33,9 +33,10 @@ type AiPortfolioResponse = {
   actions: AiAction[];
   risks: string[];
   newsContext?: Record<string, TechnicalSignal['news']>;
-  ai_fallback?:        boolean;
+  portfolioRisk?: PortfolioRisk; // ✨ Phase 3 — rủi ro cả danh mục để UI hiển thị
+  ai_fallback?: boolean;
   ai_fallback_reason?: string;
-  ai_model_used?:      string;
+  ai_model_used?: string;
 };
 
 type PortfolioContextItem = {
@@ -44,7 +45,7 @@ type PortfolioContextItem = {
   avgBuyPrice: number;
   currentPrice: number;
   realPnLPct: number;
-  positionValue: number;       // quantity × currentPrice — để AI hiểu tỷ trọng
+  positionValue: number; // quantity × currentPrice — để AI hiểu tỷ trọng
   positionStatus: 'PROFIT' | 'LOSS' | 'BREAKEVEN';
   suggestedTp: number;
   suggestedSl: number;
@@ -52,8 +53,8 @@ type PortfolioContextItem = {
     trend3mPct: number;
     momentumPct: number;
     volumeTrendPct: number;
-    volatilityPct: number;     // thêm volatility để AI biết độ rủi ro từng mã
-    relativeStrength: number;  // % so sánh vs VNINDEX cùng kỳ 3 tháng
+    volatilityPct: number; // thêm volatility để AI biết độ rủi ro từng mã
+    relativeStrength: number; // % so sánh vs VNINDEX cùng kỳ 3 tháng
     action: TechnicalSignal['action'];
     confidence: TechnicalSignal['confidence'];
   };
@@ -70,20 +71,20 @@ type PortfolioAiPayloadItem = Omit<PortfolioContextItem, 'news'> & {
 // Free tier: cache 4 giờ — phân tích portfolio không thay đổi nhiều trong ngày
 // User muốn refresh có thể nhấn "Phân tích lại" (force_refresh: true)
 const PORTFOLIO_AI_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
-const CACHE_VERSION = 'v6';
+const CACHE_VERSION = 'v7'; // ✨ Phase 3 — bump vì payload/response đổi (thêm portfolioRisk)
 const TX_SIGNATURE_LIMIT = 120;
 const AI_MAX_NEWS_PER_SYMBOL = 4;
 
 const TP_MULT: Record<RiskProfile, number> = {
   conservative: 1.07,
-  balanced:     1.12,
-  aggressive:   1.20,
+  balanced: 1.12,
+  aggressive: 1.20,
 };
 
 const SL_MULT: Record<RiskProfile, number> = {
   conservative: 0.95,
-  balanced:     0.93,
-  aggressive:   0.90,
+  balanced: 0.93,
+  aggressive: 0.90,
 };
 
 // ================= HELPERS =================
@@ -110,7 +111,7 @@ function calcTpSl(avgBuyPrice: number, riskProfile: RiskProfile) {
 }
 
 function positionStatus(pnlPct: number): PortfolioContextItem['positionStatus'] {
-  if (pnlPct > 1)  return 'PROFIT';
+  if (pnlPct > 1) return 'PROFIT';
   if (pnlPct < -1) return 'LOSS';
   return 'BREAKEVEN';
 }
@@ -121,31 +122,31 @@ function buildPortfolioContext(
   riskProfile: RiskProfile,
 ): PortfolioContextItem[] {
   return positions.map(pos => {
-    const sig          = signals.find(s => s.symbol === pos.symbol);
+    const sig = signals.find(s => s.symbol === pos.symbol);
     const currentPrice = sig?.currentPrice ?? 0;
-    const avgBuyPrice  = Number(pos.avgBuyPrice ?? 0);
-    const quantity     = Number(pos.quantity ?? 0);
-    const pnlPct       = avgBuyPrice > 0
+    const avgBuyPrice = Number(pos.avgBuyPrice ?? 0);
+    const quantity = Number(pos.quantity ?? 0);
+    const pnlPct = avgBuyPrice > 0
       ? ((currentPrice - avgBuyPrice) / avgBuyPrice) * 100
       : 0;
 
     return {
-      symbol:        pos.symbol,
+      symbol: pos.symbol,
       quantity,
       avgBuyPrice,
       currentPrice,
-      realPnLPct:    Number(pnlPct.toFixed(2)),
+      realPnLPct: Number(pnlPct.toFixed(2)),
       positionValue: Math.round(quantity * currentPrice),
       positionStatus: positionStatus(pnlPct),
       ...calcTpSl(avgBuyPrice, riskProfile),
       technical: {
-        trend3mPct:       sig?.trend3mPct       ?? 0,
-        momentumPct:      sig?.momentumPct       ?? 0,
-        volumeTrendPct:   sig?.volumeTrendPct    ?? 0,
-        volatilityPct:    sig?.volatilityPct     ?? 0,
-        relativeStrength: sig?.relativeStrength  ?? 0,
-        action:           sig?.action            ?? 'WATCH',
-        confidence:       sig?.confidence        ?? 'LOW',
+        trend3mPct: sig?.trend3mPct ?? 0,
+        momentumPct: sig?.momentumPct ?? 0,
+        volumeTrendPct: sig?.volumeTrendPct ?? 0,
+        volatilityPct: sig?.volatilityPct ?? 0,
+        relativeStrength: sig?.relativeStrength ?? 0,
+        action: sig?.action ?? 'WATCH',
+        confidence: sig?.confidence ?? 'LOW',
       },
       news: sig?.news ?? [],
     };
@@ -170,12 +171,12 @@ function buildBaseActions(context: PortfolioContextItem[]): AiAction[] {
     else if (item.realPnLPct > 12 && momentumPct < 0) action = 'REDUCE';
 
     return {
-      symbol:     item.symbol,
+      symbol: item.symbol,
       action,
-      reason:     `Giá vốn: ${item.avgBuyPrice} | P/L: ${item.realPnLPct}% | Dòng tiền: ${volumeTrendPct > 0 ? 'Vào' : 'Ra'}`,
+      reason: `Giá vốn: ${item.avgBuyPrice} | P/L: ${item.realPnLPct}% | Dòng tiền: ${volumeTrendPct > 0 ? 'Vào' : 'Ra'}`,
       confidence: 'MEDIUM' as const,
-      tp:         item.suggestedTp,
-      sl:         item.suggestedSl,
+      tp: item.suggestedTp,
+      sl: item.suggestedSl,
     };
   });
 }
@@ -185,8 +186,8 @@ function buildBaseActions(context: PortfolioContextItem[]): AiAction[] {
 function buildSystemPrompt(riskProfile: RiskProfile): string {
   const profileGuide: Record<RiskProfile, string> = {
     conservative: 'Ưu tiên bảo toàn vốn. Cắt lỗ sớm, chốt lời nhanh. Tránh gồng lỗ. Chỉ HOLD khi tín hiệu kỹ thuật vẫn tích cực.',
-    balanced:     'Cân bằng lợi nhuận và rủi ro. Có thể gồng lỗ tối đa -7% nếu momentum chưa phá vỡ. Chốt từng phần khi lãi >10%.',
-    aggressive:   'Chấp nhận biến động cao. Có thể gồng lỗ đến -10% nếu thesis còn nguyên. Để lãi chạy khi momentum mạnh.',
+    balanced: 'Cân bằng lợi nhuận và rủi ro. Có thể gồng lỗ tối đa -7% nếu momentum chưa phá vỡ. Chốt từng phần khi lãi >10%.',
+    aggressive: 'Chấp nhận biến động cao. Có thể gồng lỗ đến -10% nếu thesis còn nguyên. Để lãi chạy khi momentum mạnh.',
   };
 
   return `Bạn là chuyên gia phân tích danh mục chứng khoán Việt Nam, kết hợp VSA (Volume Spread Analysis) và phân tích tin tức.
@@ -195,7 +196,10 @@ Nhiệm vụ: Đánh giá TỪNG VỊ THẾ trong danh mục thực tế của k
 KHẨU VỊ RỦI RO: ${riskProfile.toUpperCase()}
 ${profileGuide[riskProfile]}
 
-=== DỮ LIỆU MỖI VỊ THẾ ===
+=== CẤU TRÚC DỮ LIỆU ===
+Payload gồm 2 phần: "holdings" (mảng từng vị thế) và "portfolioRisk" (rủi ro tổng danh mục).
+
+=== MỖI VỊ THẾ (holdings[]) ===
 Mỗi vị thế bao gồm:
 - symbol, quantity, avgBuyPrice (giá vốn), currentPrice (giá hiện tại)
 - realPnLPct: % lãi/lỗ thực tế so với giá vốn (âm = đang lỗ)
@@ -209,11 +213,20 @@ Mỗi vị thế bao gồm:
 - technical.action / confidence: tín hiệu kỹ thuật tổng hợp đã tính sẵn
 - news[]: tin tức gần đây (title + sentiment, sentiment > 0 = tích cực, < 0 = tiêu cực)
 
+=== RỦI RO CẢ DANH MỤC (portfolioRisk) ===
+- volatilityPct: độ biến động annualised CẢ danh mục, tính từ ma trận hiệp phương sai (ĐÃ tính tương quan giữa các mã — đây là rủi ro thực tế của cả rổ)
+- weightedAvgVolPct: trung bình vol từng mã theo tỷ trọng (giả định các mã độc lập hoàn toàn)
+- diversificationBenefitPct: phần rủi ro được triệt tiêu nhờ đa dạng hóa (= weightedAvgVolPct − volatilityPct; càng cao = danh mục phân tán rủi ro càng tốt)
+- topWeightSymbol / topWeightPct: mã có tỷ trọng lớn nhất và % của nó (rủi ro tập trung)
+- effectiveHoldings: số mã "hiệu dụng" (1/HHI) — càng thấp so với số mã thực thì danh mục càng tập trung
+- basis: ghi chú số mã & số phiên dùng để tính (nếu thiếu dữ liệu giá thì độ tin cậy thấp hơn)
+
 === QUY TẮC PHÂN TÍCH (BẮT BUỘC) ===
 
 BƯỚC 1 — ĐỌC TRẠNG THÁI VỊ THẾ:
 • Xác định đang PROFIT / LOSS / BREAKEVEN và biên độ cụ thể
 • So sánh positionValue để biết mã nào có tỷ trọng lớn (rủi ro tập trung)
+• Dùng portfolioRisk: nếu effectiveHoldings thấp hoặc topWeightPct cao → cảnh báo rủi ro tập trung; nếu diversificationBenefitPct thấp → các mã tương quan cao, ít được lợi từ đa dạng hóa
 
 BƯỚC 2 — ĐỌC DÒNG TIỀN & MOMENTUM:
 • volumeTrendPct > 20%: dòng tiền vào mạnh → tín hiệu tích cực
@@ -248,7 +261,7 @@ Không viết: "Cổ phiếu đang có xu hướng tích cực, nên xem xét gi
 === OUTPUT JSON ===
 Trả về DUY NHẤT một JSON hợp lệ, không có text ngoài JSON:
 {
-  "summary": "Tổng quan danh mục: phân tích dòng tiền tổng thể, tỷ trọng rủi ro, và 1-2 điểm nhấn quan trọng nhất cần hành động ngay.",
+  "summary": "Tổng quan danh mục: biến động & mức đa dạng hóa cả danh mục (dựa trên portfolioRisk), phân tích dòng tiền tổng thể, rủi ro tập trung, và 1-2 điểm nhấn quan trọng nhất cần hành động ngay.",
   "actions": [
     {
       "symbol": "string",
@@ -260,7 +273,7 @@ Trả về DUY NHẤT một JSON hợp lệ, không có text ngoài JSON:
     }
   ],
   "risks": [
-    "Rủi ro cụ thể đang hiện diện trong danh mục này (không liệt kê chung chung)"
+    "Rủi ro cụ thể đang hiện diện trong danh mục này (gồm cả rủi ro tập trung/tương quan nếu portfolioRisk cho thấy — không liệt kê chung chung)"
   ]
 }`;
 }
@@ -318,15 +331,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { positions }    = derivePortfolio(transactions);
-  const symbols          = positions.map(p => p.symbol);
-  const signals          = await buildTechnicalSignals(symbols);
+  const { positions } = derivePortfolio(transactions);
+  const symbols = positions.map(p => p.symbol);
+  const signals = await buildTechnicalSignals(symbols);
   const portfolioContext = buildPortfolioContext(positions, signals, parsed.data.risk_profile);
+
+  // ✨ Phase 3 — rủi ro CẢ danh mục bằng ma trận hiệp phương sai (có tính tương quan giữa các mã)
+  const totalValue = portfolioContext.reduce((sum, item) => sum + item.positionValue, 0);
+  const portfolioRisk = calcPortfolioRisk(
+    portfolioContext.map(item => ({
+      symbol: item.symbol,
+      weight: totalValue > 0 ? item.positionValue / totalValue : 0,
+      closes: signals.find(s => s.symbol === item.symbol)?.closes ?? [],
+    })),
+  );
 
   const fallback: AiPortfolioResponse = {
     summary: 'Đang dùng dữ liệu dự phòng. Hệ thống AI đánh giá dựa trên giá vốn hiện tại và tin tức.',
     actions: buildBaseActions(portfolioContext),
-    risks:   ['Quản trị rủi ro T+2.5', 'Thị trường phân hóa'],
+    risks: ['Quản trị rủi ro T+2.5', 'Thị trường phân hóa'],
   };
 
   const requestedModel = parsed.data.model && isValidModelKey(parsed.data.model)
@@ -336,22 +359,23 @@ export async function POST(request: NextRequest) {
   const aiCallResult = await callAiWithFallback<AiPortfolioResponse>(
     requestedModel,
     buildSystemPrompt(parsed.data.risk_profile),
-    JSON.stringify(trimPayloadForAI(portfolioContext)),
+    JSON.stringify({ holdings: trimPayloadForAI(portfolioContext), portfolioRisk }),
     fallback,
   );
 
   const finalResponse: AiPortfolioResponse = {
     ...aiCallResult.data,
+    portfolioRisk, // ✨ Phase 3 — luôn dùng giá trị tính ở server (AI không trả về field này)
     // newsContext dùng full news (không trim) để hiển thị trên UI
     newsContext: Object.fromEntries(
       portfolioContext.map(item => [item.symbol, signals.find(s => s.symbol === item.symbol)?.news ?? []]),
     ),
-    ai_fallback:        aiCallResult.fallbackUsed,
+    ai_fallback: aiCallResult.fallbackUsed,
     ai_fallback_reason: aiCallResult.fallbackReason,
-    ai_model_used:      aiCallResult.modelUsed,
+    ai_model_used: aiCallResult.modelUsed,
   };
 
   await setAiCache(cacheKey, finalResponse, PORTFOLIO_AI_CACHE_TTL_MS);
 
   return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(PORTFOLIO_AI_CACHE_TTL_MS) });
-                                      }
+  }
