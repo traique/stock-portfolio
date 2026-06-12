@@ -580,6 +580,7 @@ export function PortfolioView({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: 28, lineHeight: 1, fontWeight: 800 }}>{pos.symbol}</div>
+                      {companyNames[pos.symbol] && ( <div style={HOLDING_NAME}>{companyNames[pos.symbol]}</div> )}
                       <div className="num-premium" style={{ fontSize: 11, fontWeight: 800, color: C_MUTED, marginTop: 6, letterSpacing: '0.04em' }}>
                         {pos.holdings.length} LOT · SL {pos.quantity}
                       </div>
