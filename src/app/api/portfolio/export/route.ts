@@ -3,9 +3,9 @@
 // GET /api/portfolio/export?format=xlsx|csv
 //
 // Xuất danh mục ra file Excel (xlsx) hoặc CSV:
-//   Sheet 1 – Vị thế hiện tại
-//   Sheet 2 – Lịch sử giao dịch (enriched)
-//   Sheet 3 – Tổng quan
+// Sheet 1 – Vị thế hiện tại
+// Sheet 2 – Lịch sử giao dịch (enriched)
+// Sheet 3 – Tổng quan
 
 // Chỉ chạy server-side — xlsx không được bundle vào client
 export const runtime = 'nodejs';
@@ -14,12 +14,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { getBearerToken } from '@/lib/server/api-utils';
 import { getSupabaseUserClient } from '@/lib/server/supabase-user';
+// ✨ Phase 4.2: giá hiện tại lấy LIVE qua fetchMarketPrices (cùng nguồn với dashboard)
+import { fetchMarketPrices } from '@/lib/server/market';
 import {
   derivePortfolio, calcCashSummary, calcSummary,
   CashTransaction, PortfolioSettings, Transaction,
 } from '@/lib/calculations';
 
-// ─── Helpers ─────────────────────────────────────────────
+// ─── Helpers ────────────────────────
 const fmtD = (v: string | null | undefined) => v ? v.slice(0, 10) : '';
 
 function escCsv(v: unknown): string {
@@ -31,17 +33,17 @@ function toCsv(rows: (string | number | null)[][]): string {
   return rows.map(r => r.map(escCsv).join(',')).join('\r\n');
 }
 
-// ─── Sheet builders ───────────────────────────────────────
+// ─── Sheet builders ────────────────────
 function posRows(
   portfolio: ReturnType<typeof derivePortfolio>,
   prices: Record<string, number>,
 ) {
   const H = ['Mã','Giá mua','Số lượng','Ngày mua','Giá hiện tại','Giá trị vốn','Giá trị TT','Lãi/Lỗ','Lãi/Lỗ%'];
   const rows = portfolio.openLots.map(lot => {
-    const cur   = prices[lot.symbol] ?? 0;
-    const cost  = lot.buy_price * lot.quantity;
-    const mkt   = cur * lot.quantity;
-    const pnl   = mkt - cost;
+    const cur = prices[lot.symbol] ?? 0;
+    const cost = lot.buy_price * lot.quantity;
+    const mkt = cur * lot.quantity;
+    const pnl = mkt - cost;
     const pnlPct = cost > 0 ? +(pnl / cost * 100).toFixed(2) : '';
     return [lot.symbol, lot.buy_price, lot.quantity, fmtD(lot.buy_date),
       cur || '', cost, mkt || '', mkt ? pnl : '', mkt ? pnlPct : ''];
@@ -72,23 +74,23 @@ function summaryRows(
   transactions: Transaction[],
   settings: PortfolioSettings | null,
 ) {
-  const s    = calcSummary(portfolio.openLots, prices);
+  const s = calcSummary(portfolio.openLots, prices);
   const cash = calcCashSummary(cashTxs, transactions, settings);
-  const r    = portfolio.realizedSummary;
-  const nav  = cash.actualCash + s.totalNow;
+  const r = portfolio.realizedSummary;
+  const nav = cash.actualCash + s.totalNow;
   return [
     ['TỔNG QUAN DANH MỤC', ''],
-    ['Tổng tài sản (NAV)',     nav],
-    ['Giá trị cổ phiếu',      s.totalNow],
-    ['Tiền mặt',              cash.actualCash],
-    ['Vốn gốc',               cash.netCapital],
-    ['Lãi/Lỗ tổng',          nav - cash.netCapital],
+    ['Tổng tài sản (NAV)', nav],
+    ['Giá trị cổ phiếu', s.totalNow],
+    ['Tiền mặt', cash.actualCash],
+    ['Vốn gốc', cash.netCapital],
+    ['Lãi/Lỗ tổng', nav - cash.netCapital],
     ['Lãi/Lỗ chưa thực hiện', s.totalPnl],
     [''],
     ['GIAO DỊCH ĐÃ CHỐT', ''],
-    ['Số lần bán',  r.totalSellOrders],
+    ['Số lần bán', r.totalSellOrders],
     ['Lãi/Lỗ chốt', r.totalRealizedPnl],
-    ['Win rate',    r.totalSellOrders > 0
+    ['Win rate', r.totalSellOrders > 0
       ? `${(r.wins / r.totalSellOrders * 100).toFixed(1)}%` : '—'],
     ['Thắng / Thua', `${r.wins} / ${r.losses}`],
     [''],
@@ -107,7 +109,7 @@ function buildXlsx(sheets: { name: string; rows: (string|number|null)[][] }[]) {
   return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
 }
 
-// ─── Route ────────────────────────────────────────────────
+// ─── Route ──────────────────────
 export async function GET(request: NextRequest) {
   const token = getBearerToken(request);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -120,46 +122,52 @@ export async function GET(request: NextRequest) {
   if (!['xlsx', 'csv'].includes(format))
     return NextResponse.json({ error: 'format phải là xlsx hoặc csv' }, { status: 400 });
 
-  const [txRes, cashRes, settingsRes, priceRes] = await Promise.all([
+  // Phase 4.2: bỏ đọc bảng price_cache (per-user, dễ stale) — không lấy giá ở bước này nữa.
+  const [txRes, cashRes, settingsRes] = await Promise.all([
     supabase.from('transactions').select('*').eq('user_id', user.id)
       .order('trade_date', { ascending: true }),
     supabase.from('cash_transactions').select('*').eq('user_id', user.id),
     supabase.from('portfolio_settings').select('*').eq('user_id', user.id).maybeSingle(),
-    supabase.from('price_cache').select('symbol,price').eq('user_id', user.id),
   ]);
 
-  const transactions = (txRes.data     ?? []) as Transaction[];
-  const cashTxs      = (cashRes.data   ?? []) as CashTransaction[];
-  const settings     = (settingsRes.data ?? null) as PortfolioSettings | null;
-  const prices: Record<string, number> = {};
-  for (const row of (priceRes.data ?? [])) prices[(row as any).symbol] = Number((row as any).price);
+  const transactions = (txRes.data ?? []) as Transaction[];
+  const cashTxs = (cashRes.data ?? []) as CashTransaction[];
+  const settings = (settingsRes.data ?? null) as PortfolioSettings | null;
 
   if (!transactions.length)
     return NextResponse.json({ error: 'Chưa có giao dịch nào' }, { status: 404 });
 
   const portfolio = derivePortfolio(transactions);
-  const dateStr   = new Date().toISOString().slice(0, 10);
+  const dateStr = new Date().toISOString().slice(0, 10);
 
   if (format === 'csv') {
+    // CSV chỉ xuất lịch sử giao dịch — không cần giá hiện tại
     const csv = toCsv(txRows(portfolio.enrichedTransactions));
     return new NextResponse(csv, {
       headers: {
-        'Content-Type':        'text/csv; charset=utf-8',
+        'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="portfolio-transactions-${dateStr}.csv"`,
       },
     });
   }
 
+  // ✨ Phase 4.2: giá hiện tại lấy LIVE từ fetchMarketPrices (DNSE → Yahoo → VCI → snapshot),
+  // đúng nguồn dashboard đang dùng. Chỉ fetch cho xlsx và chỉ các mã đang nắm.
+  const symbols = [...new Set(portfolio.openLots.map(lot => lot.symbol))];
+  const prices: Record<string, number> = symbols.length
+    ? (await fetchMarketPrices(symbols)).prices
+    : {};
+
   const buffer = buildXlsx([
-    { name: 'Vị thế hiện tại',   rows: posRows(portfolio, prices) },
+    { name: 'Vị thế hiện tại', rows: posRows(portfolio, prices) },
     { name: 'Lịch sử giao dịch', rows: txRows(portfolio.enrichedTransactions) },
-    { name: 'Tổng quan',         rows: summaryRows(portfolio, prices, cashTxs, transactions, settings) },
+    { name: 'Tổng quan', rows: summaryRows(portfolio, prices, cashTxs, transactions, settings) },
   ]);
 
   return new NextResponse(buffer, {
     headers: {
-      'Content-Type':        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="portfolio-${dateStr}.xlsx"`,
     },
   });
-}
+             }
