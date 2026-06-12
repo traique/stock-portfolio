@@ -1,17 +1,19 @@
 // src/app/api/ai/watchlist-scan/route.ts
 //
 // PATCHED — Tích hợp Phase 1 + 2 + 3:
-//   Phase 1: buildEnhancedIndicators, scoreEnhancedIndicators, buildIndicatorSummary
-//   Phase 2: buildSectorContext, buildSectorPromptSection (sector rotation)
-//            analyzeForeignFlow, calcMarketBreadth, calcOBVTrend, calcMFI (money flow)
-//   Phase 3: buildEarningsCalendar, buildEarningsPromptSection (KQKD)
-//            buildOptimizationResult, buildOptimizationPromptSection (portfolio)
+// Phase 1: buildEnhancedIndicators, scoreEnhancedIndicators, buildIndicatorSummary
+// Phase 2: buildSectorContext, buildSectorPromptSection (sector rotation)
+//          analyzeForeignFlow, calcMarketBreadth, calcOBVTrend, calcMFI (money flow)
+// Phase 3: buildEarningsCalendar, buildEarningsPromptSection (KQKD)
+//          buildOptimizationResult, buildOptimizationPromptSection (portfolio)
 //
 // Thay đổi so với route.ts gốc:
-//   1. buildEnhancedSignals() thay thế buildTechnicalSignals() — thêm indicators Phase 1
-//   2. buildEnrichedContext() bổ sung sector + money flow + earnings cho mỗi mã
-//   3. buildEnhancedSystemPrompt() mở rộng framework phân tích
-//   4. trimPayloadForAI() giữ nguyên logic cũ + thêm enhanced fields
+// 1. buildEnhancedSignals() thay thế buildTechnicalSignals() — thêm indicators Phase 1
+// 2. buildEnrichedContext() bổ sung sector + money flow + earnings cho mỗi mã
+// 3. buildEnhancedSystemPrompt() mở rộng framework phân tích
+// 4. trimPayloadForAI() giữ nguyên logic cũ + thêm enhanced fields
+//
+// ✨ FIX 413: giảm AI_MAX_CANDIDATES + cắt ngắn context blocks để body không vượt giới hạn Groq.
 //
 // Để dễ review: tất cả thay đổi có comment "// ✨ PHASE X" bên cạnh.
 
@@ -70,117 +72,117 @@ import {
   buildOptimizationPromptSection,
 } from '@/lib/server/portfolio-optimizer';
 
-// ─── Schema ───────────────────────────────────────────────────────────────────
+// ─── Schema ─────────────────────────────────────────────────────
 
 const bodySchema = z.object({
-  symbols:       z.array(z.string().trim().transform(s => s.toUpperCase())).min(1).max(60),
-  risk_profile:  z.enum(['conservative', 'balanced', 'aggressive']).optional().default('balanced'),
+  symbols: z.array(z.string().trim().transform(s => s.toUpperCase())).min(1).max(60),
+  risk_profile: z.enum(['conservative', 'balanced', 'aggressive']).optional().default('balanced'),
   force_refresh: z.boolean().optional(),
-  model:         z.string().optional(),
+  model: z.string().optional(),
   // ✨ mozy lesson 3 — pipeline mode
   pipeline_mode: z.enum(['intraday', 'eod']).optional().default('eod'),
   // ✨ PHASE 2B — Dùng để tính market breadth
-  pct_changes:   z.record(z.string(), z.number()).optional(),
+  pct_changes: z.record(z.string(), z.number()).optional(),
   // ✨ PHASE 3B — Positions để tính portfolio optimization
-  positions:     z.array(z.object({ symbol: z.string(), value: z.number() })).optional(),
+  positions: z.array(z.object({ symbol: z.string(), value: z.number() })).optional(),
 });
 
 type RiskProfile = z.infer<typeof bodySchema>['risk_profile'];
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ─────────────────────────────────────────────────────
 
 type WatchlistPick = {
-  symbol:           string;
-  score:            number;
-  reason:           string;
-  entry:            number;
-  tp:               number;
-  sl:               number;
+  symbol: string;
+  score: number;
+  reason: string;
+  entry: number;
+  tp: number;
+  sl: number;
   // ✨ mozy lesson 1 — richer decision schema
   time_sensitivity?: string;
-  position_advice?:  { no_position: string; has_position: string };
+  position_advice?: { no_position: string; has_position: string };
   action_checklist?: string[];
-  sniper_points?:    { ideal_buy: string; secondary_buy: string; stop_loss: string; take_profit: string };
+  sniper_points?: { ideal_buy: string; secondary_buy: string; stop_loss: string; take_profit: string };
   // ✨ mozy lesson 4+5
-  trend_score?:      number;
-  bias_status?:      string;
-  ma_alignment?:     string;
-  support?:          number | null;
-  resistance?:       number | null;
+  trend_score?: number;
+  bias_status?: string;
+  ma_alignment?: string;
+  support?: number | null;
+  resistance?: number | null;
 };
 
 type WatchlistScanResponse = {
-  summary:              string;
-  picks:                WatchlistPick[];
-  avoid:                string[];
-  newsContext?:         Record<string, TechnicalSignal['news']>;
-  ai_fallback?:         boolean;
-  ai_fallback_reason?:  string;
-  ai_model_used?:       string;
+  summary: string;
+  picks: WatchlistPick[];
+  avoid: string[];
+  newsContext?: Record<string, TechnicalSignal['news']>;
+  ai_fallback?: boolean;
+  ai_fallback_reason?: string;
+  ai_model_used?: string;
 };
 
 // ✨ PHASE 1 — Extended context item
 type WatchlistContextItem = {
-  symbol:       string;
+  symbol: string;
   currentPrice: number;
-  score:        number;
+  score: number;
   technical: {
-    trend3mPct:        number;
-    momentumPct:       number;
-    volatilityPct:     number;
-    volumeTrendPct:    number;
-    relativeStrength:  number;
-    rsi14:             number;
+    trend3mPct: number;
+    momentumPct: number;
+    volatilityPct: number;
+    volumeTrendPct: number;
+    relativeStrength: number;
+    rsi14: number;
     // ✨ PHASE 1 additions:
-    enhanced?:         EnhancedIndicators;
-    enhancedScore?:    number;     // điểm bổ sung từ indicators mới
-    indicatorSummary?: string;     // text mô tả cho AI
+    enhanced?: EnhancedIndicators;
+    enhancedScore?: number; // điểm bổ sung từ indicators mới
+    indicatorSummary?: string; // text mô tả cho AI
   };
-  news:         TechnicalSignal['news'];
-  suggestedTp:  number;
-  suggestedSl:  number;
+  news: TechnicalSignal['news'];
+  suggestedTp: number;
+  suggestedSl: number;
   // ✨ PHASE 2A:
-  sectorPrompt?:     string;
+  sectorPrompt?: string;
   // ✨ PHASE 2B:
-  moneyFlowPrompt?:  string;
+  moneyFlowPrompt?: string;
   // ✨ PHASE 3A:
-  earningsPrompt?:   string;
+  earningsPrompt?: string;
   // ✨ PHASE 3B:
   optimizationPrompt?: string;
   // ✨ mozy lessons:
-  supportResistance?:  SupportResistance;
-  biasMA?:             BiasMA;
-  maAlignment?:        MAAlignment;
-  trendScore?:         number;
+  supportResistance?: SupportResistance;
+  biasMA?: BiasMA;
+  maAlignment?: MAAlignment;
+  trendScore?: number;
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────
 
 const WATCHLIST_AI_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
-const CACHE_VERSION              = 'v6'; // ✨ bump version khi thay đổi format
-const MAX_SYMBOLS                = 60;
-const SCORE_BASE                 = 50;
-const AVOID_THRESHOLD            = 45;
-const TOP_PICKS                  = 5;
-const AI_MAX_CANDIDATES          = 20;
-const AI_MAX_NEWS_PER_SYMBOL     = 3;
+const CACHE_VERSION = 'v6'; // ✨ bump version khi thay đổi format
+const MAX_SYMBOLS = 60;
+const SCORE_BASE = 50;
+const AVOID_THRESHOLD = 45;
+const TOP_PICKS = 5;
+const AI_MAX_CANDIDATES = 12;      // ✨ FIX 413: từ 20 — giảm số mã gửi AI
+const AI_MAX_NEWS_PER_SYMBOL = 2;  // ✨ FIX 413: từ 3
 
-// ─── Helpers (giữ nguyên từ route.ts gốc) ────────────────────────────────────
+// ─── Helpers (giữ nguyên từ route.ts gốc) ────────────────────────────
 
 function buildWatchlistCacheKey(userId: string, riskProfile: string, symbols: string[]): string {
   return `ai:watchlist:${CACHE_VERSION}:${userId}:${riskProfile}:${symbols.join(',')}`;
 }
 
 function scoreSignal(s: TechnicalSignal): number {
-  const trendScore    = Math.max(-20, Math.min(20, s.trend3mPct));
+  const trendScore = Math.max(-20, Math.min(20, s.trend3mPct));
   const momentumScore = Math.max(-15, Math.min(15, s.momentumPct * 1.5));
-  const volumeScore   = Math.max(-15, Math.min(15, s.volumeTrendPct * 0.5));
-  const newsScore     = s.news.length > 0 ? 5 : 0;
-  const volPenalty    = s.volatilityPct * 0.5;
+  const volumeScore = Math.max(-15, Math.min(15, s.volumeTrendPct * 0.5));
+  const newsScore = s.news.length > 0 ? 5 : 0;
+  const volPenalty = s.volatilityPct * 0.5;
   return Number((SCORE_BASE + trendScore + momentumScore + volumeScore + newsScore - volPenalty).toFixed(2));
 }
 
-// ─── ✨ PHASE 1 — buildEnhancedContext ────────────────────────────────────────
+// ─── ✨ PHASE 1 — buildEnhancedContext ───────────────────────────────
 //
 // Sau khi có signals từ buildTechnicalSignals(), tính thêm:
 //   • Enhanced indicators per symbol (từ close[])
@@ -190,9 +192,9 @@ function scoreSignal(s: TechnicalSignal): number {
 //   • Portfolio optimization (shared — gọi 1 lần)
 
 async function buildEnhancedContext(
-  signals:     TechnicalSignal[],
-  pctChanges:  Record<string, number> = {},
-  positions:   Array<{ symbol: string; value: number }> = [],
+  signals: TechnicalSignal[],
+  pctChanges: Record<string, number> = {},
+  positions: Array<{ symbol: string; value: number }> = [],
 ): Promise<WatchlistContextItem[]> {
 
   // ── Phase 2A: Sector context (batch, 1 call) ──
@@ -228,11 +230,11 @@ async function buildEnhancedContext(
       let enhanced: EnhancedIndicators | undefined;
       let enhancedScore = 0;
       let indicatorSummary = '';
-      const closes  = (s as TechnicalSignal & { closes: number[] }).closes ?? [];
+      const closes = (s as TechnicalSignal & { closes: number[] }).closes ?? [];
       const volumes = (s as TechnicalSignal & { volumes: number[] }).volumes ?? [];
       if (closes.length > 20) {
-        enhanced         = buildEnhancedIndicators(closes, s.currentPrice);
-        enhancedScore    = scoreEnhancedIndicators(enhanced);
+        enhanced = buildEnhancedIndicators(closes, s.currentPrice);
+        enhancedScore = scoreEnhancedIndicators(enhanced);
         indicatorSummary = buildIndicatorSummary(enhanced, s.symbol);
       }
 
@@ -247,7 +249,7 @@ async function buildEnhancedContext(
 
       // Market breadth: tính từ toàn bộ signals
       if (Object.keys(pctChanges).length > 0) {
-        const symList   = signals.map(x => x.symbol);
+        const symList = signals.map(x => x.symbol);
         // build closesMap từ closes[] đã expose
         const closesMap: Record<string, number[]> = Object.fromEntries(
           signals.map(x => [x.symbol, (x as TechnicalSignal & { closes: number[] }).closes ?? []])
@@ -258,21 +260,21 @@ async function buildEnhancedContext(
       // OBV + MFI từ closes[] và volumes[] thật
       if (closes.length > 5 && volumes.length > 5) {
         obvTrend = calcOBVTrend(closes, volumes);
-        mfi      = calcMFI(closes, volumes);
+        mfi = calcMFI(closes, volumes);
       }
 
       const moneyFlowPrompt = buildMoneyFlowPromptSection(foreignFlow, breadth, obvTrend, mfi, s.symbol);
 
       // ── ✨ mozy lesson 2: Support/Resistance từ OHLCV thật ──
       const highs = (s as TechnicalSignal & { highs: number[] }).highs ?? [];
-      const lows  = (s as TechnicalSignal & { lows:  number[] }).lows  ?? [];
+      const lows = (s as TechnicalSignal & { lows: number[] }).lows ?? [];
       const supportResistance = highs.length > 0
         ? calcSupportResistance(highs, lows, s.currentPrice, 30)
         : undefined;
 
       // ── ✨ mozy lesson 4: Bias MA ──
-      const maAlign   = closes.length >= 20 ? calcMAAlignment(closes) : undefined;
-      const biasMA    = maAlign ? calcBiasMA(s.currentPrice, maAlign.ma5) : undefined;
+      const maAlign = closes.length >= 20 ? calcMAAlignment(closes) : undefined;
+      const biasMA = maAlign ? calcBiasMA(s.currentPrice, maAlign.ma5) : undefined;
 
       // ── ✨ mozy lesson 5: trendScore tổng hợp ──
       const trendScore = (maAlign && enhanced)
@@ -305,23 +307,23 @@ async function buildEnhancedContext(
         : Number((baseScore + enhancedScore).toFixed(1));
 
       return {
-        symbol:        s.symbol,
-        currentPrice:  s.currentPrice,
-        score:         finalScore,
+        symbol: s.symbol,
+        currentPrice: s.currentPrice,
+        score: finalScore,
         technical: {
-          trend3mPct:       s.trend3mPct,
-          momentumPct:      s.momentumPct,
-          volatilityPct:    s.volatilityPct,
-          volumeTrendPct:   s.volumeTrendPct,
+          trend3mPct: s.trend3mPct,
+          momentumPct: s.momentumPct,
+          volatilityPct: s.volatilityPct,
+          volumeTrendPct: s.volumeTrendPct,
           relativeStrength: s.relativeStrength,
-          rsi14:            s.rsi14,
+          rsi14: s.rsi14,
           enhanced,
           enhancedScore,
           indicatorSummary,
         },
-        news:               s.news,
-        suggestedTp:        s.suggestedTp,
-        suggestedSl:        s.suggestedSl,
+        news: s.news,
+        suggestedTp: s.suggestedTp,
+        suggestedSl: s.suggestedSl,
         sectorPrompt,
         moneyFlowPrompt,
         earningsPrompt,
@@ -329,7 +331,7 @@ async function buildEnhancedContext(
         // ✨ mozy fields
         supportResistance,
         biasMA,
-        maAlignment:  maAlign,
+        maAlignment: maAlign,
         trendScore,
       };
     })
@@ -343,73 +345,84 @@ function buildFallback(context: WatchlistContextItem[]): WatchlistScanResponse {
     summary: 'Đang dùng dữ liệu dự phòng. Quét kỹ thuật dựa trên Trend, Momentum và Tin tức.',
     picks: context.slice(0, TOP_PICKS).map(s => ({
       symbol: s.symbol,
-      score:  s.score,
+      score: s.score,
       reason: `Score: ${s.score} | Trend: ${s.technical.trend3mPct.toFixed(1)}% | Dòng tiền: ${s.technical.volumeTrendPct > 0 ? 'Vào' : 'Cạn'}`,
-      entry:  s.currentPrice,
-      tp:     s.suggestedTp,
-      sl:     s.suggestedSl,
+      entry: s.currentPrice,
+      tp: s.suggestedTp,
+      sl: s.suggestedSl,
     })),
     avoid: context.filter(r => r.score < AVOID_THRESHOLD).map(r => r.symbol),
   };
 }
 
-// ─── ✨ Trim payload — thêm enhanced fields ───────────────────────────────────
+// ─── ✨ Trim payload — thêm enhanced fields + chống payload quá lớn (HTTP 413) ──
+
+// Cắt chuỗi context dài để giảm body gửi Groq. Trả undefined nếu rỗng.
+function truncate(text: string | undefined, max: number): string | undefined {
+  if (!text) return undefined;
+  const t = text.trim();
+  if (!t) return undefined;
+  return t.length <= max ? t : t.slice(0, max - 1).trimEnd() + '…';
+}
 
 function trimPayloadForAI(context: WatchlistContextItem[]) {
-  return context.slice(0, AI_MAX_CANDIDATES).map(s => ({
-    symbol:       s.symbol,
+  // Ưu tiên mã điểm cao nhất → khi cắt còn AI_MAX_CANDIDATES vẫn là top mã đáng xem
+  const ranked = [...context].sort((a, b) => b.score - a.score);
+
+  return ranked.slice(0, AI_MAX_CANDIDATES).map(s => ({
+    symbol: s.symbol,
     currentPrice: s.currentPrice,
-    score:        s.score,
-    technical:    {
+    score: s.score,
+    technical: {
       // Fields gốc
-      trend3mPct:       s.technical.trend3mPct,
-      momentumPct:      s.technical.momentumPct,
-      volatilityPct:    s.technical.volatilityPct,
-      volumeTrendPct:   s.technical.volumeTrendPct,
+      trend3mPct: s.technical.trend3mPct,
+      momentumPct: s.technical.momentumPct,
+      volatilityPct: s.technical.volatilityPct,
+      volumeTrendPct: s.technical.volumeTrendPct,
       relativeStrength: s.technical.relativeStrength,
-      rsi14:            s.technical.rsi14,
-      // ✨ Phase 1 — indicator summary (text, compact)
-      indicators: s.technical.indicatorSummary || undefined,
+      rsi14: s.technical.rsi14,
+      // ✨ Phase 1 — indicator summary (cắt ngắn)
+      indicators: truncate(s.technical.indicatorSummary, 220),
     },
-    suggestedTp:  s.suggestedTp,
-    suggestedSl:  s.suggestedSl,
+    suggestedTp: s.suggestedTp,
+    suggestedSl: s.suggestedSl,
     // Pre-calculated sniper fallbacks (dùng khi không có support/resistance)
     sniper_fallback: {
-      ideal_buy:     s.currentPrice,
+      ideal_buy: s.currentPrice,
       secondary_buy: Math.round(s.currentPrice * 0.97 / 100) * 100,
-      stop_loss:     s.suggestedSl,
-      take_profit:   s.suggestedTp,
+      stop_loss: s.suggestedSl,
+      take_profit: s.suggestedTp,
     },
     news: s.news.slice(0, AI_MAX_NEWS_PER_SYMBOL).map(n => ({
-      title:     n.title,
+      title: truncate(n.title, 110),
       sentiment: n.sentiment ?? 0,
     })),
-    // ✨ Phase 2 + 3 context blocks (text, compact)
-    sectorContext:       s.sectorPrompt       || undefined,
-    moneyFlowContext:    s.moneyFlowPrompt     || undefined,
-    earningsContext:     s.earningsPrompt      || undefined,
-    portfolioContext:    s.optimizationPrompt  || undefined,
+    // ✨ Phase 2 + 3 context blocks (cắt ngắn để tránh 413)
+    sectorContext: truncate(s.sectorPrompt, 200),
+    moneyFlowContext: truncate(s.moneyFlowPrompt, 200),
+    earningsContext: truncate(s.earningsPrompt, 200),
+    portfolioContext: truncate(s.optimizationPrompt, 200),
     // ✨ mozy lessons — structured fields
-    support:      s.supportResistance?.support    ?? undefined,
-    resistance:   s.supportResistance?.resistance ?? undefined,
+    support: s.supportResistance?.support ?? undefined,
+    resistance: s.supportResistance?.resistance ?? undefined,
     distToSR: s.supportResistance
       ? { toSupport: s.supportResistance.distToSupport, toResistance: s.supportResistance.distToResistance }
       : undefined,
-    biasMA5:      s.biasMA
+    biasMA5: s.biasMA
       ? `${s.biasMA.bias > 0 ? '+' : ''}${s.biasMA.bias}% (${s.biasMA.status})`
       : undefined,
-    maAlignment:  s.maAlignment?.alignment     ?? undefined,
-    trendScore:   s.trendScore                 ?? undefined,
+    maAlignment: s.maAlignment?.alignment ?? undefined,
+    trendScore: s.trendScore ?? undefined,
   }));
 }
 
-// ─── ✨ Enhanced system prompt ────────────────────────────────────────────────
+// ─── ✨ Enhanced system prompt ────────────────────────────────────
 
 function buildSystemPrompt(riskProfile: RiskProfile): string {
   const entryGuide: Record<RiskProfile, string> = {
     conservative: 'Chỉ chọn mã có score > 55, volatility thấp (<8%), và tin tức tích cực rõ ràng. Tối đa 3 picks.',
-    balanced:     'Chọn mã có score > 50, cân bằng momentum và vol. Tối đa 5 picks.',
-    aggressive:   'Có thể chọn mã score > 45 nếu momentum đang bùng nổ mạnh. Tối đa 7 picks.',
+    balanced: 'Chọn mã có score > 50, cân bằng momentum và vol. Tối đa 5 picks.',
+    aggressive: 'Có thể chọn mã score > 45 nếu momentum đang bùng nổ mạnh. Tối đa 7 picks.',
   };
 
   return `Bạn là chuyên gia phân tích chứng khoán Việt Nam, kết hợp Technical Analysis, Sector Rotation, Dòng tiền và Fundamental (KQKD).
@@ -469,13 +482,13 @@ ${entryGuide[riskProfile]}
 
 === QUY TẮC TÍNH SCORE (bắt buộc) ===
 Score phản ánh đúng tín hiệu kỹ thuật + dòng tiền, KHÔNG bị kéo xuống bởi uncertainty:
-- MACD bullish crossover:            +15 điểm
+- MACD bullish crossover: +15 điểm
 - Giá trên SMA20 + MA alignment bullish: +10 điểm
 - Khối ngoại mua ròng (foreign buy): +10 điểm
-- OBV tăng > 10%:                    +8 điểm
-- Ngành outperform VNINDEX > 3%:     +8 điểm
-- trendScore từ context (nếu có):    dùng trực tiếp làm baseline
-- Mỗi ⚠️ risk factor:               -5 điểm
+- OBV tăng > 10%: +8 điểm
+- Ngành outperform VNINDEX > 3%: +8 điểm
+- trendScore từ context (nếu có): dùng trực tiếp làm baseline
+- Mỗi ⚠️ risk factor: -5 điểm
 Ví dụ: FPT có MACD crossover + SMA20 + khối ngoại mua → score ít nhất 65.
 
 === QUY TẮC SNIPER POINTS (bắt buộc — VI PHẠM LÀ LỖI) ===
@@ -487,10 +500,10 @@ LUÔN dùng số giá thực tế (VND), KHÔNG viết text mô tả thuần.
 ✅ ĐÚNG: stop_loss: "72.460 (dưới đáy tích lũy)"
 
 Công thức tính nếu không có support/resistance trong context:
-- ideal_buy     = currentPrice (làm tròn hàng trăm)
+- ideal_buy = currentPrice (làm tròn hàng trăm)
 - secondary_buy = currentPrice × 0.97 (làm tròn)
-- stop_loss     = entry × 0.93 (làm tròn)
-- take_profit   = tp từ field tp (đã tính sẵn)
+- stop_loss = entry × 0.93 (làm tròn)
+- take_profit = tp từ field tp (đã tính sẵn)
 
 === QUY TẮC ACTION CHECKLIST (bắt buộc) ===
 Mỗi mục phải dựa trên DATA THẬT từ context, không được viết generic.
@@ -545,7 +558,7 @@ Cấu trúc: [Pha N tuần] + [Sector %] + [Dòng tiền cụ thể] + [Technica
 }`;
 }
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+// ─── Handler ─────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   const token = getBearerToken(request);
@@ -556,12 +569,12 @@ export async function POST(request: NextRequest) {
   const user = userRes.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const raw    = await request.json().catch(() => ({}));
+  const raw = await request.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) return validationErrorResponse(parsed.error);
 
-  const symbols      = [...new Set(parsed.data.symbols)].slice(0, MAX_SYMBOLS).sort();
-  const cacheKey     = buildWatchlistCacheKey(user.id, parsed.data.risk_profile, symbols);
+  const symbols = [...new Set(parsed.data.symbols)].slice(0, MAX_SYMBOLS).sort();
+  const cacheKey = buildWatchlistCacheKey(user.id, parsed.data.risk_profile, symbols);
 
   if (!parsed.data.force_refresh) {
     const cached = await getAiCache<WatchlistScanResponse>(cacheKey);
@@ -594,20 +607,20 @@ export async function POST(request: NextRequest) {
     const priceSignals = await buildTechnicalSignals(symbols);
     const lightFallback = buildFallback(
       priceSignals.map(s => ({
-        symbol:       s.symbol,
+        symbol: s.symbol,
         currentPrice: s.currentPrice,
-        score:        scoreSignal(s),
+        score: scoreSignal(s),
         technical: {
-          trend3mPct:       s.trend3mPct,
-          momentumPct:      s.momentumPct,
-          volatilityPct:    s.volatilityPct,
-          volumeTrendPct:   s.volumeTrendPct,
+          trend3mPct: s.trend3mPct,
+          momentumPct: s.momentumPct,
+          volatilityPct: s.volatilityPct,
+          volumeTrendPct: s.volumeTrendPct,
           relativeStrength: s.relativeStrength,
-          rsi14:            s.rsi14,
+          rsi14: s.rsi14,
         },
-        news:              s.news,
-        suggestedTp:       s.suggestedTp,
-        suggestedSl:       s.suggestedSl,
+        news: s.news,
+        suggestedTp: s.suggestedTp,
+        suggestedSl: s.suggestedSl,
       })),
     );
     return NextResponse.json({
@@ -626,8 +639,8 @@ export async function POST(request: NextRequest) {
     parsed.data.positions ?? [],
   );
 
-  const fallback    = buildFallback(enrichedContext);
-  const aiPayload   = trimPayloadForAI(enrichedContext);
+  const fallback = buildFallback(enrichedContext);
+  const aiPayload = trimPayloadForAI(enrichedContext);
 
   const requestedModel = parsed.data.model && isValidModelKey(parsed.data.model)
     ? parsed.data.model
@@ -643,12 +656,12 @@ export async function POST(request: NextRequest) {
   const finalResponse: WatchlistScanResponse = {
     ...aiCallResult.data,
     newsContext: Object.fromEntries(enrichedContext.map(s => [s.symbol, s.news])),
-    ai_fallback:        aiCallResult.fallbackUsed,
+    ai_fallback: aiCallResult.fallbackUsed,
     ai_fallback_reason: aiCallResult.fallbackReason,
-    ai_model_used:      aiCallResult.modelUsed,
+    ai_model_used: aiCallResult.modelUsed,
   };
 
   await setAiCache(cacheKey, finalResponse, WATCHLIST_AI_CACHE_TTL_MS);
 
   return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
-}
+    }
