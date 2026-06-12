@@ -7,32 +7,50 @@ import { AllocationAlerts } from '@/components/dashboard/allocation-alerts';
 import { ErrorBoundary }   from '@/components/error-boundary';
 import { usePortfolio }    from '@/lib/hooks/use-portfolio';
 import { useAllocationAlerts, AllocationAlertSettings } from '@/lib/use-allocation-alerts';
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
 import type { CashSummaryShape } from '@/lib/dashboard-types';
+import { getPrimarySectorLabel } from '@/lib/sector-map';
+
+// ─── Styles (tách const để tránh inline style trong JSX, code dán vào sạch) ──────
+const SHELL_STYLE: CSSProperties = { gap: 12 };
+const MESSAGE_STYLE: CSSProperties = { borderRadius: 16, padding: '12px 16px' };
+const EXPORT_ROW_STYLE: CSSProperties = { display: 'flex', justifyContent: 'flex-end', gap: 8 };
+const exportBtnStyle = (exporting: boolean): CSSProperties => ({
+  padding: '7px 16px',
+  borderRadius: 999,
+  border: '1px solid var(--border)',
+  background: 'var(--soft)',
+  color: 'var(--muted)',
+  fontSize: 11,
+  fontWeight: 800,
+  cursor: exporting ? 'wait' : 'pointer',
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  opacity: exporting ? 0.6 : 1,
+  transition: 'opacity 0.2s',
+});
 
 export default function DashboardPage() {
   const p = usePortfolio();
 
-  // ✨ closesMap — fetch 3M closes cho từng mã đang nắm
+  // ✨ closesMap — lấy ~90 phiên giá đóng cửa (nguồn DNSE qua /api/history) cho từng mã đang nắm
   const [closesMap, setClosesMap] = useState<Record<string, number[]>>({});
   useEffect(() => {
-    if (!p.positions.length || !p.accessToken) return;
+    if (!p.positions.length) return;
     const symbols = p.positions.map(pos => pos.symbol);
-    // Fetch song song từ Yahoo Finance qua API proxy
+
+    // Nguồn DNSE qua endpoint nội bộ /api/history (đồng bộ giá realtime, đơn vị VND thô mọi sàn)
     Promise.allSettled(
       symbols.map(async sym => {
         try {
-          const ticker = `${sym}.VN`;
-          const hosts  = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
-          for (const host of hosts) {
-            const res = await fetch(`https://${host}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`);
-            if (!res.ok) continue;
-            const json = await res.json();
-            const closes: number[] = (json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? [])
-              .map(Number).filter((v: number) => Number.isFinite(v) && v > 0);
-            if (closes.length > 5) return { sym, closes };
-          }
-        } catch { /* ignore */ }
+          const res = await fetch(`/api/history/${encodeURIComponent(sym)}?days=90`);
+          if (!res.ok) return null;
+          const json = await res.json();
+          const closes: number[] = (json?.closes ?? [])
+            .map(Number)
+            .filter((v: number) => Number.isFinite(v) && v > 0);
+          if (closes.length > 5) return { sym, closes };
+        } catch { /* bỏ qua mã lỗi */ }
         return null;
       })
     ).then(results => {
@@ -42,7 +60,7 @@ export default function DashboardPage() {
       });
       setClosesMap(map);
     });
-  }, [p.positions.map(x => x.symbol).join(','), p.accessToken]);
+  }, [p.positions.map(x => x.symbol).join(',')]);
 
   // ✨ optResult — tính portfolio optimization từ closesMap
   const optResult = useMemo<OptPanelData | undefined>(() => {
@@ -79,19 +97,10 @@ export default function DashboardPage() {
       return { symbol, currentPct, suggestedPct, delta: Math.round((suggestedPct - currentPct) * 10) / 10, volatility: vols[symbol], level };
     }).sort((a, b) => b.currentPct - a.currentPct);
 
-    // Sector grouping đơn giản
+    // Sector grouping — dùng bản đồ ngành dùng chung (đồng bộ với sector-analyzer)
     const sectorGroups: Record<string, number> = {};
     positions.forEach(({ symbol, value }) => {
-      const bankings  = ['VCB','BID','CTG','TCB','MBB','ACB','VPB','HDB','STB','EIB','TPB','SHB'];
-      const steels    = ['HPG','HSG','NKG'];
-      const realestate= ['VIC','VHM','NVL','KDH','DXG','PDR','NLG','DIG','VRE','KBC','BCM'];
-      const oilgas    = ['GAS','PLX','PVD','PVT','PVS'];
-      const tech      = ['FPT','CMG'];
-      const sector    = bankings.includes(symbol) ? 'Ngân hàng' :
-                        steels.includes(symbol)    ? 'Thép' :
-                        realestate.includes(symbol)? 'Bất động sản' :
-                        oilgas.includes(symbol)    ? 'Dầu khí' :
-                        tech.includes(symbol)      ? 'Công nghệ' : 'Khác';
+      const sector = getPrimarySectorLabel(symbol);
       sectorGroups[sector] = (sectorGroups[sector] ?? 0) + value;
     });
     const bySector = Object.entries(sectorGroups).map(([sector, val]) => {
@@ -171,7 +180,7 @@ export default function DashboardPage() {
 
   return (
     <main className="ab-page">
-      <div className="ab-shell" style={{ gap: 12 }}>
+      <div className="ab-shell" style={SHELL_STYLE}>
 
         <AppShellHeader
           isLoggedIn={true}
@@ -181,7 +190,7 @@ export default function DashboardPage() {
         />
 
         {p.message && (
-          <div className="ab-error" style={{ borderRadius: 16, padding: '12px 16px' }}>
+          <div className="ab-error" style={MESSAGE_STYLE}>
             {p.message}
           </div>
         )}
@@ -194,18 +203,11 @@ export default function DashboardPage() {
         />
 
         {!p.loading && (p.positions.length > 0 || p.enrichedTxs.length > 0) && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <div style={EXPORT_ROW_STYLE}>
             {(['xlsx', 'csv'] as const).map(fmt => (
               <button key={fmt} type="button" disabled={exporting}
                 onClick={() => handleExport(fmt)}
-                style={{
-                  padding: '7px 16px', borderRadius: 999,
-                  border: '1px solid var(--border)', background: 'var(--soft)',
-                  color: 'var(--muted)', fontSize: 11, fontWeight: 800,
-                  cursor: exporting ? 'wait' : 'pointer',
-                  letterSpacing: '0.04em', textTransform: 'uppercase',
-                  opacity: exporting ? 0.6 : 1, transition: 'opacity 0.2s',
-                }}>
+                style={exportBtnStyle(exporting)}>
                 {exporting ? '...' : `↓ ${fmt.toUpperCase()}`}
               </button>
             ))}
@@ -260,4 +262,4 @@ export default function DashboardPage() {
       </div>
     </main>
   );
-}
+          }
