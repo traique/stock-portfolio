@@ -11,83 +11,21 @@
 //    HPG, HSG, NKG đều trong vùng giảm. Rủi ro ngành cao."
 
 // ─── Sector Map ───────────────────────────────────────────────────────────────
-// Mỗi sector có:
-//   • symbols: mã đại diện (dùng để tính sector index)
-//   • label:   tên tiếng Việt
-//
-// Nguyên tắc chọn: top 3-5 mã có vốn hóa lớn nhất ngành → đại diện tốt nhất
+// SECTOR_MAP, SectorKey, SectorMeta, getSymbolSectors đã chuyển sang module dùng
+// chung '@/lib/sector-map' để cả client (dashboard) lẫn server dùng chung,
+// tránh lặp danh sách mã ở nhiều nơi.
 
-export type SectorKey =
-  | 'banking'
-  | 'steel'
-  | 'realestate'
-  | 'oilgas'
-  | 'technology'
-  | 'securities'
-  | 'retail'
-  | 'food'
-  | 'industrial'
-  | 'utilities'
-  | 'logistics';
+import {
+  SECTOR_MAP,
+  getSymbolSectors,
+  getPrimarySectorLabel,
+  type SectorKey,
+  type SectorMeta,
+} from '@/lib/sector-map';
 
-export type SectorMeta = {
-  label:   string;
-  symbols: string[];
-};
-
-export const SECTOR_MAP: Record<SectorKey, SectorMeta> = {
-  banking: {
-    label:   'Ngân hàng',
-    symbols: ['VCB', 'BID', 'CTG', 'TCB', 'MBB', 'ACB', 'VPB', 'HDB', 'STB', 'EIB', 'TPB', 'SHB'],
-  },
-  steel: {
-    label:   'Thép',
-    symbols: ['HPG', 'HSG', 'NKG', 'GEX'],
-  },
-  realestate: {
-    label:   'Bất động sản',
-    symbols: ['VIC', 'VHM', 'NVL', 'KDH', 'DXG', 'PDR', 'NLG', 'DIG', 'VRE', 'KBC', 'BCM', 'HDC'],
-  },
-  oilgas: {
-    label:   'Dầu khí',
-    symbols: ['GAS', 'PLX', 'PVD', 'PVT', 'PVS', 'BSR', 'OIL', 'PLC'],
-  },
-  technology: {
-    label:   'Công nghệ',
-    symbols: ['FPT', 'CMG', 'VGI', 'CTR'],
-  },
-  securities: {
-    label:   'Chứng khoán',
-    symbols: ['SSI', 'VCI', 'HCM', 'VND', 'VIX', 'SHS', 'MBS', 'BVS'],
-  },
-  retail: {
-    label:   'Bán lẻ',
-    symbols: ['MWG', 'FRT', 'PNJ', 'DGW'],
-  },
-  food: {
-    label:   'Thực phẩm & Đồ uống',
-    symbols: ['VNM', 'SAB', 'MSN', 'DBC', 'HAG', 'QNS', 'MCH'],
-  },
-  industrial: {
-    label:   'Khu công nghiệp & Xây dựng',
-    symbols: ['GEX', 'CTD', 'VCG', 'REE', 'CII', 'KBC', 'BCM', 'SIP'],
-  },
-  utilities: {
-    label:   'Điện & Tiện ích',
-    symbols: ['POW', 'REE', 'GAS', 'PLC'],
-  },
-  logistics: {
-    label:   'Vận tải & Logistics',
-    symbols: ['GMD', 'PVT', 'ACV', 'VJC'],
-  },
-};
-
-// Reverse map: symbol → sectors (1 symbol có thể thuộc nhiều ngành)
-export function getSymbolSectors(symbol: string): SectorKey[] {
-  return (Object.entries(SECTOR_MAP) as [SectorKey, SectorMeta][])
-    .filter(([, meta]) => meta.symbols.includes(symbol))
-    .map(([key]) => key);
-}
+// Re-export để các file đang import từ sector-analyzer không bị gãy.
+export { SECTOR_MAP, getSymbolSectors, getPrimarySectorLabel };
+export type { SectorKey, SectorMeta };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -123,8 +61,12 @@ async function fetchCloseHistory(symbol: string): Promise<number[]> {
 
   for (const host of YAHOO_HOSTS) {
     try {
-      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`;
-      const res = await fetch(url, {
+      // Lưu ý: nối chuỗi thay vì template URL để tránh editor hiểu nhầm placeholder.
+      const yahooUrl =
+        'https://' + host +
+        '/v8/finance/chart/' + encodeURIComponent(ticker) +
+        '?interval=1d&range=3mo';
+      const res = await fetch(yahooUrl, {
         headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
         next: { revalidate: 3600 }, // cache 1 giờ — sector không thay đổi trong ngày
       });
