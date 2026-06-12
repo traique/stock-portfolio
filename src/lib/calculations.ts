@@ -425,3 +425,98 @@ export function formatCurrency(value: number) {
     maximumFractionDigits: 0,
   }).format(Number.isFinite(value) ? value : 0);
 }
+
+// ===========================================================================
+//  — Rủi ro danh mục bằng ma trận hiệp phương sai (covariance)
+// σ_p = sqrt(wᵀ Σ w) — có tính tương quan giữa các mã, annualized theo 252 phiên.
+// ===========================================================================
+export type PortfolioRisk = {
+  volatilityPct: number;             // vol cả danh mục (annualized %) — đã tính tương quan
+  weightedAvgVolPct: number;         // Σ wᵢ·σᵢ nếu các mã độc lập (không đa dạng hóa)
+  diversificationBenefitPct: number; // weightedAvg − portfolio (>0 = lợi ích đa dạng hóa)
+  topWeightSymbol: string | null;    // mã tỷ trọng lớn nhất
+  topWeightPct: number;              // tỷ trọng mã lớn nhất (%)
+  effectiveHoldings: number;         // 1/Σwᵢ² — số mã "hiệu dụng"
+  basis: number;                     // số phiên return dùng để tính
+};
+
+const TRADING_DAYS = 252;
+
+function dailyReturns(closes: number[]): number[] {
+  const r: number[] = [];
+  for (let i = 1; i < closes.length; i++) {
+    const prev = closes[i - 1];
+    if (prev > 0) r.push((closes[i] - prev) / prev);
+  }
+  return r;
+}
+
+export function calcPortfolioRisk(
+  holdings: Array<{ symbol: string; weight: number; closes: number[] }>,
+): PortfolioRisk {
+  const empty: PortfolioRisk = {
+    volatilityPct: 0, weightedAvgVolPct: 0, diversificationBenefitPct: 0,
+    topWeightSymbol: null, topWeightPct: 0, effectiveHoldings: 0, basis: 0,
+  };
+
+  // Chỉ giữ mã có tỷ trọng > 0 và đủ chuỗi return (>= 20 phiên)
+  const valid = holdings
+    .map((h) => ({ symbol: h.symbol, weight: Math.max(0, h.weight), returns: dailyReturns(h.closes) }))
+    .filter((h) => h.weight > 0 && h.returns.length >= 20);
+
+  const totalW = valid.reduce((s, h) => s + h.weight, 0);
+  if (valid.length === 0 || totalW <= 0) return empty;
+
+  // Chuẩn hoá tỷ trọng về tổng = 1
+  const w = valid.map((h) => h.weight / totalW);
+
+  // Căn chỉnh chuỗi return về phần cuối chung (cùng số phiên)
+  const L = Math.min(...valid.map((h) => h.returns.length));
+  const rets = valid.map((h) => h.returns.slice(-L));
+  const means = rets.map((r) => r.reduce((a, b) => a + b, 0) / L);
+
+  // Ma trận hiệp phương sai (mẫu, chia L-1) — đối xứng
+  const n = valid.length;
+  const cov: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = i; j < n; j++) {
+      let s = 0;
+      for (let t = 0; t < L; t++) {
+        s += (rets[i][t] - means[i]) * (rets[j][t] - means[j]);
+      }
+      const c = L > 1 ? s / (L - 1) : 0;
+      cov[i][j] = c;
+      cov[j][i] = c;
+    }
+  }
+
+  // Phương sai danh mục = wᵀ Σ w
+  let variance = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      variance += w[i] * w[j] * cov[i][j];
+    }
+  }
+
+  const annualize = Math.sqrt(TRADING_DAYS) * 100;
+  const portfolioVol = Math.sqrt(Math.max(variance, 0)) * annualize;
+
+  // Vol bình quân gia quyền (bỏ qua tương quan) để so sánh lợi ích đa dạng hóa
+  const standaloneVol = valid.map((_, i) => Math.sqrt(Math.max(cov[i][i], 0)));
+  const weightedAvgVol = w.reduce((s, wi, i) => s + wi * standaloneVol[i], 0) * annualize;
+
+  // Tập trung tỷ trọng
+  let topIdx = 0;
+  for (let i = 1; i < n; i++) if (w[i] > w[topIdx]) topIdx = i;
+  const hhi = w.reduce((s, wi) => s + wi * wi, 0);
+
+  return {
+    volatilityPct: Number(portfolioVol.toFixed(2)),
+    weightedAvgVolPct: Number(weightedAvgVol.toFixed(2)),
+    diversificationBenefitPct: Number((weightedAvgVol - portfolioVol).toFixed(2)),
+    topWeightSymbol: valid[topIdx].symbol,
+    topWeightPct: Number((w[topIdx] * 100).toFixed(1)),
+    effectiveHoldings: Number((hhi > 0 ? 1 / hhi : 0).toFixed(1)),
+    basis: L,
+  };
+    }
