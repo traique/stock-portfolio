@@ -86,6 +86,8 @@ export type PortfolioDerivation = {
   totalRealizedPnl: number;
   wins: number;
   losses: number;
+  // ✨ Object gộp lại — nhiều file (page view-model, export...) tham chiếu portfolio.realizedSummary
+  realizedSummary: { totalSellOrders: number; totalRealizedPnl: number; wins: number; losses: number };
 };
 
 export type TransactionValidationResult = {
@@ -205,6 +207,7 @@ export function derivePortfolio(transactions: Transaction[]): PortfolioDerivatio
       totalRealizedPnl: 0,
       wins: 0,
       losses: 0,
+      realizedSummary: { totalSellOrders: 0, totalRealizedPnl: 0, wins: 0, losses: 0 },
     };
   }
 
@@ -238,6 +241,7 @@ export function derivePortfolio(transactions: Transaction[]): PortfolioDerivatio
     totalRealizedPnl,
     wins,
     losses,
+    realizedSummary: { totalSellOrders, totalRealizedPnl, wins, losses },
   };
 }
 
@@ -462,4 +466,4 @@ export function calcPortfolioRisk(
   const diversificationScore = 1 - concentration;
 
   return { annualVolatility, diversificationScore, concentration };
-                                }
+  }p
