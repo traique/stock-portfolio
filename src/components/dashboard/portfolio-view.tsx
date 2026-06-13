@@ -601,7 +601,7 @@ export function PortfolioView({
                     <div style={ { minWidth: 0 } }>
                       <div style={LABEL}>Giá hiện tại</div>
                       <div className="num-premium" style={ { fontSize: 28, fontWeight: 800, marginTop: 4, lineHeight: 1.1, wordBreak: 'break-word' } }>
-                        {fmtPrice(quote?.price ?? row.currentPrice)}
+                        {fmtPrice(quote?.price ?? row.now)}
                       </div>
                       <div className="num-premium" style={ { fontSize: 13, fontWeight: 800, color: colorFor(quote?.change), marginTop: 4 } }>
                         {fmtChange(quote?.change)} · {fmtPct(quote?.pct)}
@@ -620,7 +620,7 @@ export function PortfolioView({
                   </div>
 
                   <div style={ { display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(120px,1fr))' } }>
-                    {[{ l: 'Tổng mua', v: row.totalBuy }, { l: 'Hiện tại', v: row.totalNow }].map(cell => (
+                    {[{ l: 'Tổng mua', v: row.cost }, { l: 'Hiện tại', v: row.value }].map(cell => (
                       <div key={cell.l} style={MINI_CARD}>
                         <div style={LABEL}>{cell.l}</div>
                         <div className="num-premium" style={ { fontSize: 16, fontWeight: 800, marginTop: 4 } }>{formatCurrency(cell.v)}</div>
@@ -686,4 +686,4 @@ export function PortfolioView({
       )}
     </>
   );
-}
+                }
