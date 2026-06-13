@@ -3,11 +3,11 @@
 // GET /api/portfolio/export?format=xlsx|csv
 //
 // Xuất danh mục ra file Excel (xlsx) hoặc CSV:
-// Sheet 1 – Vị thế hiện tại
-// Sheet 2 – Lịch sử giao dịch (enriched)
-// Sheet 3 – Tổng quan
-
+//   Sheet 1 – Vị thế hiện tại
+//   Sheet 2 – Lịch sử giao dịch (enriched)
+//   Sheet 3 – Tổng quan
 // Chỉ chạy server-side — xlsx không được bundle vào client
+
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,23 +22,26 @@ import {
 } from '@/lib/calculations';
 
 // ─── Helpers ────────────────────────
+
 const fmtD = (v: string | null | undefined) => v ? v.slice(0, 10) : '';
 
 function escCsv(v: unknown): string {
   const s = String(v ?? '');
-  return (s.includes(',') || s.includes('"') || s.includes('\n'))
-    ? `"${s.replace(/"/g, '""')}"` : s;
+  return (s.includes(',') || s.includes('\"') || s.includes('\n'))
+    ? `\"${s.replace(/\"/g, '\"\"')}\"` : s;
 }
+
 function toCsv(rows: (string | number | null)[][]): string {
   return rows.map(r => r.map(escCsv).join(',')).join('\r\n');
 }
 
 // ─── Sheet builders ────────────────────
+
 function posRows(
   portfolio: ReturnType<typeof derivePortfolio>,
   prices: Record<string, number>,
 ) {
-  const H = ['Mã','Giá mua','Số lượng','Ngày mua','Giá hiện tại','Giá trị vốn','Giá trị TT','Lãi/Lỗ','Lãi/Lỗ%'];
+  const H = ['Mã', 'Giá mua', 'Số lượng', 'Ngày mua', 'Giá hiện tại', 'Giá trị vốn', 'Giá trị TT', 'Lãi/Lỗ', 'Lãi/Lỗ%'];
   const rows = portfolio.openLots.map(lot => {
     const cur = prices[lot.symbol] ?? 0;
     const cost = lot.buy_price * lot.quantity;
@@ -52,7 +55,7 @@ function posRows(
 }
 
 function txRows(enriched: ReturnType<typeof derivePortfolio>['enrichedTransactions']) {
-  const H = ['Ngày','Loại','Mã','Số lượng','Giá','Giá trị','Giá vốn BQ','Lãi/Lỗ thực','Ghi chú'];
+  const H = ['Ngày', 'Loại', 'Mã', 'Số lượng', 'Giá', 'Giá trị', 'Giá vốn BQ', 'Lãi/Lỗ thực', 'Ghi chú'];
   const rows = [...enriched]
     .sort((a, b) => (b.trade_date ?? b.created_at).localeCompare(a.trade_date ?? a.created_at))
     .map(tx => [
@@ -74,7 +77,7 @@ function summaryRows(
   transactions: Transaction[],
   settings: PortfolioSettings | null,
 ) {
-  const s = calcSummary(portfolio.openLots, prices);
+  const s = calcSummary(portfolio.positions, prices);
   const cash = calcCashSummary(cashTxs, transactions, settings);
   const r = portfolio.realizedSummary;
   const nav = cash.actualCash + s.totalNow;
@@ -99,7 +102,7 @@ function summaryRows(
   ];
 }
 
-function buildXlsx(sheets: { name: string; rows: (string|number|null)[][] }[]) {
+function buildXlsx(sheets: { name: string; rows: (string | number | null)[][] }[]) {
   const wb = XLSX.utils.book_new();
   for (const { name, rows } of sheets) {
     const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -110,6 +113,7 @@ function buildXlsx(sheets: { name: string; rows: (string|number|null)[][] }[]) {
 }
 
 // ─── Route ──────────────────────
+
 export async function GET(request: NextRequest) {
   const token = getBearerToken(request);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -146,7 +150,7 @@ export async function GET(request: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="portfolio-transactions-${dateStr}.csv"`,
+        'Content-Disposition': `attachment; filename=\"portfolio-transactions-${dateStr}.csv\"`,
       },
     });
   }
@@ -167,7 +171,7 @@ export async function GET(request: NextRequest) {
   return new NextResponse(buffer, {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'Content-Disposition': `attachment; filename="portfolio-${dateStr}.xlsx"`,
+      'Content-Disposition': `attachment; filename=\"portfolio-${dateStr}.xlsx\"`,
     },
   });
-             }
+}
