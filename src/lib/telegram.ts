@@ -62,8 +62,8 @@ function formatUpdatedTime(date = new Date()) {
 export async function sendTelegramMessage(chatId: string, text: string) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error('Missing TELEGRAM_BOT_TOKEN');
-
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const url = 'https://api.telegram.org/bot' + token + '/sendMessage';
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -74,13 +74,10 @@ export async function sendTelegramMessage(chatId: string, text: string) {
     }),
     cache: 'no-store',
   });
-
   const payload = await response.json();
-
   if (!response.ok || !payload?.ok) {
     throw new Error(payload?.description || 'Telegram send failed');
   }
-
   return payload;
 }
 
@@ -93,8 +90,8 @@ export function buildDailyMessage(
   quotes: QuoteDebugItem[],
   vnIndex?: QuoteDebugItem | null
 ) {
-  const { openLots, positions, realizedSummary } = derivePortfolio(transactions);
-  const summary  = calcSummary(openLots, prices);
+  const { positions, realizedSummary } = derivePortfolio(transactions);
+  const summary  = calcSummary(positions, prices);
   const realized = realizedSummary;
   const cash     = calcCashSummary(cashTransactions, transactions, portfolioSettings);
   const quoteMap = new Map(quotes.map((q) => [q.symbol.toUpperCase(), q]));
@@ -117,14 +114,13 @@ export function buildDailyMessage(
     .map((position) => {
       const row = calcPosition(position, prices);
       const quote = quoteMap.get(position.symbol.toUpperCase());
-
       return {
-        symbol: position.symbol,
+        symbol:   position.symbol,
         quantity: Number(position.quantity || 0),
-        price: Number(quote?.price || row.currentPrice || 0),
-        dayPct: Number(quote?.pct || 0),
-        pnl: Number(row.pnl || 0),
-        pnlPct: Number(row.pnlPct || 0),
+        price:    Number(quote?.price || row.now || 0),
+        dayPct:   Number(quote?.pct || 0),
+        pnl:      Number(row.pnl || 0),
+        pnlPct:   Number(row.pnlPct || 0),
       };
     })
     .sort((a, b) => a.symbol.localeCompare(b.symbol, 'vi', { numeric: true }));
@@ -158,16 +154,13 @@ export function buildDailyMessage(
   }
 
   lines.push('', `🕒 Cập nhật: <b>${formatUpdatedTime()}</b>`);
-
-  return lines.join('\n');
+  return lines.join(String.fromCharCode(10));
 }
 
 export function shouldSendDaily(lastDailySentAt: string | null, now: Date, dailyHourUtc: number) {
   if (now.getUTCHours() !== dailyHourUtc) return false;
   if (!lastDailySentAt) return true;
-
   const last = new Date(lastDailySentAt);
-
   return (
     last.getUTCFullYear() !== now.getUTCFullYear() ||
     last.getUTCMonth() !== now.getUTCMonth() ||
