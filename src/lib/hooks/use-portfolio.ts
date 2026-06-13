@@ -13,74 +13,68 @@ import {
 } from '@/lib/dashboard-types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
 export type UsePortfolioReturn = {
   // auth
-  userId:       string;
-  email:        string;
-  accessToken:  string;
+  userId: string;
+  email: string;
+  accessToken: string;
   // data
-  transactions:      Transaction[];
-  cashTransactions:  CashTransaction[];
+  transactions: Transaction[];
+  cashTransactions: CashTransaction[];
   portfolioSettings: PortfolioSettings | null;
-  prices:            PriceMap;
-  quotes:            QuoteItem[];
-  vnIndex:           QuoteItem | null;
+  prices: PriceMap;
+  quotes: QuoteItem[];
+  vnIndex: QuoteItem | null;
   // derived
-  positions:         ReturnType<typeof derivePortfolio>['positions'];
-  enrichedTxs:       ReturnType<typeof derivePortfolio>['enrichedTransactions'];
-  realizedSummary:   ReturnType<typeof derivePortfolio>['realizedSummary'];
-  openHoldings:      ReturnType<typeof derivePortfolio>['openLots'];
-  cashSummary:       CashSummaryShape;
-  allocations:       AllocationItem[];
-  totalAssets:       number;
-  totalPnl:          number;
-  totalPnlPct:       number;
-  actualNav:         number;
-  marketValue:       number;
-  unrealizedPnl:     number;
-  dayPnl:            number;
-  quoteMap:          Map<string, QuoteItem>;
+  positions: ReturnType<typeof derivePortfolio>['positions'];
+  enrichedTxs: ReturnType<typeof derivePortfolio>['enrichedTransactions'];
+  realizedSummary: ReturnType<typeof derivePortfolio>['realizedSummary'];
+  openHoldings: ReturnType<typeof derivePortfolio>['openLots'];
+  cashSummary: CashSummaryShape;
+  allocations: AllocationItem[];
+  totalAssets: number;
+  totalPnl: number;
+  totalPnlPct: number;
+  actualNav: number;
+  marketValue: number;
+  unrealizedPnl: number;
+  dayPnl: number;
+  quoteMap: Map<string, QuoteItem>;
   // AI
-  aiResult:          AiPortfolioResponse | null;
-  setAiResult:       (r: AiPortfolioResponse | null) => void;
+  aiResult: AiPortfolioResponse | null;
+  setAiResult: (r: AiPortfolioResponse | null) => void;
   // status
-  loading:           boolean;
-  refreshing:        boolean;
-  message:           string;
-  setMessage:        (m: string) => void;
+  loading: boolean;
+  refreshing: boolean;
+  message: string;
+  setMessage: (m: string) => void;
   // actions
-  handleReload:        () => Promise<void>;
+  handleReload: () => Promise<void>;
   handleRefreshPrices: () => Promise<void>;
-  handleLogout:        () => Promise<void>;
+  handleLogout: () => Promise<void>;
 };
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
-
 export function usePortfolio(): UsePortfolioReturn {
   // Auth
-  const [userId,      setUserId]      = useState('');
-  const [email,       setEmail]       = useState('');
+  const [userId, setUserId] = useState('');
+  const [email, setEmail] = useState('');
   const [accessToken, setAccessToken] = useState('');
-
   // Data
-  const [transactions,      setTransactions]      = useState<Transaction[]>([]);
-  const [cashTransactions,  setCashTransactions]  = useState<CashTransaction[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [cashTransactions, setCashTransactions] = useState<CashTransaction[]>([]);
   const [portfolioSettings, setPortfolioSettings] = useState<PortfolioSettings | null>(null);
-  const [prices,            setPrices]            = useState<PriceMap>({});
-  const [quotes,            setQuotes]            = useState<QuoteItem[]>([]);
-  const [vnIndex,           setVnIndex]           = useState<QuoteItem | null>(null);
-
+  const [prices, setPrices] = useState<PriceMap>({});
+  const [quotes, setQuotes] = useState<QuoteItem[]>([]);
+  const [vnIndex, setVnIndex] = useState<QuoteItem | null>(null);
   // Status
-  const [loading,    setLoading]    = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [message,    setMessage]    = useState('');
-
+  const [message, setMessage] = useState('');
   // AI cache
   const [aiResult, setAiResult] = useState<AiPortfolioResponse | null>(null);
 
   // ── Session ──────────────────────────────────────────────────────────────
-
   const bootstrapSession = useCallback(async () => {
     const [{ data: ud }, token] = await Promise.all([
       supabase.auth.getUser(),
@@ -94,59 +88,51 @@ export function usePortfolio(): UsePortfolioReturn {
   }, []);
 
   // ── Load portfolio ────────────────────────────────────────────────────────
-
   const loadPortfolio = useCallback(async (uid?: string, em?: string) => {
     setLoading(true);
     setMessage('');
     let uid2 = uid ?? userId;
-    let em2  = em  ?? email;
-
+    let em2 = em ?? email;
     if (!uid2) {
       const s = await bootstrapSession();
       if (!s) return;
       uid2 = s.userId; em2 = s.email;
     }
     setEmail(em2);
-
     const [txRes, cashRes, settingsRes] = await Promise.all([
       supabase.from('transactions').select('*').eq('user_id', uid2)
-        .order('trade_date',  { ascending: true, nullsFirst: false })
-        .order('created_at',  { ascending: true }),
+        .order('trade_date', { ascending: true, nullsFirst: false })
+        .order('created_at', { ascending: true }),
       supabase.from('cash_transactions').select('*').eq('user_id', uid2)
         .order('transaction_date', { ascending: true, nullsFirst: false })
-        .order('created_at',       { ascending: true }),
+        .order('created_at', { ascending: true }),
       supabase.from('portfolio_settings').select('*')
         .eq('user_id', uid2).maybeSingle(),
     ]);
-
     if (txRes.error)
-      { setTransactions([]);    setMessage(txRes.error.message); }
+      { setTransactions([]); setMessage(txRes.error.message); }
     else
       setTransactions((txRes.data ?? []) as Transaction[]);
-
     if (cashRes.error)
       { setCashTransactions([]); if (!txRes.error) setMessage(cashRes.error.message); }
     else
       setCashTransactions((cashRes.data ?? []) as CashTransaction[]);
-
     if (settingsRes.error) {
       setPortfolioSettings(null);
       if (!txRes.error && !cashRes.error) setMessage(settingsRes.error.message);
     } else {
       setPortfolioSettings((settingsRes.data ?? null) as PortfolioSettings | null);
     }
-
     setLoading(false);
   }, [bootstrapSession, email, userId]);
 
   // ── Load prices ───────────────────────────────────────────────────────────
-
   const loadPrices = useCallback(async (holdings: { symbol: string }[]) => {
     const symbols = [...new Set(holdings.map(h => h.symbol.toUpperCase()))];
     if (!symbols.length) { setPrices({}); setQuotes([]); return; }
     setRefreshing(true);
     try {
-      const res  = await fetch(
+      const res = await fetch(
         `/api/prices-cache?symbols=${encodeURIComponent(symbols.join(','))}`,
         { cache: 'no-store' },
       );
@@ -159,12 +145,12 @@ export function usePortfolio(): UsePortfolioReturn {
         setQuotes([...(data.debug ?? [])].sort((a, b) => a.symbol.localeCompare(b.symbol)));
       }
     } catch { setPrices({}); setQuotes([]); setMessage('Lỗi kết nối'); }
-    finally   { setRefreshing(false); }
+    finally { setRefreshing(false); }
   }, []);
 
   const loadVnIndex = useCallback(async () => {
     try {
-      const res  = await fetch('/api/prices-cache?symbols=VNINDEX', { cache: 'no-store' });
+      const res = await fetch('/api/prices-cache?symbols=VNINDEX', { cache: 'no-store' });
       const data: PricesResponse = await res.json();
       const item = data?.debug?.[0];
       setVnIndex(item && Number(item.price) > 0 ? item : null);
@@ -172,7 +158,6 @@ export function usePortfolio(): UsePortfolioReturn {
   }, []);
 
   // ── Init ──────────────────────────────────────────────────────────────────
-
   useEffect(() => {
     (async () => {
       const s = await bootstrapSession();
@@ -182,7 +167,6 @@ export function usePortfolio(): UsePortfolioReturn {
   }, [bootstrapSession, loadPortfolio, loadVnIndex]);
 
   // ── AI cache — persist/restore ────────────────────────────────────────────
-
   useEffect(() => {
     if (!userId) return;
     const saved = localStorage.getItem(getAiPortfolioKey(userId));
@@ -195,11 +179,10 @@ export function usePortfolio(): UsePortfolioReturn {
   }, [aiResult, userId]);
 
   // ── Derived ───────────────────────────────────────────────────────────────
-
-  const portfolio       = useMemo(() => derivePortfolio(transactions), [transactions]);
-  const openHoldings    = portfolio.openLots;
-  const enrichedTxs     = portfolio.enrichedTransactions;
-  const positions       = portfolio.positions;
+  const portfolio = useMemo(() => derivePortfolio(transactions), [transactions]);
+  const openHoldings = portfolio.openLots;
+  const enrichedTxs = portfolio.enrichedTransactions;
+  const positions = portfolio.positions;
   const realizedSummary = portfolio.realizedSummary;
 
   const summary = useMemo(() => ({
@@ -224,13 +207,13 @@ export function usePortfolio(): UsePortfolioReturn {
     return m;
   }, [quotes]);
 
-  const totalCapital  = cashSummary.netCapital;
-  const actualNav     = cashSummary.actualCash;
-  const marketValue   = summary.totalNow;
-  const totalAssets   = actualNav + marketValue;
-  const totalPnl      = totalAssets - totalCapital;
+  const totalCapital = cashSummary.netCapital;
+  const actualNav = cashSummary.actualCash;
+  const marketValue = summary.totalNow;
+  const totalAssets = actualNav + marketValue;
+  const totalPnl = totalAssets - totalCapital;
   const unrealizedPnl = summary.totalPnl;
-  const totalPnlPct   = totalCapital > 0 ? (totalPnl / totalCapital) * 100 : 0;
+  const totalPnlPct = totalCapital > 0 ? (totalPnl / totalCapital) * 100 : 0;
 
   const dayPnl = useMemo(
     () => positions.reduce((sum, pos) => {
@@ -241,22 +224,20 @@ export function usePortfolio(): UsePortfolioReturn {
   );
 
   const allocations = useMemo<AllocationItem[]>(() => {
-  const allocations = useMemo<AllocationItem[]>(() => {
-  const total = marketValue || 0;
-  return positions
-    .map(pos => {
-      const row = calcPosition(pos, prices);
-      return {
-        symbol:   pos.symbol,
-        totalNow: row.value,
-        percent:  total > 0 ? (row.value / total) * 100 : 0,
-      };
-    })
-    .sort((a, b) => b.totalNow - a.totalNow);
-}, [positions, prices, marketValue]);
+    const total = marketValue || 0;
+    return positions
+      .map(pos => {
+        const row = calcPosition(pos, prices);
+        return {
+          symbol:   pos.symbol,
+          totalNow: row.value,
+          percent:  total > 0 ? (row.value / total) * 100 : 0,
+        };
+      })
+      .sort((a, b) => b.totalNow - a.totalNow);
+  }, [positions, prices, marketValue]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-
   const handleReload = useCallback(
     () => loadPortfolio(userId, email),
     [loadPortfolio, userId, email],
@@ -286,4 +267,4 @@ export function usePortfolio(): UsePortfolioReturn {
     loading, refreshing, message, setMessage,
     handleReload, handleRefreshPrices, handleLogout,
   };
-    }
+                                 }
