@@ -574,9 +574,15 @@ export function DashboardActions({
         {/* ✨ 3 chế độ: Mua / Bán / Cổ tức cổ phiếu */}
         <div style={ { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(3, minmax(0,1fr))', marginBottom: 12 } }>
           {(['BUY', 'SELL', 'STOCK_DIVIDEND'] as TradeMode[]).map(m => (
-            <button key={m} type="button" className={`ab-btn ${tradeMode === m ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setTradeMode(m)} style={BTN}>
-              {m === 'STOCK_DIVIDEND' ? 'CỔ TỨC CP' : `LỆNH ${tradeModeLabel(m)}`}
-            </button>
+           <button
+            key={m}
+            type="button"
+            className={`ab-btn ${tradeMode === m ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
+            onClick={() => setTradeMode(m)}
+            style={ { ...BTN, padding: '0 10px', fontSize: 13, whiteSpace: 'nowrap' } }
+           >
+            {m === 'STOCK_DIVIDEND' ? 'CỔ TỨC CP' : `LỆNH ${tradeModeLabel(m)}`}
+           </button>
           ))}
         </div>
         <form onSubmit={handleTradeSubmit} style={ { display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))' } }>
