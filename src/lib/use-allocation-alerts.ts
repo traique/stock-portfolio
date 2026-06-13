@@ -58,7 +58,7 @@ export function useAllocationAlerts({
     const alerts: AllocationAlert[] = [];
 
     for (const pos of positions) {
-      const { totalNow } = calcPosition(pos, prices);
+      const { value: totalNow } = calcPosition(pos, prices);
       if (!totalNow) continue;
 
       const pct = (totalNow / totalAssets) * 100;
