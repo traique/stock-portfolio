@@ -466,4 +466,4 @@ export function calcPortfolioRisk(
   const diversificationScore = 1 - concentration;
 
   return { annualVolatility, diversificationScore, concentration };
-  }p
+  }
