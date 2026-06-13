@@ -79,6 +79,7 @@ export type SimulationResult = {
 };
 
 export type PortfolioDerivation = {
+  positions: PositionGroup[]; // ✨ vị thế đã gom theo mã — các route như portfolio-insights / export dùng field này
   openLots: OpenLot[];
   enrichedTransactions: Transaction[];
   totalSellOrders: number;
@@ -197,6 +198,7 @@ export function derivePortfolio(transactions: Transaction[]): PortfolioDerivatio
   const sim = simulateTransactions(transactions);
   if (!sim.valid) {
     return {
+      positions: [],
       openLots: [],
       enrichedTransactions: transactions,
       totalSellOrders: 0,
@@ -229,6 +231,7 @@ export function derivePortfolio(transactions: Transaction[]): PortfolioDerivatio
   }
 
   return {
+    positions: groupHoldingsBySymbol(sim.openLots),
     openLots: sim.openLots,
     enrichedTransactions,
     totalSellOrders,
@@ -459,4 +462,4 @@ export function calcPortfolioRisk(
   const diversificationScore = 1 - concentration;
 
   return { annualVolatility, diversificationScore, concentration };
-      }
+                                }
