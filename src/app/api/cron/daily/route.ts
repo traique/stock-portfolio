@@ -28,7 +28,7 @@ import { verifyCronSecret } from '@/lib/server/api-utils';
 import { fetchMarketPrices } from '@/lib/server/market';
 import type { PriceMap } from '@/lib/calculations';
 
-// ─── Supabase service client (bypass RLS) ────────────────────────────────────
+// ─── Supabase service client (bypass RLS) ─────────────────────────────
 
 function getServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -69,7 +69,7 @@ async function fetchPricesWithDebug(symbols: string[]) {
   }
 }
 
-// ─── PHẦN 1: Snapshot ────────────────────────────────────────────────────────
+// ─── PHẦN 1: Snapshot ──────────────────────────────────────────────────
 
 type SnapshotClient = ReturnType<typeof getServiceClient>;
 
@@ -98,11 +98,11 @@ async function snapshotForUser(
     return { ok: true, skipped: true };
   }
 
-  const { openLots, enrichedTransactions, positions } = derivePortfolio(transactions);
+  const { enrichedTransactions, positions } = derivePortfolio(transactions);
   const symbols = positions.map(p => p.symbol);
   const prices  = await fetchPrices(symbols);
 
-  const summary     = calcSummary(openLots, prices);
+  const summary     = calcSummary(positions, prices);
   const cashSummary = calcCashSummary(cashTransactions, enrichedTransactions, settings);
 
   const totalAssets = cashSummary.actualCash + summary.totalNow;
@@ -158,7 +158,7 @@ async function runSnapshot(supabase: SnapshotClient, vnDate: string) {
   return { ok: true, users: uniqueUsers.length, success, failed };
 }
 
-// ─── PHẦN 2: Telegram ────────────────────────────────────────────────────────
+// ─── PHẦN 2: Telegram ─────────────────────────────────────────────────
 
 async function runTelegram(supabase: SnapshotClient, now: Date) {
   // Bỏ qua cuối tuần VN
@@ -246,7 +246,7 @@ async function runTelegram(supabase: SnapshotClient, now: Date) {
 }
 
 
-// ─── PHẦN 3: EOD Price History ────────────────────────────────────────────────
+// ─── PHẦN 3: EOD Price History ──────────────────────────────────────
 // Gọi VCI Edge Function mode "eod" để lưu OHLCV vào price_history.
 // Chạy sau snapshot để không block báo cáo Telegram.
 
@@ -276,7 +276,7 @@ async function runEodHistory(supabase: SnapshotClient): Promise<{ ok: boolean; r
 }
 
 
-// ─── PHẦN 4: Cleanup price_history ───────────────────────────────────────────
+// ─── PHẦN 4: Cleanup price_history ────────────────────────────────────
 // Xóa data cũ hơn 90 ngày — đủ để tính tất cả indicators (SMA50, MACD, RSI...)
 // Chạy sau EOD để tránh xóa data vừa insert.
 
@@ -295,7 +295,7 @@ async function runCleanupHistory(supabase: SnapshotClient): Promise<{ ok: boolea
   }
 }
 
-// ─── HANDLER ─────────────────────────────────────────────────────────────────
+// ─── HANDLER ──────────────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   const authErr = verifyCronSecret(request);
@@ -326,4 +326,4 @@ export async function GET(request: NextRequest) {
     telegram:    telegramResult.status === 'fulfilled' ? telegramResult.value : { ok: false, error: String(telegramResult.reason) },
     cleanup:     cleanupResult.status  === 'fulfilled' ? cleanupResult.value  : { ok: false, error: String(cleanupResult.reason) },
   });
-      }
+                    }
