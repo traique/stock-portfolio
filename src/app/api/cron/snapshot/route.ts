@@ -16,7 +16,7 @@ import {
 import { verifyCronSecret } from '@/lib/server/api-utils';
 
 // =========================================================
-// SUPABASE SERVICE CLIENT  (bypass RLS)
+// SUPABASE SERVICE CLIENT (bypass RLS)
 // =========================================================
 
 function getServiceClient() {
@@ -28,7 +28,7 @@ function getServiceClient() {
 }
 
 // =========================================================
-// PRICE FETCH  (internal — reuse existing prices-cache API)
+// PRICE FETCH (internal — reuse existing prices-cache API)
 // =========================================================
 
 async function fetchPrices(symbols: string[]): Promise<Record<string, number>> {
@@ -37,9 +37,8 @@ async function fetchPrices(symbols: string[]): Promise<Record<string, number>> {
     const base = process.env.NEXT_PUBLIC_SITE_URL
       ?? process.env.VERCEL_PROJECT_PRODUCTION_URL
       ?? 'http://localhost:3000';
-
     const url = `${base.replace(/\/$/, '')}/api/prices-cache?symbols=${encodeURIComponent(symbols.join(','))}`;
-    const res  = await fetch(url, { cache: 'no-store' });
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return {};
     const data = await res.json();
     return data?.prices ?? {};
@@ -55,7 +54,7 @@ async function fetchPrices(symbols: string[]): Promise<Record<string, number>> {
 async function snapshotForUser(
   supabase: ReturnType<typeof getServiceClient>,
   userId: string,
-  snapshotDate: string,   // YYYY-MM-DD in VN timezone
+  snapshotDate: string, // YYYY-MM-DD in VN timezone
 ) {
   // 1. Fetch transactions
   const [txRes, cashRes, settingsRes] = await Promise.all([
@@ -64,15 +63,15 @@ async function snapshotForUser(
       .order('created_at', { ascending: true }),
     supabase.from('cash_transactions').select('*').eq('user_id', userId)
       .order('transaction_date', { ascending: true, nullsFirst: false })
-      .order('created_at',       { ascending: true }),
+      .order('created_at', { ascending: true }),
     supabase.from('portfolio_settings').select('*')
       .eq('user_id', userId).maybeSingle(),
   ]);
 
   if (txRes.error || cashRes.error) return { ok: false, error: 'DB fetch failed' };
 
-  const transactions     = (txRes.data ?? [])     as Transaction[];
-  const cashTransactions = (cashRes.data ?? [])   as CashTransaction[];
+  const transactions     = (txRes.data   ?? []) as Transaction[];
+  const cashTransactions = (cashRes.data ?? []) as CashTransaction[];
   const settings         = (settingsRes.data ?? null) as PortfolioSettings | null;
 
   if (!transactions.length && !cashTransactions.length) {
@@ -80,20 +79,20 @@ async function snapshotForUser(
   }
 
   // 2. Derive open positions — 1 lần simulate duy nhất
-  const { openLots, enrichedTransactions, positions } = derivePortfolio(transactions);
+  const { enrichedTransactions, positions } = derivePortfolio(transactions);
   const symbols = positions.map(p => p.symbol);
 
   // 3. Fetch live prices
   const prices = await fetchPrices(symbols);
 
   // 4. Calculate
-  const summary     = calcSummary(openLots, prices);
+  const summary     = calcSummary(positions, prices);
   const cashSummary = calcCashSummary(cashTransactions, enrichedTransactions, settings);
 
-  const totalAssets  = cashSummary.actualCash + summary.totalNow;
-  const netCapital   = cashSummary.netCapital;
-  const totalPnl     = totalAssets - netCapital;
-  const totalPnlPct  = netCapital > 0 ? (totalPnl / netCapital) * 100 : 0;
+  const totalAssets = cashSummary.actualCash + summary.totalNow;
+  const netCapital  = cashSummary.netCapital;
+  const totalPnl    = totalAssets - netCapital;
+  const totalPnlPct = netCapital > 0 ? (totalPnl / netCapital) * 100 : 0;
 
   // 5. Upsert snapshot (one per user per day)
   const { error: upsertErr } = await supabase
@@ -103,7 +102,8 @@ async function snapshotForUser(
         user_id:        userId,
         snapshot_date:  snapshotDate,
         total_assets:   Math.round(totalAssets),
-        market_value:   Math.round(summary.totalNow),        nav_cash:       Math.round(cashSummary.actualCash),
+        market_value:   Math.round(summary.totalNow),
+        nav_cash:       Math.round(cashSummary.actualCash),
         net_capital:    Math.round(netCapital),
         total_pnl:      Math.round(totalPnl),
         total_pnl_pct:  Number(totalPnlPct.toFixed(4)),
@@ -129,13 +129,13 @@ export async function GET(request: NextRequest) {
   // VN date — cron runs at 15:10 VN so Date.now() is already in that window
   const vnDate = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Ho_Chi_Minh',
-  }).format(new Date());   // returns YYYY-MM-DD
+  }).format(new Date()); // returns YYYY-MM-DD
 
   // Fetch all users who have at least one transaction
   const { data: users, error: usersErr } = await supabase
     .from('transactions')
     .select('user_id')
-    .limit(1000);   // adjust if needed
+    .limit(1000); // adjust if needed
 
   if (usersErr) {
     console.error('[snapshot] fetch users error:', usersErr);
@@ -144,7 +144,6 @@ export async function GET(request: NextRequest) {
 
   // Deduplicate user IDs
   const uniqueUsers = [...new Set((users ?? []).map(r => r.user_id as string))];
-
   console.log(`[snapshot] ${vnDate} — processing ${uniqueUsers.length} users`);
 
   const results = await Promise.allSettled(
@@ -153,7 +152,7 @@ export async function GET(request: NextRequest) {
 
   const summary = results.reduce(
     (acc, r, i) => {
-      if (r.status === 'fulfilled' && r.value.ok)  acc.success++;
+      if (r.status === 'fulfilled' && r.value.ok) acc.success++;
       else {
         acc.failed++;
         console.error(`[snapshot] user ${uniqueUsers[i]} failed:`,
@@ -165,8 +164,8 @@ export async function GET(request: NextRequest) {
   );
 
   return NextResponse.json({
-    date:    vnDate,
-    users:   uniqueUsers.length,
+    date: vnDate,
+    users: uniqueUsers.length,
     ...summary,
   });
-}
+          }
