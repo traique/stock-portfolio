@@ -1,8 +1,9 @@
 // src/app/api/transactions/validate/route.ts
 //
-// Validate một giao dịch mới (BUY/SELL) trước khi lưu vào DB.
+// Validate một giao dịch mới (BUY/SELL/STOCK_DIVIDEND) trước khi lưu vào DB.
 // Client gọi endpoint này ngay sau khi người dùng điền form —
 // nếu SELL vượt số lượng sẽ nhận lỗi rõ ràng thay vì phát hiện sau khi INSERT.
+// (BUY và STOCK_DIVIDEND luôn hợp lệ nếu qty > 0.)
 //
 // POST /api/transactions/validate
 // Body: { transaction_type, symbol, quantity, price, trade_date, note? }
@@ -16,14 +17,16 @@ import { getSupabaseUserClient } from '@/lib/server/supabase-user';
 import { validateNewTransaction, Transaction } from '@/lib/calculations';
 
 const bodySchema = z.object({
-  transaction_type: z.enum(['BUY', 'SELL']),
-  symbol:           z.string().trim().min(1).max(20).toUpperCase(),
-  quantity:         z.coerce.number().positive(),
-  price:            z.coerce.number().positive(),
-  trade_date:       z.string().nullable().optional(),
-  note:             z.string().nullable().optional(),
+  // ✨ thêm STOCK_DIVIDEND (cổ tức cổ phiếu)
+  transaction_type: z.enum(['BUY', 'SELL', 'STOCK_DIVIDEND']),
+  symbol: z.string().trim().min(1).max(20).toUpperCase(),
+  quantity: z.coerce.number().positive(),
+  // ✨ cổ tức cổ phiếu có giá = 0 → cho phép >= 0 (BUY/SELL vẫn buộc > 0, kiểm tra bên dưới)
+  price: z.coerce.number().min(0),
+  trade_date: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
   // id tạm để simulation nhận dạng lệnh mới — client tự sinh UUID hoặc để trống
-  id:               z.string().optional().default('__validate__'),
+  id: z.string().optional().default('__validate__'),
 });
 
 export async function POST(request: NextRequest) {
@@ -49,6 +52,11 @@ export async function POST(request: NextRequest) {
 
   const { id, transaction_type, symbol, quantity, price, trade_date, note } = parsed.data;
 
+  // ✨ BUY/SELL cần giá > 0; STOCK_DIVIDEND cho phép giá 0.
+  if (transaction_type !== 'STOCK_DIVIDEND' && price <= 0) {
+    return NextResponse.json({ valid: false, error: 'Giá phải lớn hơn 0' }, { status: 422 });
+  }
+
   // 3. Lấy lịch sử giao dịch hiện tại của user
   const { data: existing, error: dbError } = await supabase
     .from('transactions')
@@ -69,13 +77,13 @@ export async function POST(request: NextRequest) {
     (existing ?? []) as Transaction[],
     {
       id,
-      user_id:          user.id,
+      user_id: user.id,
       transaction_type,
       symbol,
       quantity,
       price,
-      trade_date:       trade_date ?? null,
-      note:             note       ?? null,
+      trade_date: trade_date ?? null,
+      note: note ?? null,
     },
   );
 
