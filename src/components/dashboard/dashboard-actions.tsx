@@ -678,12 +678,18 @@ export function DashboardActions({
       {/* CASH */}
       <Section kicker="Tiền mặt" title="NẠP / RÚT / CỔ TỨC / ĐIỀU CHỈNH" open={cashOpen} onToggle={() => setCashOpen(v => !v)}>
         <div style={ { display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0,1fr))', marginBottom: 12 } }>
-          {(['CASH', 'ADJUSTMENT'] as CashMode[]).map(m => (
-            <button key={m} type="button" className={`ab-btn ${cashMode === m ? 'ab-btn-primary' : 'ab-btn-subtle'}`} onClick={() => setCashMode(m)} style={BTN}>
-              {m === 'CASH' ? 'NẠP / RÚT / CỔ TỨC' : 'ĐIỀU CHỈNH'}
-            </button>
-          ))}
-        </div>
+         {(['CASH', 'ADJUSTMENT'] as CashMode[]).map(m => (
+          <button
+             key={m}
+             type="button"
+             className={`ab-btn ${cashMode === m ? 'ab-btn-primary' : 'ab-btn-subtle'}`}
+             onClick={() => setCashMode(m)}
+             style={ { ...BTN, padding: '0 10px', fontSize: 13, whiteSpace: 'nowrap' } }
+           >
+             {m === 'CASH' ? 'NẠP / RÚT / CỔ TỨC' : 'ĐIỀU CHỈNH'}
+           </button>
+           ))}
+         </div>
 
         {cashMode === 'CASH' ? (
           <form onSubmit={handleCashSubmit} style={ { display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(180px,1fr))' } }>
