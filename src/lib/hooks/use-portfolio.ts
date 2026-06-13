@@ -241,18 +241,19 @@ export function usePortfolio(): UsePortfolioReturn {
   );
 
   const allocations = useMemo<AllocationItem[]>(() => {
-    const total = marketValue || 0;
-    return positions
-      .map(pos => {
-        const row = calcPosition(pos, prices);
-        return {
-          symbol:   pos.symbol,
-          totalNow: row.totalNow,
-          percent:  total > 0 ? (row.totalNow / total) * 100 : 0,
-        };
-      })
-      .sort((a, b) => b.totalNow - a.totalNow);
-  }, [positions, prices, marketValue]);
+  const allocations = useMemo<AllocationItem[]>(() => {
+  const total = marketValue || 0;
+  return positions
+    .map(pos => {
+      const row = calcPosition(pos, prices);
+      return {
+        symbol:   pos.symbol,
+        totalNow: row.value,
+        percent:  total > 0 ? (row.value / total) * 100 : 0,
+      };
+    })
+    .sort((a, b) => b.totalNow - a.totalNow);
+}, [positions, prices, marketValue]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
