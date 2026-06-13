@@ -79,7 +79,7 @@ function summaryRows(
 ) {
   const s = calcSummary(portfolio.positions, prices);
   const cash = calcCashSummary(cashTxs, transactions, settings);
-  const r = portfolio.realizedSummary;
+  const r = portfolio;
   const nav = cash.actualCash + s.totalNow;
   return [
     ['TỔNG QUAN DANH MỤC', ''],
