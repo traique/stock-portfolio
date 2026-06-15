@@ -9,6 +9,7 @@ const SIEU_HEADERS = {
   Referer: 'https://sieutinhieu.vn/',
   Accept: 'application/json',
 };
+
 const BASE = 'https://sieutinhieu.vn/api/v1';
 
 const querySchema = z.object({
@@ -21,16 +22,52 @@ const querySchema = z.object({
 // HỆ SỐ ƯỚC LƯỢNG từ mẫu SHS @18.40 (Vùng vào 18.2–18.6, TP1 20.1, SL 17.3).
 // CẦN CALIBRATE thêm vài mã rồi chỉnh cho khớp app thật.
 const PLAN_CONFIG = { ENTRY_BAND: 0.011, TP_PCT: 0.09, SL_PCT: 0.06 };
+
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
+// Chuẩn hoá timestamp (ISO hoặc epoch giây/ms) -> milliseconds để so sánh.
+function toMs(s: string): number {
+  const d = Date.parse(s);
+  if (!Number.isNaN(d)) return d;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return 0;
+  return n < 1e12 ? n * 1000 : n;
+}
+
+// ✨ Shape endpoint today-trend-changes (xu hướng đổi trong ngày).
+type LiveSignal = {
+  symbol: string;
+  signal_type: 'BUY' | 'SELL';
+  price: number;
+  ma20_value: number | null;
+  macd_value: number | null;
+  macd_signal_value: number | null;
+  timestamp: string;
+  trend_change_from?: 'BUY' | 'SELL' | null;
+  trend_change_to?: 'BUY' | 'SELL' | null;
+};
+
+type LiveSignalResponse = { signal: LiveSignal | null } | null;
+
+// Shape endpoint /signals/latest (lịch sử tín hiệu — dùng để giữ trạng thái gần nhất).
 type RawSignal = {
   signal_type: 'BUY' | 'SELL';
-  price: string;
+  price: string | number;
   timestamp: string;
   ma20_value: string | null;
   macd_value: string | null;
   macd_histogram: string | null;
   volume: number | null;
+};
+
+// Tín hiệu đã chuẩn hoá để hiển thị.
+type NormalizedSignal = {
+  signal_type: 'BUY' | 'SELL';
+  price: number;
+  hist: number;
+  timestamp: string;
+  trend_from: 'BUY' | 'SELL' | null;
+  trend_to: 'BUY' | 'SELL' | null;
 };
 
 async function fetchSieu<T>(
@@ -72,11 +109,11 @@ function buildPlan(type: 'BUY' | 'SELL', price: number) {
   };
 }
 
-function deriveStrength(s: RawSignal): string {
-  const hist = Number(s.macd_histogram ?? 0);
-  const isBuy = s.signal_type === 'BUY';
+// macd_histogram = macd_value - macd_signal_value (endpoint trend-change không trả histogram).
+function deriveStrength(signalType: 'BUY' | 'SELL', hist: number): string {
+  const isBuy = signalType === 'BUY';
   const strong = isBuy ? hist > 0 : hist < 0;
-  return strong ? (isBuy ? 'STRONG BUY' : 'STRONG SELL') : s.signal_type;
+  return strong ? (isBuy ? 'STRONG BUY' : 'STRONG SELL') : signalType;
 }
 
 export async function GET(request: NextRequest) {
@@ -85,37 +122,69 @@ export async function GET(request: NextRequest) {
   );
   if (!parsed.success) return validationErrorResponse(parsed.error);
   const { symbol, timeframe, limit, start } = parsed.data;
-
   try {
-    // Gọi song song: backtest performance + tín hiệu mới nhất
-    const [perf, signals] = await Promise.all([
+    // Gọi song song: performance + trend-change hôm nay + lịch sử tín hiệu (fallback).
+    const [perf, trend, history] = await Promise.all([
       fetchSieu<Record<string, unknown>>('/signals/performance', {
         symbol,
         timeframe,
         limit: String(limit),
         start: String(start),
       }),
+      fetchSieu<LiveSignalResponse>(
+        `/realtime-signals/live-signals/today-trend-changes/${symbol}`,
+        { timeframe }
+      ).catch(() => null),
       fetchSieu<RawSignal[]>('/signals/latest', {
         symbol,
         timeframe,
-        limit: '1',
-      }).catch(() => null), // tín hiệu là phụ, lỗi thì bỏ qua
+        limit: '30',
+      }).catch(() => null),
     ]);
 
     const base = ((perf as any)?.data ?? perf ?? {}) as Record<string, unknown>;
-    const latest = Array.isArray(signals) ? signals[0] : null;
+
+    // 1) Ưu tiên xu hướng đổi trong ngày (mới & chuẩn nhất).
+    let latest: NormalizedSignal | null = null;
+    const liveSig = trend?.signal ?? null;
+    if (liveSig) {
+      latest = {
+        signal_type: liveSig.signal_type,
+        price: Number(liveSig.price),
+        hist: Number(liveSig.macd_value ?? 0) - Number(liveSig.macd_signal_value ?? 0),
+        timestamp: liveSig.timestamp,
+        trend_from: liveSig.trend_change_from ?? null,
+        trend_to: liveSig.trend_change_to ?? null,
+      };
+    } else if (Array.isArray(history) && history.length > 0) {
+      // 2) Hôm nay không đổi → GIỮ TRẠNG THÁI GẦN NHẤT (timestamp mới nhất trong lịch sử).
+      const newest = [...history].sort(
+        (a, b) => toMs(b.timestamp) - toMs(a.timestamp)
+      )[0];
+      if (newest) {
+        latest = {
+          signal_type: newest.signal_type,
+          price: Number(newest.price),
+          hist: Number(newest.macd_histogram ?? 0),
+          timestamp: newest.timestamp,
+          trend_from: null,
+          trend_to: null,
+        };
+      }
+    }
 
     let signal: unknown = null;
     let plan: unknown = null;
     if (latest) {
-      const price = Number(latest.price);
       signal = {
-        type: deriveStrength(latest),
+        type: deriveStrength(latest.signal_type, latest.hist),
         raw_type: latest.signal_type,
-        confirmed_at: price,
+        confirmed_at: latest.price,
         timestamp: latest.timestamp,
+        trend_from: latest.trend_from,
+        trend_to: latest.trend_to,
       };
-      plan = buildPlan(latest.signal_type, price);
+      plan = buildPlan(latest.signal_type, latest.price);
     }
 
     return NextResponse.json({
@@ -135,4 +204,4 @@ export async function GET(request: NextRequest) {
       { status: isTimeout ? 504 : 502 }
     );
   }
-}
+                               }
