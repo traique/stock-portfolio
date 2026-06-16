@@ -7,11 +7,15 @@
 //   (tạo lô cổ phiếu giá vốn = 0 ⇒ tổng vốn không đổi, số lượng tăng,
 //    giá vốn bình quân giảm — đúng bản chất điều chỉnh giá ngày GDKHQ).
 //
-// 🛠️ FIX DANH MỤC = 0 (thay đổi tối thiểu, giữ nguyên FIFO):
-//   1) sortTransactions: giao dịch KHÔNG có ngày được xếp CUỐI (coi như mới nhất) —
-//      tránh lệnh BÁN thiếu ngày bị xếp trước lệnh MUA gây 'bán vượt' giả.
-//   2) simulateTransactions: chỉ chặn cứng oversell khi strict=true (lúc validate
-//      giao dịch mới). Ở luồng hiển thị danh mục KHÔNG xóa sạch danh mục nữa.
+// 🛠️ FIX DANH MỤC = 0 (giữ):
+//   1) sortTransactions: giao dịch KHÔNG có ngày được xếp CUỐI (coi như mới nhất).
+//   2) simulateTransactions: chỉ chặn cứng oversell khi strict=true (lúc validate).
+//      Luồng hiển thị danh mục KHÔNG xóa sạch danh mục nữa.
+//
+// 💰 FIX GIÁ VỐN KHI BÁN (cổ tức): lệnh BÁN tính lãi/lỗ theo GIÁ VỐN BÌNH QUÂN
+//   GIA QUYỀN của toàn bộ số đang nắm giữ (gồm cả lô cổ tức giá 0), và trừ đều
+//   theo tỉ lệ — KHÔNG còn ăn lô cũ trước kiểu FIFO gây 'lỗ ảo' trên mã có cổ tức.
+//   Áp dụng cho MỌI mã mua nhiều lần (khớp bảng giá vốn VPS/SSI).
 
 export type Transaction = {
   id: string;
@@ -121,7 +125,7 @@ export function sortTransactions(transactions: Transaction[]): Transaction[] {
   });
 }
 
-// FIFO: mô phỏng toàn bộ lịch sử giao dịch → các lô còn mở + lãi/lỗ từng lệnh bán.
+// Mô phỏng toàn bộ lịch sử giao dịch → các lô còn mở + lãi/lỗ từng lệnh bán.
 export function simulateTransactions(
   transactions: Transaction[],
   options?: { strict?: boolean },
@@ -137,7 +141,7 @@ export function simulateTransactions(
     const isStockDividend = tx.transaction_type === 'STOCK_DIVIDEND';
     if (!symbol || qty <= 0) continue;
     if (!isStockDividend && price <= 0) continue;
-    // ✨ BUY và STOCK_DIVIDEND đều tạo lô mở mới (FIFO).
+    // ✨ BUY và STOCK_DIVIDEND đều tạo lô mở mới.
     if (tx.transaction_type === 'BUY' || isStockDividend) {
       const lot: OpenLot = {
         id: `${tx.id}:lot`,
@@ -156,7 +160,7 @@ export function simulateTransactions(
       lotsBySymbol.set(symbol, queue);
       continue;
     }
-    // ── SELL ──
+    // ── SELL ── giá vốn theo BÌNH QUÂN GIA QUYỀN của toàn bộ lô đang mở
     const queue = lotsBySymbol.get(symbol) ?? [];
     const available = roundQty(queue.reduce((s, e) => s + e.remaining, 0));
     if (qty > available + EPSILON) {
@@ -172,17 +176,17 @@ export function simulateTransactions(
       }
     }
     const sellQty = Math.min(qty, available);
-    let toConsume = sellQty;
-    let costBasis = 0;
+    // Giá vốn bình quân gia quyền của toàn bộ số đang nắm giữ (gồm cả lô cổ tức giá 0).
+    const totalCost = queue.reduce((s, e) => s + e.remaining * e.lot.buy_price, 0);
+    const avgCost = available > 0 ? totalCost / available : 0;
+    const costBasis = sellQty * avgCost;
+    // Trừ đều theo tỉ lệ ⇒ các lô còn lại GIỮ nguyên giá vốn bình quân.
+    const remainRatio = available > 0 ? (available - sellQty) / available : 0;
     for (const entry of queue) {
-      if (toConsume <= EPSILON) break;
-      const consume = Math.min(entry.remaining, toConsume);
-      costBasis += consume * entry.lot.buy_price;
-      entry.remaining = roundQty(entry.remaining - consume);
-      toConsume = roundQty(toConsume - consume);
+      entry.remaining = roundQty(entry.remaining * remainRatio);
     }
     sellMetaById[tx.id] = {
-      avgCost: sellQty > 0 ? costBasis / sellQty : 0,
+      avgCost,
       realizedPnl: sellQty * price - costBasis,
     };
   }
