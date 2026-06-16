@@ -1,5 +1,5 @@
 // src/lib/calculations.ts
-//
+//lcta
 // ✨ HỖ TRỢ CỔ TỨC (dividends):
 //   • Cổ tức TIỀN MẶT  → CashTransaction.transaction_type = 'DIVIDEND'
 //       (cộng vào tiền mặt thực tế, KHÔNG cộng vào vốn gốc ⇒ tính là lãi).
@@ -466,4 +466,4 @@ export function calcPortfolioRisk(
   const diversificationScore = 1 - concentration;
 
   return { annualVolatility, diversificationScore, concentration };
-  }
+}
