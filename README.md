@@ -114,8 +114,8 @@ Supabase pg_cron (chạy độc lập trong Postgres)
 
 ### Bước 1 — Clone repo
 ```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/traique/stock-portfolio.git
+cd stock-portfolio
 npm install
 ```
 
@@ -232,6 +232,4 @@ supabase/
 - **HOSE/HNX/UPCOM realtime** lấy từ DNSE (Entrade), trễ khoảng 1 phút; Yahoo Finance và VCI chỉ là fallback khi DNSE thiếu dữ liệu.
 - **VNINDEX** cũng đi qua chuỗi fallback trên, không còn cố định một nguồn duy nhất.
 - Mọi gợi ý từ AI (điểm số, TP/SL, gợi ý tỷ trọng, gợi ý cổ tức) **chỉ là tham khảo**, không phải lời khuyên đầu tư và không tự động thực thi giao dịch.
-- Trang `/market` không nằm trong README gốc — đây là tính năng đã bổ sung thêm.
-- `src/app/test-backend` và `api/debug/datasources` là **trang/endpoint debug nội bộ**, nên gỡ bỏ hoặc giữ bảo vệ bằng `CRON_SECRET` trước khi public repo lâu dài.
 - Ứng dụng chỉ theo dõi **cổ phiếu Việt Nam**.
