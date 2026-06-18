@@ -1,128 +1,98 @@
-// src/lib/server/providers/vci-chart.ts
+// src/app/api/prices/history/route.ts
 //
-// OHLCV lịch sử cho HOSE / HNX / UPCOM / VNINDEX qua DNSE Entrade
-// (public, không auth, không bị geo-block, chạy tốt từ Vercel).
-// DNSE trả giá theo NGHÌN VND (18.3) -> nhân PRICE_SCALE để ra VND thô (18300).
+// GET /api/prices/history?symbol=VNINDEX&range=7d|30d|90d|180d|1y|all
+//
+// Lấy OHLCV ngày trực tiếp từ DNSE Entrade (public, không auth, không geo-block,
+// chạy tốt từ Vercel). KHÔNG spawn python3. Self-contained — không import module
+// provider khác để tránh kéo theo import lỗi (`../exchanges/exchange`) vào build.
+// Trả về: { history: Array<{ date: string; close: number }> }
 
-import { normalizeSymbol, isVnIndexSymbol } from '../exchanges/exchange';
+import { NextRequest, NextResponse } from 'next/server';
 
-// ✨ DNSE tách endpoint theo loại: cổ phiếu = /ohlcs/stock, chỉ số = /ohlcs/index.
-// Gửi 'VNINDEX' vào /ohlcs/stock sẽ bị 400 BAD_REQUEST "invalid symbol".
+type RangeKey = '7d' | '30d' | '90d' | '180d' | '1y' | 'all';
+
+const RANGE_DAYS: Record<RangeKey, number> = {
+  '7d': 7, '30d': 30, '90d': 90, '180d': 180, '1y': 365, all: 5000,
+};
+
+// ✅ Whitelist mã: chỉ chữ HOA + số, 2–10 ký tự. Chặn mọi ký tự injection.
+const SYMBOL_RE = /^[A-Z0-9]{2,10}$/;
+
+// DNSE trả giá theo NGHÌN VND (18.3) → nhân để ra VND thô (18300).
+const PRICE_SCALE = 1000;
 const DNSE_OHLC_BASE = 'https://' + 'services.entrade.com.vn/chart-api/v2/ohlcs';
 
-const PRICE_SCALE = 1000;
+// Mã chỉ số dùng endpoint /ohlcs/index; cổ phiếu dùng /ohlcs/stock.
+const INDEX_SYMBOLS = new Set([
+  'VNINDEX', 'VN30', 'VN100', 'HNX', 'HNXINDEX', 'HNX30', 'UPCOM', 'UPCOMINDEX',
+]);
 
-const REQUEST_HEADERS = {
-  Accept: 'application/json',
-  'User-Agent':
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-};
+export async function GET(request: NextRequest) {
+  const sp     = request.nextUrl.searchParams;
+  const symbol = (sp.get('symbol') ?? 'VNINDEX').trim().toUpperCase();
+  const range  = (sp.get('range')  ?? '180d') as RangeKey;
 
-export type OhlcvSeries = {
-  symbol: string;
-  count: number;
-  timestamps: number[];
-  opens: number[];
-  highs: number[];
-  lows: number[];
-  closes: number[];
-  volumes: number[];
-  trade_dates: string[];
-};
+  if (!SYMBOL_RE.test(symbol)) {
+    return NextResponse.json({ error: 'symbol không hợp lệ' }, { status: 400 });
+  }
+  if (!(range in RANGE_DAYS)) {
+    return NextResponse.json({ error: 'range không hợp lệ' }, { status: 400 });
+  }
 
-function toNumberArray(v: unknown): number[] {
-  return Array.isArray(v) ? v.map((x) => Number(x)) : [];
-}
-
-function toSeconds(ts: number): number {
-  return ts > 1e12 ? Math.floor(ts / 1000) : ts;
-}
-
-function toVnd(price: number): number {
-  return Math.round(price * PRICE_SCALE);
-}
-
-function emptySeries(symbol: string): OhlcvSeries {
-  return {
-    symbol,
-    count: 0,
-    timestamps: [],
-    opens: [],
-    highs: [],
-    lows: [],
-    closes: [],
-    volumes: [],
-    trade_dates: [],
-  };
-}
-
-/**
- * Lấy OHLCV ngày (1D) cho 1 mã. Giá trả về ở đơn vị VND thô.
- */
-export async function getVciChartOHLCV(
-  symbol: string,
-  days = 90,
-): Promise<OhlcvSeries> {
-  const sym = normalizeSymbol(symbol);
-  const isIndex = isVnIndexSymbol(sym);
-  const dnseSymbol = isIndex ? 'VNINDEX' : sym;
-  // ✨ Chỉ số dùng /ohlcs/index; cổ phiếu dùng /ohlcs/stock (tránh 400 invalid symbol).
+  const days     = RANGE_DAYS[range];
+  const isIndex  = INDEX_SYMBOLS.has(symbol);
+  const dnseSym  = isIndex ? 'VNINDEX' : symbol;
   const endpoint = isIndex ? `${DNSE_OHLC_BASE}/index` : `${DNSE_OHLC_BASE}/stock`;
 
-  const to = Math.floor(Date.now() / 1000);
+  const to   = Math.floor(Date.now() / 1000);
   const from = to - Math.ceil(days * 1.6 + 10) * 86400;
 
   const url =
     `${endpoint}?from=${from}&to=${to}` +
-    `&symbol=${encodeURIComponent(dnseSymbol)}&resolution=1D`;
+    `&symbol=${encodeURIComponent(dnseSym)}&resolution=1D`;
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: REQUEST_HEADERS,
-    cache: 'no-store',
-  });
+  try {
+    // ✅ Fetch trực tiếp DNSE — KHÔNG spawn python3 (Vercel không có Python/vnstock).
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+      },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return NextResponse.json({ history: [] });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`DNSE OHLC HTTP ${res.status}: ${body.slice(0, 200)}`);
+    const data = await res.json();
+    const rawT: unknown = data?.t;
+    const rawC: unknown = data?.c;
+    const tArr: number[] = Array.isArray(rawT) ? rawT.map(Number) : [];
+    const cArr: number[] = Array.isArray(rawC) ? rawC.map(Number) : [];
+    if (tArr.length === 0) return NextResponse.json({ history: [] });
+
+    // Zip timestamp + close → lọc giá hợp lệ → sort tăng dần → cắt theo số ngày.
+    const bars = tArr
+      .map((raw, i) => ({
+        sec:   raw > 1e12 ? Math.floor(raw / 1000) : raw,
+        close: cArr[i],
+      }))
+      .filter(b => Number.isFinite(b.close) && b.close > 0)
+      .sort((a, b) => a.sec - b.sec)
+      .slice(-days);
+
+    const history = bars.map(b => ({
+      date:  new Date(b.sec * 1000).toISOString().slice(0, 10),
+      close: Math.round(b.close * PRICE_SCALE), // VND thô
+    }));
+
+    return NextResponse.json(
+      { history },
+      { headers: { 'Cache-Control': 'public, max-age=900, s-maxage=900' } }, // cache 15 phút
+    );
+  } catch {
+    // Lỗi mạng / timeout → trả mảng rỗng, chart tự ẩn VN-Index
+    return NextResponse.json({ history: [] });
   }
-
-  const data = await res.json();
-
-  const t = toNumberArray(data?.t);
-  if (t.length === 0) return emptySeries(sym);
-
-  const o = toNumberArray(data.o);
-  const h = toNumberArray(data.h);
-  const l = toNumberArray(data.l);
-  const c = toNumberArray(data.c);
-  const v = toNumberArray(data.v);
-
-  const bars = t
-    .map((ts, i) => ({
-      t: toSeconds(ts),
-      o: o[i],
-      h: h[i],
-      l: l[i],
-      c: c[i],
-      v: v[i] ?? 0,
-    }))
-    .filter((b) => Number.isFinite(b.c) && b.c > 0)
-    .sort((a, b) => a.t - b.t);
-
-  const sliced = bars.slice(-days);
-
-  return {
-    symbol: sym,
-    count: sliced.length,
-    timestamps: sliced.map((b) => b.t),
-    opens: sliced.map((b) => toVnd(Number.isFinite(b.o) && b.o > 0 ? b.o : b.c)),
-    highs: sliced.map((b) => toVnd(Number.isFinite(b.h) && b.h > 0 ? b.h : b.c)),
-    lows: sliced.map((b) => toVnd(Number.isFinite(b.l) && b.l > 0 ? b.l : b.c)),
-    closes: sliced.map((b) => toVnd(b.c)),
-    volumes: sliced.map((b) => (Number.isFinite(b.v) ? b.v : 0)),
-    trade_dates: sliced.map((b) =>
-      new Date(b.t * 1000).toISOString().slice(0, 10),
-    ),
-  };
 }
