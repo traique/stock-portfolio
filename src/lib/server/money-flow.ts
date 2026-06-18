@@ -345,29 +345,44 @@ export function calcOBVTrend(closes: number[], volumes: number[], lookback = 10)
   return Number(((recentObv - pastObv) / Math.abs(pastObv) * 100).toFixed(1));
 }
 
-export function calcMFI(closes: number[], volumes: number[], period = 14): number {
+
+export function calcMFI(
+  closes: number[],
+  volumes: number[],
+  highs?: number[],
+  lows?: number[],
+  period = 14,
+): number {
   if (closes.length < period + 1 || volumes.length < period + 1) return 50;
 
   const len = Math.min(closes.length, volumes.length);
+  const hasOHLC =
+    Array.isArray(highs) && Array.isArray(lows) &&
+    highs.length >= len && lows.length >= len;
+
+  // Typical price chuẩn = (H+L+C)/3; thiếu OHLC → dùng close.
+  const tp = (i: number): number =>
+    hasOHLC ? (highs![i] + lows![i] + closes[i]) / 3 : closes[i];
+
   let posFlow = 0;
   let negFlow = 0;
 
   for (let i = len - period; i < len; i++) {
-    const tp = closes[i];
-    const tpPrev = closes[i - 1];
-    const mf = tp * (volumes[i] || 1);
+    const tpCurr = tp(i);
+    const tpPrev = tp(i - 1);
+    const moneyFlow = tpCurr * (volumes[i] || 0); // raw money flow = TP × volume
 
-    if (tp > tpPrev) posFlow += mf;
-    else if (tp < tpPrev) negFlow += mf;
+    if (tpCurr > tpPrev) posFlow += moneyFlow;
+    else if (tpCurr < tpPrev) negFlow += moneyFlow;
   }
 
+  if (posFlow === 0 && negFlow === 0) return 50; // không biến động → trung tính
   if (negFlow === 0) return 100;
   if (posFlow === 0) return 0;
 
   const mfr = posFlow / negFlow;
   return Number((100 - 100 / (1 + mfr)).toFixed(1));
 }
-
 // ─── Prompt builder ─────────────────────────────────────────────────────────
 
 export function buildMoneyFlowPromptSection(
