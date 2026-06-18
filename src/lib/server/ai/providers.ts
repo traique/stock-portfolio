@@ -5,8 +5,6 @@ import type { ZodType } from 'zod'; // ✨ Phase 0.2
 import type { AiCallResult } from './types';
 
 // ── Groq (OpenAI-compatible) ──
-async function callGroq<T>(model: string, systemPrompt: string, userPrompt: string, fallback: T): Promise<T> {
-// src/lib/server/ai/providers.ts → THAY TOÀN BỘ hàm callGroq bằng bản dưới
 
 async function callGroq<T>(
   model: string,
