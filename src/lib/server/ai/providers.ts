@@ -6,42 +6,64 @@ import type { AiCallResult } from './types';
 
 // ── Groq (OpenAI-compatible) ──
 async function callGroq<T>(model: string, systemPrompt: string, userPrompt: string, fallback: T): Promise<T> {
+// src/lib/server/ai/providers.ts → THAY TOÀN BỘ hàm callGroq bằng bản dưới
+
+async function callGroq<T>(
+  model: string,
+  system: string,
+  user: string,
+  fallback: T,
+  _isRetry = false, // cờ chống lặp vô hạn
+): Promise<T> {
   const apiKey = envServer.GROQ_API_KEY ?? envServer.OPENROUTER_API_KEY;
   if (!apiKey) return fallback;
-  const MAX_RETRIES = 2;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch('https://' + 'api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: model || FALLBACK_MODEL,
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-        }),
-        cache: 'no-store',
-      });
-      if (res.status === 429) {
-        const after = Number(res.headers.get('retry-after') ?? 2);
-        await new Promise(r => setTimeout(r, after * 1000));
-        continue;
-      }
-      if (!res.ok) { console.error(`[callGroq] HTTP ${res.status}`); return fallback; }
-      const json = await res.json();
-      const text: string | undefined = json?.choices?.[0]?.message?.content;
-      if (!text) return fallback;
-      const clean = text.replace(/```(?:json)?|```/g, '').trim();
-      return JSON.parse(clean) as T;
-    } catch (err) {
-      if (attempt === MAX_RETRIES) { console.error('[callGroq] failed after retries:', err); return fallback; }
-      await new Promise(r => setTimeout(r, 500));
-    }
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: model || FALLBACK_MODEL,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user',   content: user },
+      ],
+    }),
+  });
+
+  // 429 → retry theo retry-after
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get('retry-after')) || 2;
+    await new Promise(r => setTimeout(r, retryAfter * 1000));
+    if (!_isRetry) return callGroq(model, system, user, fallback, true);
+    return fallback;
   }
-  return fallback;
+
+  if (!res.ok) {
+    // 🔁 404 = model_not_found → thử lại 1 lần với model an toàn (FALLBACK_MODEL)
+    if (res.status === 404 && model !== FALLBACK_MODEL && !_isRetry) {
+      console.warn(`[callGroq] HTTP 404 cho model "${model}" → retry với ${FALLBACK_MODEL}`);
+      return callGroq(FALLBACK_MODEL, system, user, fallback, true);
+    }
+    // Log đầy đủ để debug (model + status + body)
+    const body = await res.text().catch(() => '');
+    console.error(`[callGroq] HTTP ${res.status} model="${model}" body="${body.slice(0, 300)}"`);
+    return fallback;
+  }
+
+  // response_format: json_object đảm bảo Groq trả JSON sạch (không kèm code fences).
+  try {
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content ?? '{}';
+    return JSON.parse(content) as T;
+  } catch (e) {
+    console.error('[callGroq] JSON parse error:', e);
+    return fallback;
+  }
 }
 
 // ── Gemini ──
