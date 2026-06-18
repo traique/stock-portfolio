@@ -268,27 +268,38 @@ export function calcCrossSignal(closes: number[]): CrossSignal {
 /**
  * ADX(14) — Average Directional Index
  * Đo độ mạnh xu hướng (không phân biệt hướng).
- * Cần high[], low[], close[] → fallback tính từ close[] nếu không có OHLC.
- * Khi chỉ có close[]: dùng close làm proxy cho high=close, low=close*0.995
  */
-export function calcADX(closes: number[], period = 14): ADXResult {
+export function calcADX(
+  closes: number[],
+  highs?: number[],
+  lows?: number[],
+  period = 14,
+): ADXResult {
   const neutral: ADXResult = { adx: 20, diPlus: 15, diMinus: 15, trending: false };
   if (closes.length < period * 2) return neutral;
 
-  // Proxy OHLC từ close (đơn giản hóa vì không có OHLC từ Yahoo v8 interval=1d)
-  const highs  = closes.map((c, i) => i === 0 ? c : Math.max(c, closes[i - 1]));
-  const lows   = closes.map((c, i) => i === 0 ? c : Math.min(c, closes[i - 1]));
+  // Dùng OHLC THẬT khi đủ dữ liệu & khớp độ dài; nếu thiếu → proxy từ close.
+  const hasRealOHLC =
+    Array.isArray(highs) && Array.isArray(lows) &&
+    highs.length === closes.length && lows.length === closes.length;
+
+  const H = hasRealOHLC
+    ? (highs as number[])
+    : closes.map((c, i) => (i === 0 ? c : Math.max(c, closes[i - 1])));
+  const L = hasRealOHLC
+    ? (lows as number[])
+    : closes.map((c, i) => (i === 0 ? c : Math.min(c, closes[i - 1])));
 
   const trueRanges: number[] = [];
   const dmPlus:  number[] = [];
   const dmMinus: number[] = [];
 
   for (let i = 1; i < closes.length; i++) {
-    const high   = highs[i];
-    const low    = lows[i];
+    const high      = H[i];
+    const low       = L[i];
     const prevClose = closes[i - 1];
-    const prevHigh  = highs[i - 1];
-    const prevLow   = lows[i - 1];
+    const prevHigh  = H[i - 1];
+    const prevLow   = L[i - 1];
 
     // True Range
     trueRanges.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
@@ -296,8 +307,8 @@ export function calcADX(closes: number[], period = 14): ADXResult {
     // Directional Movement
     const upMove   = high - prevHigh;
     const downMove = prevLow - low;
-    dmPlus.push(upMove  > downMove && upMove  > 0 ? upMove  : 0);
-    dmMinus.push(downMove > upMove  && downMove > 0 ? downMove : 0);
+    dmPlus.push(upMove    > downMove && upMove   > 0 ? upMove   : 0);
+    dmMinus.push(downMove > upMove   && downMove > 0 ? downMove : 0);
   }
 
   // Wilder's smoothing
@@ -342,18 +353,21 @@ export function calcADX(closes: number[], period = 14): ADXResult {
 
 /**
  * Tính toàn bộ indicators từ close[].
+ * ✨ Phase 2: nhận thêm highs[]/lows[] THẬT (tùy chọn) để ADX tính đúng.
  * Gọi 1 lần duy nhất per symbol để tránh lặp vòng lặp.
  */
 export function buildEnhancedIndicators(
   closes: number[],
   price: number,
+  highs?: number[],
+  lows?: number[],
 ): EnhancedIndicators {
   return {
     macd:           calcMACD(closes),
     bollinger:      calcBollinger(closes, price),
     multiTimeframe: calcMultiTimeframe(closes),
     crossSignal:    calcCrossSignal(closes),
-    adx:            calcADX(closes),
+    adx:            calcADX(closes, highs, lows),
     sma20:          Number(calcSMA(closes, 20).toFixed(0)),
     sma50:          Number(calcSMA(closes, 50).toFixed(0)),
     ema9:           Number(calcEMA(closes, 9).toFixed(0)),
