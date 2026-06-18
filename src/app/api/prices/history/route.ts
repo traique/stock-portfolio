@@ -1,59 +1,128 @@
-// src/app/api/prices/history/route.ts
+// src/lib/server/providers/vci-chart.ts
 //
-// GET /api/prices/history?symbol=VNINDEX&range=7d|30d|90d|180d|1y|all
-//
-// Lấy lịch sử giá / chỉ số theo range, dùng provider VCI (giống /api/history/[symbol]).
-// Trả về: { history: Array<{ date: string; close: number }> }
+// OHLCV lịch sử cho HOSE / HNX / UPCOM / VNINDEX qua DNSE Entrade
+// (public, không auth, không bị geo-block, chạy tốt từ Vercel).
+// DNSE trả giá theo NGHÌN VND (18.3) -> nhân PRICE_SCALE để ra VND thô (18300).
 
-import { NextRequest, NextResponse } from 'next/server';
-import { getVciChartOHLCV } from '@/lib/server/providers/vci-chart';
+import { normalizeSymbol, isVnIndexSymbol } from '../exchanges/exchange';
 
-type RangeKey = '7d' | '30d' | '90d' | '180d' | '1y' | 'all';
+// ✨ DNSE tách endpoint theo loại: cổ phiếu = /ohlcs/stock, chỉ số = /ohlcs/index.
+// Gửi 'VNINDEX' vào /ohlcs/stock sẽ bị 400 BAD_REQUEST "invalid symbol".
+const DNSE_OHLC_BASE = 'https://' + 'services.entrade.com.vn/chart-api/v2/ohlcs';
 
-const RANGE_DAYS: Record<RangeKey, number | null> = {
-  '7d': 7, '30d': 30, '90d': 90, '180d': 180, '1y': 365, all: null,
+const PRICE_SCALE = 1000;
+
+const REQUEST_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
 };
 
-// ✅ Whitelist mã: chỉ chữ HOA + số, 2–10 ký tự. Chặn mọi ký tự injection.
-const SYMBOL_RE = /^[A-Z0-9]{2,10}$/;
+export type OhlcvSeries = {
+  symbol: string;
+  count: number;
+  timestamps: number[];
+  opens: number[];
+  highs: number[];
+  lows: number[];
+  closes: number[];
+  volumes: number[];
+  trade_dates: string[];
+};
 
-function rangeToStartDate(range: RangeKey): string {
-  const days = RANGE_DAYS[range];
-  if (days == null) return '2015-01-01';
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
+function toNumberArray(v: unknown): number[] {
+  return Array.isArray(v) ? v.map((x) => Number(x)) : [];
 }
 
-export async function GET(request: NextRequest) {
-  const sp     = request.nextUrl.searchParams;
-  const symbol = (sp.get('symbol') ?? 'VNINDEX').trim().toUpperCase();
-  const range  = (sp.get('range')  ?? '180d') as RangeKey;
+function toSeconds(ts: number): number {
+  return ts > 1e12 ? Math.floor(ts / 1000) : ts;
+}
 
-  if (!SYMBOL_RE.test(symbol)) {
-    return NextResponse.json({ error: 'symbol không hợp lệ' }, { status: 400 });
+function toVnd(price: number): number {
+  return Math.round(price * PRICE_SCALE);
+}
+
+function emptySeries(symbol: string): OhlcvSeries {
+  return {
+    symbol,
+    count: 0,
+    timestamps: [],
+    opens: [],
+    highs: [],
+    lows: [],
+    closes: [],
+    volumes: [],
+    trade_dates: [],
+  };
+}
+
+/**
+ * Lấy OHLCV ngày (1D) cho 1 mã. Giá trả về ở đơn vị VND thô.
+ */
+export async function getVciChartOHLCV(
+  symbol: string,
+  days = 90,
+): Promise<OhlcvSeries> {
+  const sym = normalizeSymbol(symbol);
+  const isIndex = isVnIndexSymbol(sym);
+  const dnseSymbol = isIndex ? 'VNINDEX' : sym;
+  // ✨ Chỉ số dùng /ohlcs/index; cổ phiếu dùng /ohlcs/stock (tránh 400 invalid symbol).
+  const endpoint = isIndex ? `${DNSE_OHLC_BASE}/index` : `${DNSE_OHLC_BASE}/stock`;
+
+  const to = Math.floor(Date.now() / 1000);
+  const from = to - Math.ceil(days * 1.6 + 10) * 86400;
+
+  const url =
+    `${endpoint}?from=${from}&to=${to}` +
+    `&symbol=${encodeURIComponent(dnseSymbol)}&resolution=1D`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: REQUEST_HEADERS,
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`DNSE OHLC HTTP ${res.status}: ${body.slice(0, 200)}`);
   }
-  if (!(range in RANGE_DAYS)) {
-    return NextResponse.json({ error: 'range không hợp lệ' }, { status: 400 });
-  }
 
-  const startDate = rangeToStartDate(range);
-  const endDate   = new Date().toISOString().slice(0, 10);
+  const data = await res.json();
 
-  try {
-    // ✅ Dùng provider VCI có sẵn — KHÔNG spawn python3 (Vercel không có Python/vnstock).
-    const candles = await getVciChartOHLCV(symbol, startDate, endDate, '1D');
-    const history = (candles ?? []).map((c: any) => ({
-      date:  String(c.date ?? c.time).slice(0, 10),
-      close: Number(c.close),
-    }));
+  const t = toNumberArray(data?.t);
+  if (t.length === 0) return emptySeries(sym);
 
-    return NextResponse.json(
-      { history },
-      { headers: { 'Cache-Control': 'public, max-age=900, s-maxage=900' } }, // cache 15 phút
-    );
-  } catch {
-    // Provider lỗi → trả mảng rỗng, chart tự ẩn VN-Index
-    return NextResponse.json({ history: [] });
-  }
-      }
+  const o = toNumberArray(data.o);
+  const h = toNumberArray(data.h);
+  const l = toNumberArray(data.l);
+  const c = toNumberArray(data.c);
+  const v = toNumberArray(data.v);
+
+  const bars = t
+    .map((ts, i) => ({
+      t: toSeconds(ts),
+      o: o[i],
+      h: h[i],
+      l: l[i],
+      c: c[i],
+      v: v[i] ?? 0,
+    }))
+    .filter((b) => Number.isFinite(b.c) && b.c > 0)
+    .sort((a, b) => a.t - b.t);
+
+  const sliced = bars.slice(-days);
+
+  return {
+    symbol: sym,
+    count: sliced.length,
+    timestamps: sliced.map((b) => b.t),
+    opens: sliced.map((b) => toVnd(Number.isFinite(b.o) && b.o > 0 ? b.o : b.c)),
+    highs: sliced.map((b) => toVnd(Number.isFinite(b.h) && b.h > 0 ? b.h : b.c)),
+    lows: sliced.map((b) => toVnd(Number.isFinite(b.l) && b.l > 0 ? b.l : b.c)),
+    closes: sliced.map((b) => toVnd(b.c)),
+    volumes: sliced.map((b) => (Number.isFinite(b.v) ? b.v : 0)),
+    trade_dates: sliced.map((b) =>
+      new Date(b.t * 1000).toISOString().slice(0, 10),
+    ),
+  };
+}
