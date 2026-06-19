@@ -3,7 +3,8 @@
 // Phase 2A — Phân tích ngành (Sector Rotation)
 //
 // Không cần API trả phí. Tính sector performance hoàn toàn từ:
-//   • Yahoo Finance history (cùng endpoint range=3mo đã dùng)
+//   • OHLCV lịch sử qua DNSE Entrade (getVciChartOHLCV) — phủ HOSE + HNX +
+//     UPCOM + VNINDEX. (✨ 2.7: thay Yahoo-only chỉ phục vụ HOSE + ^VNINDEX.)
 //   • SECTOR_MAP — phân loại thủ công các mã VN theo ngành
 //
 // Output cho AI prompt:
@@ -22,6 +23,8 @@ import {
   type SectorKey,
   type SectorMeta,
 } from '@/lib/sector-map';
+// ✨ 2.7: provider OHLCV đa sàn (HOSE/HNX/UPCOM/VNINDEX) — tự nhận diện chỉ số.
+import { getVciChartOHLCV } from './providers/vci-chart';
 
 // Re-export để các file đang import từ sector-analyzer không bị gãy.
 export { SECTOR_MAP, getSymbolSectors, getPrimarySectorLabel };
@@ -48,43 +51,22 @@ export type SectorContext = {
 
 // ─── Fetching ─────────────────────────────────────────────────────────────────
 
-const YAHOO_HOSTS = [
-  'query1.finance.yahoo.com',
-  'query2.finance.yahoo.com',
-];
-
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
-
-async function fetchCloseHistory(symbol: string): Promise<number[]> {
-  const ticker = symbol === 'VNINDEX' ? '^VNINDEX' : `${symbol}.VN`;
-
-  for (const host of YAHOO_HOSTS) {
-    try {
-      // Lưu ý: nối chuỗi thay vì template URL để tránh editor hiểu nhầm placeholder.
-      const yahooUrl =
-        'https://' + host +
-        '/v8/finance/chart/' + encodeURIComponent(ticker) +
-        '?interval=1d&range=3mo';
-      const res = await fetch(yahooUrl, {
-        headers: { 'User-Agent': USER_AGENT, Accept: '*/*' },
-        next: { revalidate: 3600 }, // cache 1 giờ — sector không thay đổi trong ngày
-      });
-      if (!res.ok) continue;
-
-      const json = await res.json();
-      const closes: number[] = (
-        json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []
-      )
-        .map(Number)
-        .filter((v: number) => Number.isFinite(v) && v > 0);
-
-      if (closes.length > 10) return closes;
-    } catch {
-      // try next host
-    }
+/**
+ * Lịch sử giá đóng cửa (VND thô) cho 1 mã — phục vụ tính trend1m/trend3m.
+ * ✨ Phase 2 (2.7): dùng DNSE Entrade qua getVciChartOHLCV thay Yahoo-only.
+ *   - Yahoo cũ: chỉ `${symbol}.VN` + `^VNINDEX` → HNX/UPCOM rỗng → trend1m=0
+ *     → bị filter `trend1m !== 0` loại oan → ngành toàn mã HNX/UPCOM bị bỏ.
+ *   - getVciChartOHLCV: phủ HOSE + HNX + UPCOM, tự nhận diện VNINDEX
+ *     (isVnIndexSymbol) → KHÔNG cần nhánh `^VNINDEX` riêng nữa.
+ * Lấy 90 phiên để đủ dữ liệu cho lookback 3M (65 phiên).
+ */
+async function fetchCloseHistory(symbol: string, days = 90): Promise<number[]> {
+  try {
+    const series = await getVciChartOHLCV(symbol, days);
+    return series.closes;
+  } catch {
+    return []; // lỗi mạng/symbol → rỗng (mã sẽ tự bị bỏ qua như cũ)
   }
-  return [];
 }
 
 function trendPct(closes: number[], lookback: number): number {
@@ -158,14 +140,14 @@ async function analyzeSector(
 /**
  * Build toàn bộ sector context.
  * Chỉ phân tích những ngành liên quan đến watchlist/portfolio của user
- * để giảm số lượng Yahoo request.
+ * để giảm số lượng request.
  *
  * @param relevantSectors - các SectorKey cần phân tích (từ getSymbolSectors)
  */
 export async function buildSectorContext(
   relevantSectors: SectorKey[],
 ): Promise<SectorContext> {
-  // Lấy VNINDEX làm baseline
+  // Lấy VNINDEX làm baseline (getVciChartOHLCV tự route sang index endpoint)
   const vnIndexCloses = await fetchCloseHistory('VNINDEX');
   const vnindex1m     = trendPct(vnIndexCloses, 22);
 
