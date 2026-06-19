@@ -3,7 +3,7 @@
 // Phase 3B — Portfolio Optimization
 //
 // Không cần API ngoài. Tính từ:
-//   • Lịch sử giá Yahoo Finance (đã có trong project)
+//   • Lịch sử giá (đã có trong project)
 //   • Dữ liệu vị thế từ calculations.ts
 //
 // Cung cấp cho AI:
@@ -15,7 +15,10 @@
 // Không implement full Markowitz (cần solver) — dùng Risk Parity:
 //   mỗi mã đóng góp rủi ro bằng nhau → intuitive, không cần optimizer.
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { getSymbolSectors, SECTOR_MAP } from './sector-analyzer';
+import { calcPortfolioRisk } from '@/lib/calculations'; // ✨ 2.5: dùng chung vol covariance
+
+// ─── Types ───
 
 export type PositionWeight = {
   symbol:       string;
@@ -47,7 +50,7 @@ export type OptimizationResult = {
   summary:             string;  // mô tả ngắn cho AI
 };
 
-// ─── Math helpers ─────────────────────────────────────────────────────────────
+// ─── Math helpers ───
 
 /** Daily returns từ close[] */
 function dailyReturns(closes: number[]): number[] {
@@ -102,7 +105,7 @@ function pearsonCorr(a: number[], b: number[]): number {
   return denom > 0 ? Number((num / denom).toFixed(3)) : 0;
 }
 
-// ─── Correlation Matrix ───────────────────────────────────────────────────────
+// ─── Correlation Matrix ───
 
 export function buildCorrelationMatrix(
   returnsMap: Record<string, number[]>,
@@ -125,11 +128,10 @@ export function buildCorrelationMatrix(
     }
   }
 
-  // Sort by absolute correlation descending
   return pairs.sort((a, b) => Math.abs(b.corr) - Math.abs(a.corr));
 }
 
-// ─── Risk Parity Weights ──────────────────────────────────────────────────────
+// ─── Risk Parity Weights ───
 //
 // Risk Parity: w_i = (1/σ_i) / Σ(1/σ_j)
 // Đơn giản nhất: chia đều rủi ro thay vì chia đều giá trị.
@@ -150,9 +152,7 @@ export function calcRiskParityWeights(
   return weights;
 }
 
-// ─── Concentration Risk ───────────────────────────────────────────────────────
-
-import { getSymbolSectors, SECTOR_MAP } from './sector-analyzer';
+// ─── Concentration Risk ───
 
 function concentrationLevel(pct: number, isSector = false): 'ok' | 'watch' | 'danger' {
   if (isSector) {
@@ -166,7 +166,7 @@ function concentrationLevel(pct: number, isSector = false): 'ok' | 'watch' | 'da
 export function calcConcentrationRisk(
   positions:  Array<{ symbol: string; value: number }>,
   vols:       Record<string, number>,
-  returnsMap: Record<string, number[]>,
+  closesMap:  Record<string, number[]>, // ✨ 2.5: closes để tính vol theo covariance
 ): ConcentrationRisk {
   const totalValue = positions.reduce((s, p) => s + p.value, 0);
   if (totalValue === 0) {
@@ -202,25 +202,34 @@ export function calcConcentrationRisk(
     level: concentrationLevel(value / totalValue * 100, true) as 'ok' | 'watch' | 'danger',
   })).sort((a, b) => b.pct - a.pct);
 
-  // Portfolio volatility estimate (weighted, ignoring correlation — conservative upper bound)
-  const weights = positions.map(p => p.value / totalValue);
-  const symbols = positions.map(p => p.symbol);
-  const weightedVol = weights.reduce((s, w, i) => s + w * (vols[symbols[i]] ?? 20), 0);
+  // ✨ 2.5: Portfolio volatility theo MA TRẬN HIỆP PHƯƠNG SAI — thống nhất với
+  //   calcPortfolioRisk() trong calculations.ts (CÓ tính tương quan giữa các mã),
+  //   thay cho trung bình có trọng số bỏ qua tương quan (overestimate).
+  const riskHoldings = positions
+    .filter(p => p.value > 0)
+    .map(p => ({
+      symbol: p.symbol,
+      weight: p.value / totalValue,
+      closes: closesMap[p.symbol] ?? [],
+    }));
+  const { annualVolatility } = calcPortfolioRisk(riskHoldings);
+  // calcPortfolioRisk trả annualVolatility dạng PHÂN SỐ (vd 0.25) → đổi sang %.
+  const portfolioVolatility = Number((annualVolatility * 100).toFixed(1));
 
-  // Diversification score: HHI-based (Herfindahl-Hirschman Index)
-  // Score = 100 * (1 - HHI), where HHI = Σ(weight²)
-  const hhi    = weights.reduce((s, w) => s + w * w, 0);
+  // Diversification score: giữ HHI (Herfindahl-Hirschman) như cũ.
+  const weights  = positions.map(p => p.value / totalValue);
+  const hhi      = weights.reduce((s, w) => s + w * w, 0);
   const divScore = Math.round((1 - hhi) * 100);
 
   return {
     bySymbol,
     bySector,
-    portfolioVolatility: Number(weightedVol.toFixed(1)),
+    portfolioVolatility,
     diversificationScore: divScore,
   };
 }
 
-// ─── Master builder ───────────────────────────────────────────────────────────
+// ─── Master builder ───
 
 /**
  * Tính toàn bộ optimization metrics.
@@ -234,7 +243,7 @@ export function buildOptimizationResult(
 ): OptimizationResult {
   const totalValue = positions.reduce((s, p) => s + p.value, 0);
 
-  // Returns và vol cho mỗi mã
+  // Returns và vol cho mỗi mã (dùng cho correlation + Risk Parity)
   const returnsMap: Record<string, number[]> = {};
   const vols:       Record<string, number>   = {};
 
@@ -271,8 +280,8 @@ export function buildOptimizationResult(
   const allCorrs        = buildCorrelationMatrix(returnsMap);
   const highCorrelations = allCorrs.filter(c => c.risk === 'high').slice(0, 5);
 
-  // Concentration
-  const concentration = calcConcentrationRisk(positions, vols, returnsMap);
+  // ✨ 2.5: Concentration — truyền closesMap (vol theo covariance), không còn returnsMap.
+  const concentration = calcConcentrationRisk(positions, vols, closesMap);
 
   // Summary text cho AI
   const dangerPositions = concentration.bySymbol.filter(s => s.level === 'danger');
@@ -320,7 +329,7 @@ export function buildOptimizationResult(
   };
 }
 
-// ─── Prompt builder ───────────────────────────────────────────────────────────
+// ─── Prompt builder ───
 
 export function buildOptimizationPromptSection(
   result:  OptimizationResult,
@@ -353,4 +362,4 @@ export function buildOptimizationPromptSection(
   }
 
   return lines.join('\n');
-}
+  }
