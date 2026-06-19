@@ -264,4 +264,4 @@ export function buildEarningsPromptSection(data: EarningsCalendar): string {
   }
 
   return lines.join('\\n');
-                   }
+         }
