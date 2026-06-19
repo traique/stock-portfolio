@@ -22,7 +22,6 @@ import {
   type SectorKey,
   type SectorMeta,
 } from '@/lib/sector-map';
-import { calcPortfolioRisk } from '@/lib/calculations'; // ✨ 2.5: dùng chung vol covariance
 
 // Re-export để các file đang import từ sector-analyzer không bị gãy.
 export { SECTOR_MAP, getSymbolSectors, getPrimarySectorLabel };
