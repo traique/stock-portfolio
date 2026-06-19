@@ -7,15 +7,10 @@
 // Phase 3: buildEarningsCalendar, buildEarningsPromptSection (KQKD)
 //          buildOptimizationResult, buildOptimizationPromptSection (portfolio)
 //
-// Thay đổi so với route.ts gốc:
-// 1. buildEnhancedSignals() thay thế buildTechnicalSignals() — thêm indicators Phase 1
-// 2. buildEnrichedContext() bổ sung sector + money flow + earnings cho mỗi mã
-// 3. buildEnhancedSystemPrompt() mở rộng framework phân tích
-// 4. trimPayloadForAI() giữ nguyên logic cũ + thêm enhanced fields
+// ✨ WIRING 2.1 + 2.2: buildEnhancedIndicators & calcMFI giờ nhận highs/lows thật
+//    (ADX dùng TR/±DM thật, MFI dùng typical price (H+L+C)/3).
 //
 // ✨ FIX 413: giảm AI_MAX_CANDIDATES + cắt ngắn context blocks để body không vượt giới hạn Groq.
-//
-// Để dễ review: tất cả thay đổi có comment "// ✨ PHASE X" bên cạnh.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -185,7 +180,7 @@ function scoreSignal(s: TechnicalSignal): number {
 // ─── ✨ PHASE 1 — buildEnhancedContext ───────────────────────────────
 //
 // Sau khi có signals từ buildTechnicalSignals(), tính thêm:
-//   • Enhanced indicators per symbol (từ close[])
+//   • Enhanced indicators per symbol (từ close[] + high[]/low[])
 //   • Sector context (shared — gọi 1 lần cho cả batch)
 //   • Money flow per symbol (foreign + OBV/MFI)
 //   • Earnings per symbol
@@ -226,14 +221,17 @@ async function buildEnhancedContext(
       const baseScore = scoreSignal(s);
 
       // ── Phase 1: Enhanced indicators ──
-      // closes[] và volumes[] giờ được expose từ TechnicalSignal (đã patch ai-insights.ts)
+      // closes[]/volumes[]/highs[]/lows[] được expose từ TechnicalSignal (đã patch ai-insights.ts + technical.ts)
       let enhanced: EnhancedIndicators | undefined;
       let enhancedScore = 0;
       let indicatorSummary = '';
       const closes = (s as TechnicalSignal & { closes: number[] }).closes ?? [];
       const volumes = (s as TechnicalSignal & { volumes: number[] }).volumes ?? [];
+      const highs = (s as TechnicalSignal & { highs: number[] }).highs ?? [];
+      const lows = (s as TechnicalSignal & { lows: number[] }).lows ?? [];
       if (closes.length > 20) {
-        enhanced = buildEnhancedIndicators(closes, s.currentPrice);
+        // ✨ WIRING 2.1 — truyền highs/lows để calcADX dùng TR/±DM thật
+        enhanced = buildEnhancedIndicators(closes, s.currentPrice, highs, lows);
         enhancedScore = scoreEnhancedIndicators(enhanced);
         indicatorSummary = buildIndicatorSummary(enhanced, s.symbol);
       }
@@ -257,17 +255,17 @@ async function buildEnhancedContext(
         breadth = calcMarketBreadth(symList, pctChanges, closesMap);
       }
 
-      // OBV + MFI từ closes[] và volumes[] thật
+      // OBV + MFI từ closes[]/volumes[]/highs[]/lows[] thật
       if (closes.length > 5 && volumes.length > 5) {
         obvTrend = calcOBVTrend(closes, volumes);
-        mfi = calcMFI(closes, volumes);
+        // ✨ WIRING 2.2 — truyền highs/lows để MFI dùng typical price (H+L+C)/3
+        mfi = calcMFI(closes, volumes, highs, lows);
       }
 
       const moneyFlowPrompt = buildMoneyFlowPromptSection(foreignFlow, breadth, obvTrend, mfi, s.symbol);
 
       // ── ✨ mozy lesson 2: Support/Resistance từ OHLCV thật ──
-      const highs = (s as TechnicalSignal & { highs: number[] }).highs ?? [];
-      const lows = (s as TechnicalSignal & { lows: number[] }).lows ?? [];
+      // (highs/lows đã hoist lên đầu mapper ở Phase 1)
       const supportResistance = highs.length > 0
         ? calcSupportResistance(highs, lows, s.currentPrice, 30)
         : undefined;
@@ -298,7 +296,6 @@ async function buildEnhancedContext(
         ? buildOptimizationPromptSection(optResult, s.symbol)
         : '';
 
-      // ── Final score (base + enhanced bonus) ──
       // ── Final score ──
       // Nếu có trendScore (0-100 từ mozy formula) → blend với baseScore 50/50
       // Nếu chỉ có enhancedScore → cộng vào baseScore (range nhỏ, ±5)
@@ -664,4 +661,4 @@ export async function POST(request: NextRequest) {
   await setAiCache(cacheKey, finalResponse, WATCHLIST_AI_CACHE_TTL_MS);
 
   return NextResponse.json({ ...finalResponse, ...buildAiCacheMeta(WATCHLIST_AI_CACHE_TTL_MS) });
-                        }
+                }
