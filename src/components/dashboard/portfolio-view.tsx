@@ -532,7 +532,7 @@ const HoldingCard = memo(function HoldingCard({
   pos: PositionGroup;
   prices: PriceMap;
   quote?: QuoteItem;
-  companyName?: string;
+  companyName?: string | null;
   closes?: number[];
   expanded: boolean;
   onToggle: (sym: string) => void;
