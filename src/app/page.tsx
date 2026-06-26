@@ -584,7 +584,7 @@ const AuthForm = memo(function AuthForm() {
 
 // Ô thêm mã tách riêng ⇒ gõ phím chỉ re-render component này
 const AddSymbolRow = memo(function AddSymbolRow({ inputRef, value, onChange, onAdd }: {
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
   value: string;
   onChange: (v: string) => void;
   onAdd: () => void;
