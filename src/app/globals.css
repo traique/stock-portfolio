@@ -1,0 +1,790 @@
+/* =========================================================
+   LCTA — HỆ THỐNG QUẢN LÝ GIA SẢN CAO CẤP
+   Design: Liquid Glass · iOS 26 · Mobile-First
+
+   SOURCE OF TRUTH cho design tokens VÀ base components.
+   premium-overrides.css CHỈ thêm component MỚI, KHÔNG:
+     - định nghĩa lại selector đã có ở đây
+     - override token
+     - dùng !important
+========================================================= */
+
+/* ---------- Reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; min-height: 100%; }
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light dark;
+  /* Bỏ text-rendering: optimizeLegibility — gây jank trên mobile */
+}
+
+body {
+  font-family: var(--font-main);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+a { color: inherit; text-decoration: none; }
+button, input, textarea, select { font: inherit; }
+h1, h2, h3, h4, h5, h6 { margin: 0; letter-spacing: -0.01em; }
+
+/* =========================================================
+   DESIGN TOKENS — LIGHT
+========================================================= */
+:root {
+  /* Typography */
+  --font-main:   var(--font-sans), system-ui, sans-serif;
+  --font-number: var(--font-num), system-ui, sans-serif;
+  --font-brand:  var(--font-logo), serif;
+
+  /* Surfaces & text */
+  --bg:            #eef2fb;
+  --card:          rgba(255, 255, 255, 0.52);
+  --soft:          rgba(255, 255, 255, 0.72);
+  --soft-2:        rgba(255, 255, 255, 0.92);
+  --cell:          rgba(255, 255, 255, 0.42);  /* inner cell/panel */
+  --text:          #0b1120;
+  --muted:         #3d4f68;
+  --subtle:        #44566f;   /* tăng đậm từ #5a6e8a để đạt WCAG */
+  --border:        rgba(11, 17, 32, 0.08);
+  --border-strong: rgba(11, 17, 32, 0.16);
+
+  /* Brand / action */
+  --primary:       #1e3048;   /* text & focus outline */
+  --accent:        #3b82f6;   /* action / active */
+  --accent-strong: #2563eb;
+  --btn-grad:      linear-gradient(135deg, #60a5fa, #3b82f6);
+  --btn-shadow:    0 6px 18px rgba(59, 130, 246, 0.28);
+
+  /* Semantic */
+  --green: #047857; --red: #be123c; --yellow: #92400e;
+  --green-surface: rgba(4, 120, 87, 0.08);  --green-border: rgba(4, 120, 87, 0.20);
+  --red-surface:   rgba(190, 18, 60, 0.08); --red-border:   rgba(190, 18, 60, 0.20);
+  --warn-surface:  rgba(146, 64, 14, 0.10); --warn-border:  rgba(146, 64, 14, 0.28);
+
+  /* Shadows */
+  --shadow-soft:   0 4px 24px rgba(99, 120, 180, 0.10);
+  --shadow-strong: 0 12px 40px rgba(99, 120, 180, 0.16);
+
+  --skeleton: linear-gradient(90deg,
+    rgba(15,23,42,0.04), rgba(15,23,42,0.09), rgba(15,23,42,0.04));
+
+  /* Tabs */
+  --tab-active-bg:     rgba(255, 255, 255, 0.88);
+  --tab-active-border: rgba(255, 255, 255, 0.95);
+  --tab-active-shadow: 0 2px 12px rgba(99, 120, 180, 0.12);
+
+  /* Pills / icon buttons */
+  --pill-bg:       rgba(255, 255, 255, 0.22);
+  --pill-bg-hover: rgba(255, 255, 255, 0.32);
+  --pill-border:   rgba(255, 255, 255, 0.40);
+
+  /* Liquid Glass (blur hạ 28 -> 20 cho perf) */
+  --glass-backdrop:     blur(20px) saturate(170%);
+  --glass-glow:         linear-gradient(180deg, rgba(255,255,255,0.72) 0%, transparent 55%);
+  --glass-ring:         rgba(255, 255, 255, 0.80);
+  --glass-ring-b:       rgba(255, 255, 255, 0.18);
+  --glass-shadow:       0 4px 24px rgba(99,120,180,0.12), inset 0 1px 0 rgba(255,255,255,0.80);
+  --glass-shadow-hover: 0 10px 36px rgba(99,120,180,0.20), inset 0 1px 0 rgba(255,255,255,0.90);
+
+  /* Scales */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 40px;
+  --r-sm: 12px; --r-md: 16px; --r-lg: 22px; --r-xl: 26px; --r-pill: 999px;
+  --z-dropdown: 1000; --z-modal: 2000; --z-toast: 3000;
+}
+
+/* =========================================================
+   DESIGN TOKENS — DARK
+========================================================= */
+:root[data-theme='dark'] {
+  --bg:            #060c18;
+  --card:          rgba(14, 22, 40, 0.62);
+  --soft:          rgba(30, 42, 64, 0.70);
+  --soft-2:        rgba(51, 65, 90, 0.80);
+  --cell:          rgba(255, 255, 255, 0.05);
+  --text:          #f1f5f9;
+  --muted:         #94a3b8;
+  --subtle:        #94a3b8;
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --primary:       #f1f5f9;
+  --accent:        #2563eb;
+  --accent-strong: #1d4ed8;
+  --btn-grad:      linear-gradient(135deg, #3b82f6, #1d4ed8);
+  --btn-shadow:    0 6px 18px rgba(37, 99, 235, 0.32);
+
+  --green: #10b981; --red: #f43f5e; --yellow: #f59e0b;
+  --green-surface: rgba(16, 185, 129, 0.10); --green-border: rgba(16, 185, 129, 0.22);
+  --red-surface:   rgba(244, 63, 94, 0.10);  --red-border:   rgba(244, 63, 94, 0.22);
+  --warn-surface:  rgba(245, 158, 11, 0.10); --warn-border:  rgba(245, 158, 11, 0.28);
+
+  --shadow-soft:   0 8px 28px rgba(0, 0, 0, 0.36);
+  --shadow-strong: 0 18px 48px rgba(0, 0, 0, 0.55);
+
+  --skeleton: linear-gradient(90deg,
+    rgba(255,255,255,0.03), rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+
+  --tab-active-bg:     rgba(255, 255, 255, 0.11);
+  --tab-active-border: rgba(255, 255, 255, 0.22);
+  --tab-active-shadow: 0 0 18px rgba(255, 255, 255, 0.05);
+
+  --pill-bg:       rgba(255, 255, 255, 0.09);
+  --pill-bg-hover: rgba(255, 255, 255, 0.14);
+  --pill-border:   rgba(255, 255, 255, 0.16);
+
+  --glass-backdrop:     blur(20px) saturate(150%);
+  --glass-glow:         linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 50%);
+  --glass-ring:         rgba(255, 255, 255, 0.13);
+  --glass-ring-b:       rgba(0, 0, 0, 0.25);
+  --glass-shadow:       0 4px 24px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.10);
+  --glass-shadow-hover: 0 12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.14);
+}
+
+/* No-JS fallback: tôn trọng system dark khi chưa có data-theme.
+   Khi JS bật, blocking script (layout.tsx) set data-theme trước paint. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #060c18; --card: rgba(14,22,40,0.62); --soft: rgba(30,42,64,0.70);
+    --soft-2: rgba(51,65,90,0.80); --cell: rgba(255,255,255,0.05);
+    --text: #f1f5f9; --muted: #94a3b8; --subtle: #94a3b8;
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.16);
+    --primary: #f1f5f9; --accent: #2563eb; --accent-strong: #1d4ed8;
+    --btn-grad: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    --glass-ring: rgba(255,255,255,0.13); --glass-ring-b: rgba(0,0,0,0.25);
+    --glass-glow: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, transparent 50%);
+    --pill-bg: rgba(255,255,255,0.09); --pill-bg-hover: rgba(255,255,255,0.14);
+    --pill-border: rgba(255,255,255,0.16);
+  }
+}
+
+/* =========================================================
+   GLASS UTILITIES — dùng lại thay vì copy 4 dòng border
+========================================================= */
+.glass-border {
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+.glass-surface {
+  background: var(--card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+}
+
+/* Inner cell: KHÔNG lồng backdrop-filter (perf) — chỉ nền mờ + border token */
+.glass-cell {
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+/* =========================================================
+   PAGE BACKGROUND — ambient tĩnh
+========================================================= */
+.ab-page {
+  min-height: 100vh;     /* fallback */
+  min-height: 100dvh;    /* dynamic viewport — fix iOS address bar */
+  color: var(--text);
+  transition: color 0.3s ease;
+  background:
+    radial-gradient(ellipse 70% 45% at 5% 0%,   rgba(147,197,253,0.45) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 38% at 95% 100%, rgba(196,181,253,0.35) 0%, transparent 60%),
+    linear-gradient(160deg, #dbeafe 0%, #ede9fe 55%, #e0e7ff 100%);
+}
+
+:root[data-theme='dark'] .ab-page {
+  background:
+    radial-gradient(ellipse 65% 42% at 8% 2%,   rgba(59,130,246,0.16) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 35% at 92% 98%, rgba(139,92,246,0.13) 0%, transparent 55%),
+    linear-gradient(160deg, #060c18 0%, #09081a 55%, #060c18 100%);
+}
+
+.ab-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* =========================================================
+   GLASS CARD SYSTEM — định nghĩa MỘT lần
+========================================================= */
+.ab-card {
+  border-radius: var(--r-lg);
+  padding: clamp(14px, 4vw, 20px);
+  background: var(--card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Elevated — 1 định nghĩa duy nhất; giữ alias tên cũ để khỏi sửa JSX */
+.ab-card--elevated,
+.ab-premium-card,
+.ab-watch-card,
+.ab-position-card,
+.ab-hero-premium {
+  border-radius: var(--r-xl);
+  padding: clamp(14px, 4vw, 20px);
+  background: var(--card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  box-shadow: var(--glass-shadow);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ab-card--elevated::before,
+.ab-premium-card::before,
+.ab-watch-card::before,
+.ab-position-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--glass-glow);
+  border-radius: inherit;
+}
+
+.ab-card--elevated:hover,
+.ab-premium-card:hover,
+.ab-watch-card:hover,
+.ab-position-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.ab-watch-shell, .ab-form-shell, .ab-movers-card, .ab-tone-card,
+.ab-commodity-card, .ab-fuel-card, .ab-summary-card, .ab-stock-card {
+  border-radius: var(--r-xl);
+  position: relative;
+  overflow: hidden;
+}
+
+/* =========================================================
+   HERO (định nghĩa MỘT lần — gộp từ premium-overrides cũ)
+========================================================= */
+.ab-hero-premium { padding: 14px 16px 16px; }
+
+.ab-brand-mark {
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  letter-spacing: 0.03em;
+  background: var(--cell);
+  box-shadow: inset 0 1px 0 var(--glass-ring);
+}
+
+.ab-hero-title { font-size: clamp(30px, 4vw, 42px); letter-spacing: -0.06em; }
+
+.ab-hero-subline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* =========================================================
+   TABS
+========================================================= */
+.ab-premium-tabs {
+  padding: 4px;
+  border-radius: var(--r-pill);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+.ab-premium-tab {
+  border: none;
+  background: transparent;
+  padding: 10px 16px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+
+.ab-premium-tab.active {
+  background: var(--tab-active-bg);
+  border: 1px solid var(--tab-active-border);
+  box-shadow: var(--tab-active-shadow);
+}
+
+/* =========================================================
+   BUTTONS & INPUTS
+========================================================= */
+.ab-input, .ab-btn { height: 48px; border-radius: var(--r-pill); }
+
+.ab-btn-primary {
+  background: var(--btn-grad);
+  box-shadow: var(--btn-shadow);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 12px 24px;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.ab-btn-primary:active   { transform: scale(0.97); }
+.ab-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.ab-input {
+  background: var(--soft);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  padding: 12px 20px;
+  color: var(--text);
+  outline: none;
+  font-weight: 500;
+}
+/* focus do :focus-visible global xử lý — bỏ rule lệch border cũ */
+
+.ab-stat-chip, .ab-watch-count, .ab-mini-card, .ab-mini-row,
+.ab-delete, .ab-menu-btn, .ab-btn-subtle {
+  border-radius: var(--r-md);
+  border-color: var(--border);
+}
+
+/* =========================================================
+   NUMBER FONT — class TƯỜNG MINH, KHÔNG !important / [class*=]
+========================================================= */
+.num, .num-premium, .ab-price, .ab-big-number,
+.ab-mini-value, .ab-commodity-value, .ab-fuel-value {
+  font-family: var(--font-number);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* =========================================================
+   TYPOGRAPHY HELPERS
+========================================================= */
+.ab-symbol.premium { font-size: clamp(28px, 4vw, 34px); }
+.ab-price.premium  { font-size: clamp(38px, 5vw, 48px); }
+.ab-big-number     { font-size: clamp(30px, 4vw, 40px); }
+
+.ab-soft-change.under-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+/* =========================================================
+   MARKET STRIP & BOARD
+========================================================= */
+.ab-market-strip-pro {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.7fr 0.9fr;
+  gap: 12px;
+  padding: 4px;
+}
+
+.ab-strip-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 7px 11px;
+  min-height: 62px;
+}
+.ab-strip-item strong { font-size: clamp(26px, 4vw, 34px); }
+.ab-strip-item.vnindex { border-right: 1px solid var(--border); padding-right: 15px; }
+
+.ab-strip-stack { display: flex; align-items: center; gap: 8px; }
+.ab-strip-stack span { font-size: 13px; font-weight: 800; }
+
+.ab-market-board-premium {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.35fr);
+  gap: 16px;
+  padding: 18px;
+}
+
+.ab-strip-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.ab-metric-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px;
+  border-radius: 18px;
+  text-align: center;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+.ab-metric-cell span   { font-size: 12px; line-height: 1.2; font-weight: 700; color: var(--muted); }
+.ab-metric-cell strong { font-size: clamp(24px, 4vw, 32px); line-height: 1; font-weight: 800; letter-spacing: -0.04em; }
+.ab-metric-cell.wide strong { font-size: clamp(22px, 3.5vw, 28px); }
+
+/* =========================================================
+   COMMODITY & FUEL
+========================================================= */
+.ab-commodity-grid, .ab-fuel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.ab-commodity-title       { font-size: clamp(26px, 4vw, 34px); line-height: 1; font-weight: 800; letter-spacing: -0.05em; }
+.ab-commodity-title.small { font-size: clamp(24px, 3.5vw, 30px); }
+.ab-commodity-subtitle    { margin-top: 8px; font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.ab-commodity-icon {
+  width: 46px; height: 46px;
+  border-radius: var(--r-pill);
+  display: grid; place-items: center;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+.ab-commodity-dual { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.ab-commodity-panel {
+  border-radius: 20px;
+  padding: 16px;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+.ab-commodity-panel.single { margin-top: 16px; }
+
+.ab-commodity-value, .ab-fuel-value {
+  margin-top: 10px;
+  font-size: clamp(34px, 4.8vw, 46px);
+  line-height: 0.96;
+  font-weight: 800;
+  letter-spacing: -0.06em;
+  word-break: break-word;
+}
+.ab-fuel-unit { margin-top: 12px; color: var(--muted); font-size: 13px; font-weight: 700; }
+
+/* =========================================================
+   SECTION TOGGLE
+========================================================= */
+.ab-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+}
+.ab-section-toggle-copy  { min-width: 0; }
+.ab-section-toggle-title { margin-top: 4px; font-size: 28px; line-height: 1.02; font-weight: 800; letter-spacing: -0.05em; }
+
+.ab-section-toggle-icon {
+  width: 42px; height: 42px; flex: 0 0 42px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  color: var(--text);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  transition: box-shadow 0.2s ease;
+}
+.ab-section-toggle:hover .ab-section-toggle-icon { box-shadow: var(--shadow-soft); }
+
+/* =========================================================
+   BENTO GRID — grid-column chỉ gán trong breakpoint 2 cột
+========================================================= */
+.lcta-bento-grid { display: grid; gap: var(--sp-3); grid-template-columns: 1fr; }
+.lcta-bento-full { grid-column: 1 / -1; }
+
+@media (min-width: 720px) {
+  .lcta-bento-grid  { grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+  .lcta-bento-left  { grid-column: 1; }
+  .lcta-bento-right { grid-column: 2; }
+}
+
+/* =========================================================
+   EMPTY / LOADING / ERROR
+========================================================= */
+.ab-empty {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px; padding: 40px 20px; text-align: center;
+}
+.ab-empty-icon {
+  width: 52px; height: 52px;
+  border-radius: 18px;
+  display: grid; place-items: center;
+  color: var(--muted);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+.ab-empty-title { font-size: 15px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.ab-empty-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 240px; }
+
+.ab-skeleton {
+  border-radius: var(--r-sm);
+  background: var(--skeleton);
+  background-size: 200% 100%;
+  animation: abShimmer 1.6s linear infinite;
+}
+@keyframes abShimmer {
+  0%   { background-position:  200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.ab-error {
+  color: var(--red);
+  font-size: 13px; font-weight: 600;
+  background: var(--red-surface);
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--red-border);
+}
+
+/* =========================================================
+   LAYOUT UTILITIES
+========================================================= */
+.ab-row-between { display: flex; justify-content: space-between; }
+.ab-row-gap     { display: flex; flex-wrap: wrap; gap: 12px; }
+.align-center   { align-items: center; }
+.align-start    { align-items: flex-start; }
+.mt-12 { margin-top: var(--sp-3); }
+.mt-16 { margin-top: var(--sp-4); }
+
+/* =========================================================
+   HEADER SHELL & PILLS
+========================================================= */
+.ab-header-shell {
+  position: sticky;
+  top: 8px;
+  z-index: var(--z-dropdown);
+  padding: 10px 12px;
+  background: var(--card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--glass-ring-b);
+  border-radius: 24px;
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ab-header-glow {
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--glass-glow);
+}
+
+.ab-glass-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: var(--r-pill);
+  padding: 6px 13px;
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--text); white-space: nowrap;
+}
+
+.ab-icon-btn, .ab-account-btn {
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+.ab-icon-btn {
+  width: 36px; height: 36px;
+  min-width: 44px; min-height: 44px;  /* touch target */
+  border-radius: 50%;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.ab-account-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: var(--r-pill);
+  padding: 6px 13px; min-height: 44px;
+  font-size: 10px; font-weight: 900; letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.ab-icon-btn:hover, .ab-account-btn:hover {
+  background: var(--pill-bg-hover);
+  box-shadow: var(--shadow-soft);
+}
+
+.ab-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: var(--z-dropdown);
+  background: var(--card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--pill-border);
+  border-radius: 20px;
+  padding: 8px;
+  box-shadow: var(--glass-shadow-hover);
+  min-width: 200px;
+}
+
+/* =========================================================
+   FOCUS-VISIBLE — outline tự bám hình element (không ép radius)
+========================================================= */
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+button:focus-visible, a:focus-visible { outline-offset: 3px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offset: 0; }
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(99,120,180,0.22); border-radius: var(--r-pill); }
+:root[data-theme='dark'] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); }
+
+/* =========================================================
+   RESPONSIVE — mỗi breakpoint MỘT khối, giảm dần
+========================================================= */
+@media (max-width: 980px) {
+  .ab-home-grid, .premium-summary-grid, .compact-form-grid,
+  .ab-market-strip-pro, .ab-commodity-grid, .ab-fuel-grid,
+  .ab-watch-grid.premium, .ab-position-grid,
+  .ab-market-board-premium { grid-template-columns: 1fr; }
+  .ab-strip-item.vnindex, .ab-strip-item.wide { border: 0; padding-left: 0; padding-right: 0; }
+}
+
+@media (max-width: 720px) {
+  .ab-shell        { padding: 10px; gap: 12px; }
+  .ab-hero-premium { padding: 12px 14px; border-radius: var(--r-lg); }
+  .ab-hero-title   { font-size: 24px; line-height: 1.02; }
+  .ab-hero-subline { width: 100%; justify-content: flex-start; font-size: 11px; padding: 8px 12px; }
+
+  .ab-premium-tabs { width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, transparent 0, black 8%, black 88%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, black 8%, black 88%, transparent 100%); }
+  .ab-premium-tabs::-webkit-scrollbar { display: none; }
+  .ab-premium-tab { flex: 0 0 auto; min-width: max-content; padding: 10px 14px; font-size: 13px; }
+
+  .ab-market-strip-pro { gap: 0; padding: 0; }
+  .ab-strip-item { min-height: auto; padding: 11px 2px; border-bottom: 1px solid var(--border); }
+  .ab-strip-item:last-child { border-bottom: 0; }
+  .ab-strip-item strong { font-size: 22px; }
+  .ab-strip-stack { flex-direction: column; align-items: flex-start; gap: 4px; }
+
+  .ab-watch-shell, .ab-form-shell, .ab-movers-card, .ab-tone-card,
+  .ab-position-card, .ab-premium-card, .ab-card { border-radius: var(--r-lg); }
+  .ab-watch-card.premium, .ab-position-card { padding: 14px; }
+  .ab-symbol.premium { font-size: 24px; }
+  .ab-price.premium  { font-size: 30px; margin-top: 10px; }
+
+  .ab-add-row, .ab-mini-grid.premium, .ab-commodity-dual { grid-template-columns: 1fr; }
+  .ab-input, .ab-btn { height: 44px; }
+  .ab-commodity-card, .ab-fuel-card { border-radius: var(--r-lg); padding: 14px; }
+  .ab-commodity-value, .ab-fuel-value { font-size: 26px; }
+
+  .ab-market-board-premium { padding: 14px; gap: 12px; }
+  .ab-metric-cell { padding: 9px 7px; border-radius: 14px; }
+  .ab-metric-cell span   { font-size: 11px; }
+  .ab-metric-cell strong { font-size: 17px; }
+
+  .ab-section-toggle { padding: 10px 0; min-height: 52px; }
+  .ab-section-toggle-title { font-size: 22px; }
+  .ab-section-toggle-icon { width: 36px; height: 36px; flex-basis: 36px; border-radius: 12px; }
+}
+
+@media (max-width: 560px) {
+  /* Giảm blur trên màn hình nhỏ */
+  :root { --glass-backdrop: blur(14px) saturate(140%); }
+  .ab-shell        { padding: 10px; }
+  .ab-hero-premium { border-radius: var(--r-lg); }
+  .ab-brand-mark   { padding: 6px 12px; font-size: 12px; }
+  .ab-hero-title   { font-size: 22px; }
+  .ab-premium-tab  { padding: 9px 13px; }
+  .ab-strip-item strong { font-size: 20px; }
+  .ab-big-number   { font-size: 26px; }
+}
+
+@media (max-width: 400px) {
+  .ab-add-symbol-row { flex-direction: column; }
+  .ab-add-symbol-row .ab-btn { width: 100%; }
+}
+
+/* =========================================================
+   BACKDROP-FILTER FALLBACK (Firefox cũ, một số Android)
+========================================================= */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ab-card, .ab-card--elevated, .ab-premium-card, .ab-watch-card,
+  .ab-position-card, .ab-hero-premium, .ab-header-shell, .ab-dropdown {
+    background: var(--soft-2);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* =========================================================
+   REDUCE MOTION
+========================================================= */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  }
