@@ -1,0 +1,316 @@
+/*
+  premium-overrides.css
+  CHỈ component MỚI — không định nghĩa lại selector đã có ở globals.css,
+  không override token, không !important.
+  Dark mode tự đổi qua token (--cell, --glass-ring...) — KHÔNG cần block dark riêng.
+*/
+
+/* =========================================================
+   POSITION CARD EXTRAS
+========================================================= */
+.ab-position-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ab-position-meta-cell {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+.ab-position-meta-label {
+  font-size: 10px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--subtle);
+}
+.ab-position-meta-value { font-size: 15px; font-weight: 800; color: var(--text); }
+
+/* =========================================================
+   AI SECTION
+========================================================= */
+.ab-ai-action-card {
+  padding: 13px;
+  border-radius: var(--r-md);
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+.ab-ai-tp-sl {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 10px; text-align: center; font-size: 13px; font-weight: 800;
+}
+.ab-ai-tp {
+  background: var(--green-surface);
+  border: 1px solid var(--green-border);
+  padding: 8px 0; border-radius: var(--r-sm);
+}
+.ab-ai-sl {
+  background: var(--red-surface);
+  border: 1px solid var(--red-border);
+  padding: 8px 0; border-radius: var(--r-sm);
+}
+.ab-ai-label { font-size: 10px; letter-spacing: 0.04em; font-weight: 800; text-transform: uppercase; }
+.ab-ai-value { margin-top: 4px; font-size: 16px; }
+
+.ab-ai-summary {
+  padding: 14px;
+  border-radius: 14px;
+  font-style: italic; font-size: 14px; line-height: 1.55;
+  color: var(--text);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+
+.ab-ai-risks {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--red-surface);
+  border: 1px solid var(--red-border);
+}
+.ab-ai-risks-label { color: var(--red); font-weight: 800; font-size: 13px; }
+.ab-ai-risks-text  { font-weight: 600; font-size: 13px; }
+
+/* =========================================================
+   RISK PROFILE SELECTOR
+========================================================= */
+.ab-risk-selector { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.ab-risk-btn {
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  color: var(--subtle);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  cursor: pointer;
+  /* transition tường minh thay vì 'all' */
+  transition: color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+.ab-risk-btn:hover { color: var(--text); box-shadow: var(--shadow-soft); }
+.ab-risk-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(59,130,246,0.40);
+}
+
+/* =========================================================
+   NEWS MODAL
+========================================================= */
+.ab-modal-overlay {
+  position: fixed; inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+
+.ab-modal-inner {
+  width: 100%; max-width: 450px; max-height: 80vh;
+  overflow-y: auto; position: relative; padding: 20px;
+  border-radius: 28px;
+  background: var(--soft-2);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.ab-news-item {
+  display: block;
+  padding: 13px;
+  border-radius: var(--r-md);
+  text-decoration: none;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.ab-news-item:hover { box-shadow: var(--shadow-soft); transform: translateY(-1px); }
+.ab-news-title { color: var(--text); font-weight: 700; font-size: 14px; margin-bottom: 8px; line-height: 1.4; }
+.ab-news-meta  { font-size: 11px; font-weight: 700; color: var(--subtle); text-transform: uppercase; }
+
+@media (max-width: 720px) {
+  .ab-modal-overlay { align-items: flex-end; padding: 0; }
+  .ab-modal-inner {
+    max-width: 100%; width: 100%; max-height: 88vh;
+    border-radius: 28px 28px 0 0; border-bottom: none; padding: 20px 16px;
+  }
+  .ab-modal-inner::before {
+    content: ''; display: block;
+    width: 40px; height: 4px; border-radius: 2px;
+    background: var(--border-strong); margin: 0 auto 16px;
+  }
+}
+
+/* =========================================================
+   PNL BADGE
+========================================================= */
+.lcta-pnl-pos {
+  background: var(--green-surface);
+  border: 1px solid var(--green-border);
+  box-shadow: 0 0 16px rgba(16,185,129,0.14);
+  color: var(--green);
+  border-radius: var(--r-md);
+  padding: 11px 14px;
+}
+.lcta-pnl-neg {
+  background: var(--red-surface);
+  border: 1px solid var(--red-border);
+  box-shadow: 0 0 16px rgba(244,63,94,0.12);
+  color: var(--red);
+  border-radius: var(--r-md);
+  padding: 11px 14px;
+}
+
+/* =========================================================
+   MINI STAT CELL
+========================================================= */
+.lcta-mini-stat {
+  border-radius: 15px;
+  padding: 11px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+}
+.lcta-mini-stat-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--subtle); }
+.lcta-mini-stat-value { font-size: 15px; font-weight: 800; color: var(--text); line-height: 1.2; }
+
+/* =========================================================
+   GLASS PILL (inline, reusable)
+========================================================= */
+.lcta-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+  background: var(--cell);
+  border-top:    1px solid var(--glass-ring);
+  border-left:   1px solid var(--glass-ring);
+  border-right:  1px solid var(--glass-ring-b);
+  border-bottom: 1px solid var(--glass-ring-b);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+  color: var(--text); white-space: nowrap; cursor: default;
+  transition: box-shadow 0.18s ease;
+}
+.lcta-pill-btn { cursor: pointer; }
+.lcta-pill-btn:hover { box-shadow: var(--shadow-soft); }
+
+/* =========================================================
+   ALLOCATION BAR
+========================================================= */
+.lcta-alloc-track {
+  width: 100%; height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--cell);
+  border-top: 1px solid var(--glass-ring);
+  overflow: hidden;
+}
+.lcta-alloc-fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, rgba(59,130,246,0.90), rgba(99,179,237,0.65));
+  box-shadow: 0 0 8px rgba(59,130,246,0.28);
+  transition: width 0.6s cubic-bezier(.4,0,.2,1);
+}
+
+/* =========================================================
+   WARNING BANNER
+========================================================= */
+.lcta-warning-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--warn-surface);
+  border: 1px solid var(--warn-border);
+  box-shadow: 0 0 18px rgba(245,158,11,0.10);
+  font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.5;
+}
+
+/* =========================================================
+   TOGGLE ROW
+========================================================= */
+.ab-toggle-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.ab-toggle-row input[type='checkbox'] {
+  width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+}
+
+/* =========================================================
+   COMPACT FORM GRID
+========================================================= */
+.compact-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 10px;
+}
+
+/* =========================================================
+   VN-INDEX COMPACT — component VN-Index DUY NHẤT (bỏ overview/stats)
+========================================================= */
+.ab-vnindex-compact {
+  display: flex; flex-direction: row; align-items: stretch;
+  gap: 0; overflow: hidden;
+}
+.ab-vnindex-compact-main {
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 3px; padding-right: 16px;
+  border-right: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.ab-vnindex-compact-stat {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 0 12px;
+  border-right: 1px solid var(--border);
+  text-align: center; gap: 4px; flex: 1; min-width: 0;
+}
+.ab-vnindex-compact-stat:last-child { border-right: none; }
+@media (max-width: 560px) {
+  .ab-vnindex-compact-main { padding-right: 10px; }
+  .ab-vnindex-compact-stat { padding: 0 6px; }
+}
+
+/* =========================================================
+   STOCK BADGE
+========================================================= */
+.ab-stock-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  font-size: 9px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase;
+  background: var(--soft);
+  border: 1px solid var(--border);
+  color: var(--subtle);
+  margin-top: 4px;
+}
+
+/* =========================================================
+   SPIN ANIMATION
+========================================================= */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin-animation { animation: spin 0.8s linear infinite; }
