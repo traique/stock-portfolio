@@ -856,17 +856,29 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .price-flash-down { animation: price-flash-down 1.2s ease-out; border-radius: 8px; }
 
 /* =========================================================
-   MOBILE NAV — cho phép cuộn ngang khi hẹp thay vì tràn layout
+   MOBILE NAV — co nhẹ kích thước để nav vừa màn hình nhỏ.
+   ⚠️ TUYỆT ĐỐI KHÔNG dùng overflow-x trên nav: dropdown của TIỆN ÍCH là
+   position absolute bên trong nav — overflow sẽ biến nav thành clipping
+   context và ẨN HOÀN TOÀN menu xổ xuống (bug đã từng xảy ra).
 ========================================================= */
 @media (max-width: 560px) {
-  .ab-header-shell nav {
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-mask-image: linear-gradient(to right, black 0, black 92%, transparent 100%);
-    mask-image: linear-gradient(to right, black 0, black 92%, transparent 100%);
-    max-width: 100%;
+  .ab-header-shell nav { max-width: 100%; flex-wrap: wrap; }
+  /* Logo LCTA — là sibling của nav (con trực tiếp của row div), KHÔNG nằm trong nav */
+  .ab-header-shell > div > a:first-of-type {
+    font-size: 18px !important;
+    letter-spacing: 0.14em !important;
+    margin-right: 0 !important;
   }
-  .ab-header-shell nav::-webkit-scrollbar { display: none; }
+  /* HOME (a đầu tiên trong nav) / DANH MỤC */
+  .ab-header-shell nav > a {
+    padding: 7px 9px !important;
+    font-size: 11px !important;
+  }
+  /* Nút TIỆN ÍCH (span bên trong button) */
+  .ab-header-shell nav button > span {
+    padding: 7px 9px !important;
+    font-size: 11px !important;
+  }
 }
 
 /* Nhịp đập cho pill phiên giao dịch đang mở cửa */
