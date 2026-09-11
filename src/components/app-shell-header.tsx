@@ -54,35 +54,64 @@ export default function AppShellHeader({
   const menuRef  = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
 
-  /* Restore theme + model — VÀ validate model đã lưu với list live ngay khi mount */
+  /* Restore theme + model — validate model đã lưu CHỈ khi mở menu (lazy)
+     để không tốn 1 request /api/ai/models trên mọi lần load trang */
   useEffect(() => {
     const t = localStorage.getItem('lcta_theme') as ThemeMode | null;
     if (t) { setTheme(t); document.documentElement.dataset.theme = t; }
 
     const m = localStorage.getItem('lcta_ai_model');
     if (m) setAiModelState(m);
+  }, []);
 
-    // ✅ Validate model đã lưu với danh sách model live ngay khi mount.
-    //    Nếu model cũ (đã deprecated / không còn) → reset về DEFAULT_MODEL,
-    //    tránh gửi model chết lên Groq/Gemini gây 404.
-    let aborted = false;
+  /* Weather + date — cache sessionStorage 30 phút: header mount lại trên
+     mỗi trang, không nên gọi open-meteo mỗi lần */
+  useEffect(() => {
+    let mounted = true;
+
+    try {
+      const cached = sessionStorage.getItem('lcta_weather');
+      if (cached) {
+        const { text, code, ts } = JSON.parse(cached) as { text: string; code: number; ts: number };
+        if (Date.now() - ts < 30 * 60 * 1000 && text) {
+          setWeatherCode(code);
+          setInfoLine(text);
+          return () => { mounted = false; };
+        }
+      }
+    } catch { /* cache hỏng → fetch bình thường */ }
+
+    const ctrl = new AbortController();
     (async () => {
       try {
-        const res = await fetch('/api/ai/models');
-        if (!res.ok || aborted) return;
-        const data = await res.json();
-        const list: AiModelMeta[] = data.models ?? [];
-        if (aborted) return;
-        setAiModels(list);
-        const saved = localStorage.getItem('lcta_ai_model');
-        if (saved && list.length > 0 && !list.some(x => x.key === saved)) {
-          setAiModelState(DEFAULT_MODEL);
-          localStorage.setItem('lcta_ai_model', DEFAULT_MODEL);
-          window.dispatchEvent(new CustomEvent('lcta:ai-model-change', { detail: { model: DEFAULT_MODEL } }));
-        }
-      } catch { /* offline → giữ nguyên model đã lưu */ }
+        const now     = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
+        const solar   = `${weekday} ${pad2(now.getDate())}/${pad2(now.getMonth()+1)}`;
+        const lunar   = Solar.fromYmd(now.getFullYear(), now.getMonth()+1, now.getDate()).getLunar();
+        const lunarTx = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
+        const res     = await fetch(
+          'https://api.open-meteo.com/v1/forecast?latitude=10.7769&longitude=106.7009&current=temperature_2m,weather_code&timezone=Asia%2FHo_Chi_Minh',
+          { signal: ctrl.signal, cache: 'no-store' },
+        );
+        const data  = await res.json();
+        const temp  = Math.round(Number(data?.current?.temperature_2m ?? 28));
+        const code  = Number.isFinite(Number(data?.current?.weather_code)) ? Number(data.current.weather_code) : null;
+        if (!mounted) return;
+        setWeatherCode(code);
+        setInfoLine(`${solar} · ${lunarTx} · ${temp}°C`);
+        try {
+          sessionStorage.setItem('lcta_weather', JSON.stringify({
+            text: `${solar} · ${lunarTx} · ${temp}°C`, code, ts: Date.now(),
+          }));
+        } catch { /* private mode */ }
+      } catch (e: unknown) {
+        if (e instanceof Error && e.name === 'AbortError') return;
+        if (!mounted) return;
+        const n = new Date();
+        setInfoLine(`${pad2(n.getDate())}/${pad2(n.getMonth()+1)} · 28°C`);
+      }
     })();
-    return () => { aborted = true; };
+    return () => { mounted = false; ctrl.abort(); };
   }, []);
 
   /* Click outside + Escape để đóng dropdown */
@@ -102,35 +131,9 @@ export default function AppShellHeader({
     };
   }, []);
 
-  /* Weather + date */
-  useEffect(() => {
-    const ctrl = new AbortController();
-    (async () => {
-      try {
-        const now     = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-        const weekday = new Intl.DateTimeFormat('vi-VN', { weekday: 'short', timeZone: 'Asia/Ho_Chi_Minh' }).format(now);
-        const solar   = `${weekday} ${pad2(now.getDate())}/${pad2(now.getMonth()+1)}`;
-        const lunar   = Solar.fromYmd(now.getFullYear(), now.getMonth()+1, now.getDate()).getLunar();
-        const lunarTx = `${pad2(lunar.getDay())}/${pad2(lunar.getMonth())} ÂL`;
-        const res     = await fetch(
-          'https://api.open-meteo.com/v1/forecast?latitude=10.7769&longitude=106.7009&current=temperature_2m,weather_code&timezone=Asia%2FHo_Chi_Minh',
-          { signal: ctrl.signal, cache: 'no-store' },
-        );
-        const data  = await res.json();
-        const temp  = Math.round(Number(data?.current?.temperature_2m ?? 28));
-        const code  = Number.isFinite(Number(data?.current?.weather_code)) ? Number(data.current.weather_code) : null;
-        setWeatherCode(code);
-        setInfoLine(`${solar} · ${lunarTx} · ${temp}°C`);
-      } catch (e: unknown) {
-        if (e instanceof Error && e.name === 'AbortError') return;
-        const n = new Date();
-        setInfoLine(`${pad2(n.getDate())}/${pad2(n.getMonth()+1)} · 28°C`);
-      }
-    })();
-    return () => ctrl.abort();
-  }, []);
-
-  /* Lazy load models (đã có guard — nếu mount đã nạp thì bỏ qua) */
+  /* Lazy load models (đã có guard — nếu mount đã nạp thì bỏ qua).
+     Validate model đã lưu chạy ở đây thay vì mount: nếu model cũ đã chết
+     (deprecated) → reset về DEFAULT_MODEL, tránh 404 khi gửi lên Groq/Gemini. */
   const fetchModels = async () => {
     if (aiModels.length > 0 || modelsLoading) return;
     setModelsLoading(true);
@@ -141,9 +144,10 @@ export default function AppShellHeader({
         const list: AiModelMeta[] = data.models ?? [];
         setAiModels(list);
         const saved = localStorage.getItem('lcta_ai_model');
-        if (saved && !list.some(m => m.key === saved)) {
+        if (saved && list.length > 0 && !list.some(m => m.key === saved)) {
           setAiModelState(DEFAULT_MODEL);
           localStorage.setItem('lcta_ai_model', DEFAULT_MODEL);
+          window.dispatchEvent(new CustomEvent('lcta:ai-model-change', { detail: { model: DEFAULT_MODEL } }));
         }
       }
     } finally { setModelsLoading(false); }

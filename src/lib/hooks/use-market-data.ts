@@ -54,8 +54,10 @@ export function useMarketData(symbols: string[], ready: boolean): UseMarketDataR
   const fetchAll = async (signal?: AbortSignal) => {
     const list = symbolsRef.current;
     const all  = list.length ? [...list, 'VNINDEX'] : ['VNINDEX'];
+    // prices-cache: có cache 2 lớp (memory 60s + Supabase L2) — trước đây trang
+    // chủ dùng /api/prices (no cache) nên mỗi lần load đều fetch realtime từ đầu.
     const res  = await fetch(
-      `/api/prices?symbols=${encodeURIComponent(all.join(','))}`,
+      `/api/prices-cache?symbols=${encodeURIComponent(all.join(','))}`,
       { cache: 'no-store', signal },
     );
     const data: PricesResponse = await res.json();
